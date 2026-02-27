@@ -45,8 +45,12 @@ build/
 .venv/
 .zshenv
 __pycache__/
-data
+# data
 docs/java/
 log/
-results/
+data/obo/*.owl
+data/obo/edge_labels.txt
+data/results-*/
+data/scores-*/
+data/external/
 python/tests/arangodb/
