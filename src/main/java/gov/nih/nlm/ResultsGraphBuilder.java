@@ -27,30 +27,29 @@ import static gov.nih.nlm.OntologyGraphBuilder.createVTuple;
 import static gov.nih.nlm.OntologyGraphBuilder.insertEdges;
 import static gov.nih.nlm.OntologyGraphBuilder.insertVertices;
 import static gov.nih.nlm.OntologyGraphBuilder.normalizeEdgeLabel;
-import static gov.nih.nlm.OntologyGraphBuilder.oboDir;
 import static gov.nih.nlm.OntologyGraphBuilder.parsePredicate;
+import static gov.nih.nlm.PathUtilities.OBO_DIR;
+import static gov.nih.nlm.PathUtilities.USR_DIR;
 import static gov.nih.nlm.PathUtilities.listFilesMatchingPattern;
 
 public class ResultsGraphBuilder {
 
-    // Assign location of ontology files
-    private static final Path usrDir = Paths.get(System.getProperty("user.dir"));
-    public static final Path tuplesDir = usrDir.resolve("data/tuples");
-    public static final Path schemaDir = usrDir.resolve("data/schema");
+    // Assign location of tuples and schema files
+    public static final Path TUPLES_DIR = USR_DIR.resolve("data/tuples");
 
     // Connect to a local ArangoDB server instance
     private static final ArangoDbUtilities arangoDbUtilities = new ArangoDbUtilities();
 
     // Assign triple indices
-    private static final int tripleSubjectIdx = 0;
-    private static final int triplePredicateIdx = 1;
-    private static final int tripleObjectIdx = 2;
+    private static final int TRIPLE_SUBJECT_IDX = 0;
+    private static final int TRIPLE_PREDICATE_IDX = 1;
+    private static final int TRIPLE_OBJECT_IDX = 2;
 
     // Assign quadruple indices
-    private static final int quadrupleSubjectIdx = 0;
-    private static final int quadrupleObjectIdx = 1;
-    private static final int quadruplePredicateIdx = 2;
-    private static final int quadrupleLiteralIdx = 3;
+    private static final int QUADRUPLE_SUBJECT_IDX = 0;
+    private static final int QUADRUPLE_OBJECT_IDX = 1;
+    private static final int QUADRUPLE_PREDICATE_IDX = 2;
+    private static final int QUADRUPLE_LITERAL_IDX = 3;
 
     public static ArrayList<ArrayList<Node>> readJsonFile(String jsonFilePath) throws IOException {
         ArrayList<ArrayList<Node>> tuplesArrayList = new ArrayList<>();
@@ -80,14 +79,14 @@ public class ResultsGraphBuilder {
                 }
                 tupleArrayList.add(node);
             }
-            if (tupleArrayList.size() == 3 && !(tupleArrayList.get(tripleSubjectIdx).isURI() && tupleArrayList.get(
-                    triplePredicateIdx).isURI() && (tupleArrayList.get(tripleObjectIdx).isURI() || tupleArrayList.get(
-                    tripleObjectIdx).isLiteral()))) {
+            if (tupleArrayList.size() == 3 && !(tupleArrayList.get(TRIPLE_SUBJECT_IDX).isURI() && tupleArrayList.get(
+                    TRIPLE_PREDICATE_IDX).isURI() && (tupleArrayList.get(TRIPLE_OBJECT_IDX).isURI() || tupleArrayList.get(
+                    TRIPLE_OBJECT_IDX).isLiteral()))) {
                 throw new IOException("Invalid triple " + tupleArrayList);
             }
-            if (tupleArrayList.size() == 4 && !(tupleArrayList.get(quadrupleSubjectIdx).isURI() && tupleArrayList.get(
-                    quadrupleObjectIdx).isURI() && tupleArrayList.get(quadruplePredicateIdx).isURI() && tupleArrayList.get(
-                    quadrupleLiteralIdx).isLiteral())) {
+            if (tupleArrayList.size() == 4 && !(tupleArrayList.get(QUADRUPLE_SUBJECT_IDX).isURI() && tupleArrayList.get(
+                    QUADRUPLE_OBJECT_IDX).isURI() && tupleArrayList.get(QUADRUPLE_PREDICATE_IDX).isURI() && tupleArrayList.get(
+                    QUADRUPLE_LITERAL_IDX).isLiteral())) {
                 throw new IOException("Invalid quadruple " + tupleArrayList);
             }
             tuplesArrayList.add(tupleArrayList);
@@ -166,7 +165,7 @@ public class ResultsGraphBuilder {
             if (tupleArrayList.size() != 3) continue;
 
             // Ensure the object contains a literal
-            Node o = tupleArrayList.get(tripleObjectIdx);
+            Node o = tupleArrayList.get(TRIPLE_OBJECT_IDX);
             if (!o.isLiteral()) {
                 continue;
             }
@@ -175,11 +174,11 @@ public class ResultsGraphBuilder {
             String literal = o.getLiteralValue().toString();
 
             // Ensure the subject contains a valid ontology ID
-            OntologyGraphBuilder.VTuple vtuple = createVTuple(tupleArrayList.get(tripleSubjectIdx));
+            OntologyGraphBuilder.VTuple vtuple = createVTuple(tupleArrayList.get(TRIPLE_SUBJECT_IDX));
             if (!vtuple.isValidVertex()) continue;
 
             // Parse the predicate
-            String attribute = parsePredicate(ontologyElementMaps, tupleArrayList.get(triplePredicateIdx));
+            String attribute = parsePredicate(ontologyElementMaps, tupleArrayList.get(TRIPLE_PREDICATE_IDX));
 
             // Update the corresponding vertex
             if (!vertexDocuments.get(vtuple.id()).containsKey(vtuple.number()))
@@ -219,33 +218,33 @@ public class ResultsGraphBuilder {
             if (tupleArrayList.size() != 3) continue;
 
             // Ensure the subject contains a valid ontology ID
-            OntologyGraphBuilder.VTuple s_vtuple = createVTuple(tupleArrayList.get(tripleSubjectIdx));
-            if (!s_vtuple.isValidVertex()) continue;
+            OntologyGraphBuilder.VTuple subjectVTuple = createVTuple(tupleArrayList.get(TRIPLE_SUBJECT_IDX));
+            if (!subjectVTuple.isValidVertex()) continue;
 
             // Ensure the object contains a valid ontology ID
-            OntologyGraphBuilder.VTuple o_vtuple = createVTuple(tupleArrayList.get(tripleObjectIdx));
-            if (!o_vtuple.isValidVertex()) continue;
+            OntologyGraphBuilder.VTuple objectVTuple = createVTuple(tupleArrayList.get(TRIPLE_OBJECT_IDX));
+            if (!objectVTuple.isValidVertex()) continue;
 
             // Parse the predicate
             String label = normalizeEdgeLabel(parsePredicate(ontologyElementMaps,
-                    tupleArrayList.get(triplePredicateIdx)));
+                    tupleArrayList.get(TRIPLE_PREDICATE_IDX)));
 
             // Create an edge collection, if needed
-            String idPair = s_vtuple.id() + "-" + o_vtuple.id();
+            String idPair = subjectVTuple.id() + "-" + objectVTuple.id();
             if (!edgeCollections.containsKey(idPair)) {
                 edgeCollections.put(idPair,
-                        arangoDbUtilities.createOrGetEdgeCollection(graph, s_vtuple.id(), o_vtuple.id()));
+                        arangoDbUtilities.createOrGetEdgeCollection(graph, subjectVTuple.id(), objectVTuple.id()));
                 edgeDocuments.put(idPair, new HashMap<>());
                 edgeKeys.put(idPair, new HashSet<>());
             }
 
             // Construct the edge, if needed
-            String key = s_vtuple.number() + "-" + o_vtuple.number();
+            String key = subjectVTuple.number() + "-" + objectVTuple.number();
             if (!edgeKeys.get(idPair).contains(key)) {
                 nEdges++;
                 BaseEdgeDocument doc = new BaseEdgeDocument(key,
-                        s_vtuple.id() + "/" + s_vtuple.number(),
-                        o_vtuple.id() + "/" + o_vtuple.number());
+                        subjectVTuple.id() + "/" + subjectVTuple.number(),
+                        objectVTuple.id() + "/" + objectVTuple.number());
                 doc.addAttribute("Label", label);
                 edgeDocuments.get(idPair).put(key, doc);
                 edgeKeys.get(idPair).add(key);
@@ -276,25 +275,25 @@ public class ResultsGraphBuilder {
             if (tupleArrayList.size() != 4) continue;
 
             // Ensure the subject contains a valid ontology ID
-            OntologyGraphBuilder.VTuple s_vtuple = createVTuple(tupleArrayList.get(quadrupleSubjectIdx));
-            if (!s_vtuple.isValidVertex()) continue;
+            OntologyGraphBuilder.VTuple subjectVTuple = createVTuple(tupleArrayList.get(QUADRUPLE_SUBJECT_IDX));
+            if (!subjectVTuple.isValidVertex()) continue;
 
             // Ensure the object contains a valid ontology ID
-            OntologyGraphBuilder.VTuple o_vtuple = createVTuple(tupleArrayList.get(quadrupleObjectIdx));
-            if (!o_vtuple.isValidVertex()) continue;
+            OntologyGraphBuilder.VTuple objectVTuple = createVTuple(tupleArrayList.get(QUADRUPLE_OBJECT_IDX));
+            if (!objectVTuple.isValidVertex()) continue;
 
             // Parse the predicate
-            String attribute = parsePredicate(ontologyElementMaps, tupleArrayList.get(quadruplePredicateIdx));
+            String attribute = parsePredicate(ontologyElementMaps, tupleArrayList.get(QUADRUPLE_PREDICATE_IDX));
 
             // Parse the literal
-            String literal = tupleArrayList.get(quadrupleLiteralIdx).getLiteralValue().toString();
+            String literal = tupleArrayList.get(QUADRUPLE_LITERAL_IDX).getLiteralValue().toString();
 
             // Update the corresponding edge
-            String idPair = s_vtuple.id() + "-" + o_vtuple.id();
-            String key = s_vtuple.number() + "-" + o_vtuple.number();
+            String idPair = subjectVTuple.id() + "-" + objectVTuple.id();
+            String key = subjectVTuple.number() + "-" + objectVTuple.number();
             if (!edgeDocuments.get(idPair).containsKey(key))
                 throw new RuntimeException("Invalid edge in collection " + idPair + " with key " + key);
-            updatedEdges.add(s_vtuple.id() + "/" + s_vtuple.number() + "-" + o_vtuple.id() + "/" + o_vtuple.number());
+            updatedEdges.add(subjectVTuple.id() + "/" + subjectVTuple.number() + "-" + objectVTuple.id() + "/" + objectVTuple.number());
             BaseEdgeDocument doc = edgeDocuments.get(idPair).get(key);
             if (doc.getAttribute(attribute) == null) {
                 doc.addAttribute(attribute, literal);
@@ -314,7 +313,7 @@ public class ResultsGraphBuilder {
     public static void main(String[] args) {
 
         // Identify the results tuples files
-        String tuplesPath = tuplesDir.toString();
+        String tuplesPath = TUPLES_DIR.toString();
         String tuplesPattern = ".*\\.json";
         List<Path> tuplesFiles;
         try {
@@ -328,7 +327,7 @@ public class ResultsGraphBuilder {
         }
 
         // Map terms and labels
-        String oboPath = oboDir.toString();
+        String oboPath = OBO_DIR.toString();
         String oboPattern = "ro.owl";
         List<Path> oboFiles;
         try {

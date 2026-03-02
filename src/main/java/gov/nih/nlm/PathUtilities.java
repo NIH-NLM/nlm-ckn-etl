@@ -13,6 +13,10 @@ import java.util.stream.Collectors;
  */
 public class PathUtilities {
 
+    // Assign common directory paths
+    public static final Path USR_DIR = Paths.get(System.getProperty("user.dir"));
+    public static final Path OBO_DIR = USR_DIR.resolve("data/obo");
+
     /**
      * List files in a directory matching a pattern.
      *

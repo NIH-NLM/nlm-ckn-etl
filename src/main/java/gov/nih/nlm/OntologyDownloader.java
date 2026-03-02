@@ -11,10 +11,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static gov.nih.nlm.PathUtilities.OBO_DIR;
 
 /**
  * Downloads ontology files from the OBO Foundry, comparing versions to manage updates.
@@ -31,9 +32,6 @@ public class OntologyDownloader {
             "http://purl.obolibrary.org/obo/pato.owl",
             "http://purl.obolibrary.org/obo/hsapdv.owl",
             "http://purl.obolibrary.org/obo/ro.owl");
-    // Assign location of ontology files
-    private static final Path usrDir = Paths.get(System.getProperty("user.dir"));
-    private static final Path oboDir = usrDir.resolve("data/obo");
     // Assign pattern for extracting YYYY-MM-DD dates
     private static final Pattern DATE_PATTERN = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})");
 
@@ -140,7 +138,7 @@ public class OntologyDownloader {
      */
     public static void main(String[] args) {
         try {
-            updateDownloads(OBO_PURLS, oboDir);
+            updateDownloads(OBO_PURLS, OBO_DIR);
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException(e);
         }
