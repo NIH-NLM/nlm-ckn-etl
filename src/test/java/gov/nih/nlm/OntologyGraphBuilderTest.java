@@ -23,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class OntologyGraphBuilderTest {
 
-    // Assign location of ontology files
-    private static final Path usrDir = Paths.get(System.getProperty("user.dir"));
-    private static final Path oboDir = usrDir.resolve("src/test/data/obo");
+    // Assign location of test ontology files
+    private static final Path USR_DIR = Paths.get(System.getProperty("user.dir"));
+    private static final Path OBO_DIR = USR_DIR.resolve("src/test/data/obo");
     static String arangoDbHost = "localhost";
     static String arangoDbPort = "8529";
     static String arangoDbUser = "root";
@@ -153,7 +153,7 @@ class OntologyGraphBuilderTest {
     @Test
     void parsePredicate_oboTermWithDevelopsFrom() {
         // A URI without fragment, where the term is in the ro map
-        List<Path> roFile = List.of(oboDir.resolve("ro.owl"));
+        List<Path> roFile = List.of(OBO_DIR.resolve("ro.owl"));
         Map<String, OntologyElementMap> maps = OntologyElementParser.parseOntologyElements(roFile);
 
         var node = NodeFactory.createURI("http://purl.obolibrary.org/obo/RO_0002202");
@@ -163,7 +163,7 @@ class OntologyGraphBuilderTest {
 
     @Test
     void parsePredicate_oboTermWithCapableOf() {
-        List<Path> roFile = List.of(oboDir.resolve("ro.owl"));
+        List<Path> roFile = List.of(OBO_DIR.resolve("ro.owl"));
         Map<String, OntologyElementMap> maps = OntologyElementParser.parseOntologyElements(roFile);
 
         var node = NodeFactory.createURI("http://purl.obolibrary.org/obo/RO_0002215");
@@ -344,7 +344,7 @@ class OntologyGraphBuilderTest {
         try {
             // Parse macrophage OWL file and load the result into ArangoDB
             try {
-                String[] args = new String[]{oboDir.toString(), "cl-test", "test"};
+                String[] args = new String[]{OBO_DIR.toString(), "cl-test", "test"};
                 OntologyGraphBuilder.main(args);
             } catch (Exception e) {
                 throw new RuntimeException(e);
