@@ -157,7 +157,7 @@ $ python -m pytest *.py
 
 ### ETL Pipeline Execution Order
 
-1. **Download ontologies:**
+1. **Download ontologies (Java):**
    ```
    $ export CP="target/nlm-ckn-etl-1.0.jar"
    $ java -cp $CP gov.nih.nlm.OntologyDownloader
@@ -169,13 +169,15 @@ $ python -m pytest *.py
    $ java -cp $CP gov.nih.nlm.OntologyGraphBuilder
    ```
 
-3. **Fetch external data:**
+3. **Fetch external data (Python):**
    ```
    $ cd python/src
+   $ export NCBI_EMAIL="<some-email>"
+   $ export NCBI_API_KEY="<some-api-key>"
    $ python ExternalApiResultsFetcher.py
    ```
 
-4. **Create result tuples:**
+4. **Create result tuples (Python):**
    ```
    $ cd python/src
    $ python NSForestResultsTupleWriter.py
@@ -185,7 +187,7 @@ $ python -m pytest *.py
 
 5. **Load results into ArangoDB (Java):**
    ```
-   $ export CP="target/cell-kn-mvp-etl-1.0.jar"
+   $ export CP="target/nlm-ckn-etl-1.0.jar"
    $ java -cp $CP gov.nih.nlm.ResultsGraphBuilder
    ```
 

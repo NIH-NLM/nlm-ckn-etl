@@ -13,7 +13,7 @@ from LoaderUtilities import (
     load_results,
 )
 
-TUPLES_DIRPATH = Path(__file__) / "data" / "tuples"
+TUPLES_DIRPATH = Path(__file__).parents[2] / "data" / "tuples"
 
 
 def create_tuples_from_nsforest(nsforest_results):

@@ -10,9 +10,11 @@ import com.arangodb.model.AqlQueryOptions;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static gov.nih.nlm.AqlQuerySetBuilder.AqlQuerySet;
@@ -118,11 +120,12 @@ public class PhenotypeGraphBuilder {
         System.out.println("Collecting unique vertex documents from " + paths.size() + " identified paths");
         long startTime = System.nanoTime();
         List<BaseDocument> vertexDocuments = new ArrayList<>();
+        Set<String> seenVertexIds = new HashSet<>();
         for (Map path : paths) {
             ArrayList<LinkedHashMap> vertices = (ArrayList<LinkedHashMap>) path.get("vertices");
             for (LinkedHashMap vertex : vertices) {
                 BaseDocument vertexDoc = new BaseDocument(vertex);
-                if (!vertexDocuments.contains(vertexDoc)) {
+                if (seenVertexIds.add(vertexDoc.getId())) {
                     vertexDocuments.add(vertexDoc);
                 }
             }
@@ -142,11 +145,12 @@ public class PhenotypeGraphBuilder {
         System.out.println("Collecting unique edge documents from " + paths.size() + " identified paths");
         long startTime = System.nanoTime();
         List<BaseEdgeDocument> edgeDocuments = new ArrayList<>();
+        Set<String> seenEdgeIds = new HashSet<>();
         for (Map path : paths) {
             ArrayList<LinkedHashMap> edges = (ArrayList<LinkedHashMap>) path.get("edges");
             for (LinkedHashMap edge : edges) {
                 BaseEdgeDocument edgeDoc = new BaseEdgeDocument(edge);
-                if (!edgeDocuments.contains(edgeDoc)) {
+                if (seenEdgeIds.add(edgeDoc.getId())) {
                     edgeDocuments.add(edgeDoc);
                 }
             }

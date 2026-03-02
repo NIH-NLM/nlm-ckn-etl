@@ -54,39 +54,43 @@ public class ResultsGraphBuilder {
 
     public static ArrayList<ArrayList<Node>> readJsonFile(String jsonFilePath) throws IOException {
         ArrayList<ArrayList<Node>> tuplesArrayList = new ArrayList<>();
+        String content;
         try {
-            String content = new String(Files.readAllBytes(Paths.get(jsonFilePath)));
-            JSONObject jsonObject = new JSONObject(content);
-            JSONArray tuplesJsonArray = (JSONArray) jsonObject.get("tuples");
-            for (int iTuple = 0; iTuple < tuplesJsonArray.length(); iTuple++) {
-                ArrayList<Node> tupleArrayList = new ArrayList<>();
-                JSONArray tupleJsonArray = (JSONArray) tuplesJsonArray.get(iTuple);
-                for (int iElement = 0; iElement < tupleJsonArray.length(); iElement++) {
-                    String value = tupleJsonArray.get(iElement).toString();
-                    Node node;
-                    if (value.contains("http")) {
-                        node = NodeFactory.createURI(value);
-                    } else {
-                        node = NodeFactory.createLiteral(value);
-                    }
-                    tupleArrayList.add(node);
-                }
-                if (tupleArrayList.size() == 3 && !(tupleArrayList.get(tripleSubjectIdx).isURI() && tupleArrayList.get(
-                        triplePredicateIdx).isURI() && (tupleArrayList.get(tripleObjectIdx).isURI() || tupleArrayList.get(
-                        tripleObjectIdx).isLiteral()))) {
-                    throw new IOException("Invalid triple " + tupleArrayList);
-                }
-                if (tupleArrayList.size() == 4 && !(tupleArrayList.get(quadrupleSubjectIdx).isURI() && tupleArrayList.get(
-                        quadrupleObjectIdx).isURI() && tupleArrayList.get(quadruplePredicateIdx).isURI() && tupleArrayList.get(
-                        quadrupleLiteralIdx).isLiteral())) {
-                    throw new IOException("Invalid quadruple " + tupleArrayList);
-                }
-                tuplesArrayList.add(tupleArrayList);
-            }
+            content = new String(Files.readAllBytes(Paths.get(jsonFilePath)));
         } catch (IOException e) {
-            System.err.println("Error reading the file: " + e.getMessage());
+            throw new IOException("Error reading file: " + jsonFilePath, e);
+        }
+        JSONObject jsonObject;
+        try {
+            jsonObject = new JSONObject(content);
         } catch (org.json.JSONException e) {
-            System.err.println("Error parsing JSON: " + e.getMessage());
+            throw new IOException("Error parsing JSON in file: " + jsonFilePath, e);
+        }
+        JSONArray tuplesJsonArray = (JSONArray) jsonObject.get("tuples");
+        for (int iTuple = 0; iTuple < tuplesJsonArray.length(); iTuple++) {
+            ArrayList<Node> tupleArrayList = new ArrayList<>();
+            JSONArray tupleJsonArray = (JSONArray) tuplesJsonArray.get(iTuple);
+            for (int iElement = 0; iElement < tupleJsonArray.length(); iElement++) {
+                String value = tupleJsonArray.get(iElement).toString();
+                Node node;
+                if (value.contains("http")) {
+                    node = NodeFactory.createURI(value);
+                } else {
+                    node = NodeFactory.createLiteral(value);
+                }
+                tupleArrayList.add(node);
+            }
+            if (tupleArrayList.size() == 3 && !(tupleArrayList.get(tripleSubjectIdx).isURI() && tupleArrayList.get(
+                    triplePredicateIdx).isURI() && (tupleArrayList.get(tripleObjectIdx).isURI() || tupleArrayList.get(
+                    tripleObjectIdx).isLiteral()))) {
+                throw new IOException("Invalid triple " + tupleArrayList);
+            }
+            if (tupleArrayList.size() == 4 && !(tupleArrayList.get(quadrupleSubjectIdx).isURI() && tupleArrayList.get(
+                    quadrupleObjectIdx).isURI() && tupleArrayList.get(quadruplePredicateIdx).isURI() && tupleArrayList.get(
+                    quadrupleLiteralIdx).isLiteral())) {
+                throw new IOException("Invalid quadruple " + tupleArrayList);
+            }
+            tuplesArrayList.add(tupleArrayList);
         }
         return tuplesArrayList;
     }
