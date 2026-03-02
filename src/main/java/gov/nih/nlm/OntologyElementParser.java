@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static gov.nih.nlm.PathUtilities.OBO_DIR;
 import static gov.nih.nlm.PathUtilities.listFilesMatchingPattern;
 
 /**
@@ -30,18 +31,14 @@ import static gov.nih.nlm.PathUtilities.listFilesMatchingPattern;
  */
 public class OntologyElementParser {
 
-    // Assign location of ontology files
-    private static final Path usrDir = Paths.get(System.getProperty("user.dir"));
-    private static final Path oboDir = usrDir.resolve("data/obo");
-
     // Assign pattern for matching to required elements
-    private static final Pattern owlPattern = Pattern.compile("^owl:");
+    private static final Pattern OWL_PATTERN = Pattern.compile("^owl:");
 
     // Assign pattern for matching to pcl/CS terms
-    private static final Pattern pclPattern = Pattern.compile("/pcl/CS");
+    private static final Pattern PCL_PATTERN = Pattern.compile("/pcl/CS");
 
     // Assign pattern for matching to ensembl/ENSG terms
-    private static final Pattern ensemblPattern = Pattern.compile("/ensembl/ENSG");
+    private static final Pattern ENSEMBL_PATTERN = Pattern.compile("/ensembl/ENSG");
 
     /**
      * Parse the specified file, and normalize.
@@ -75,11 +72,11 @@ public class OntologyElementParser {
      * @return URI created
      */
     public static URI createURI(String uri) throws RuntimeException {
-        Matcher pclMatcher = pclPattern.matcher(uri);
+        Matcher pclMatcher = PCL_PATTERN.matcher(uri);
         if (pclMatcher.find()) {
             return URI.create(pclMatcher.replaceFirst("/PCLCS_"));
         }
-        Matcher ensembleMatcher = ensemblPattern.matcher(uri);
+        Matcher ensembleMatcher = ENSEMBL_PATTERN.matcher(uri);
         if (ensembleMatcher.find()) {
             return URI.create(ensembleMatcher.replaceFirst("/ENSG_"));
         }
@@ -100,7 +97,7 @@ public class OntologyElementParser {
             Element element = (Element) node;
 
             // Consider elements with tags in the "owl" namespace
-            if (owlPattern.matcher(element.getTagName()).find()) {
+            if (OWL_PATTERN.matcher(element.getTagName()).find()) {
 
                 // Consider elements with a non-empty "about" attribute
                 String about = element.getAttribute("rdf:about");
@@ -146,8 +143,8 @@ public class OntologyElementParser {
     public static Map<String, OntologyElementMap> parseOntologyElements(List<Path> files) throws RuntimeException {
         Map<String, OntologyElementMap> ontologyElementMaps = new HashMap<>();
         for (Path file : files) {
-            String oboFNm = file.getFileName().toString();
-            System.out.println("Parsing ontology element in " + oboFNm);
+            String oboFileName = file.getFileName().toString();
+            System.out.println("Parsing ontology element in " + oboFileName);
             Document doc = parseXmlFile(file.toFile());
             OntologyElementMap ontologyElementMap = new OntologyElementMap();
             // Get title
@@ -178,7 +175,7 @@ public class OntologyElementParser {
             // Parse the first node
             parseOntologyNode(doc.getDocumentElement(), ontologyElementMap);
             // Map maps by filename
-            ontologyElementMaps.put(oboFNm.substring(0, oboFNm.lastIndexOf(".")), ontologyElementMap);
+            ontologyElementMaps.put(oboFileName.substring(0, oboFileName.lastIndexOf(".")), ontologyElementMap);
         }
         return ontologyElementMaps;
     }
@@ -192,7 +189,7 @@ public class OntologyElementParser {
      * @param args (None expected)
      */
     public static void main(String[] args) {
-        String directoryPath = oboDir.toString();
+        String directoryPath = OBO_DIR.toString();
         String filePattern = ".*\\.owl";
         List<Path> files;
         try {

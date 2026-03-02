@@ -15,13 +15,13 @@ import org.apache.jena.vocabulary.RDF;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
 import static gov.nih.nlm.OntologyElementParser.parseOntologyElements;
+import static gov.nih.nlm.PathUtilities.OBO_DIR;
 import static gov.nih.nlm.PathUtilities.listFilesMatchingPattern;
 
 /**
@@ -29,12 +29,8 @@ import static gov.nih.nlm.PathUtilities.listFilesMatchingPattern;
  */
 public class OntologyTripleParser {
 
-    // Assign location of ontology files
-    private static final Path usrDir = Paths.get(System.getProperty("user.dir"));
-    private static final Path oboDir = usrDir.resolve("data/obo");
-
     // Assign selected predicate namespaces
-    private static final List<String> predicateNameSpaces = List.of("http://www.w3.org/2000/01/rdf-schema#",
+    private static final List<String> PREDICATE_NAMESPACES = List.of("http://www.w3.org/2000/01/rdf-schema#",
             "http://purl.obolibrary.org/obo/",
             "http://purl.org/dc/",
             "http://www.geneontology.org/formats/oboInOwl#");
@@ -79,7 +75,7 @@ public class OntologyTripleParser {
                 String predicateURI = classStatement.getPredicate().getURI();
                 if (!classStatement.getObject().isAnon()) {
                     // Handle statements which contain a named object
-                    if (predicateNameSpaces.stream().anyMatch(ns -> predicateURI.startsWith(ns))) {
+                    if (PREDICATE_NAMESPACES.stream().anyMatch(ns -> predicateURI.startsWith(ns))) {
                         // Collect statements as triples which contain a predicate in one of the
                         // selected name spaces
                         Triple triple = classStatement.asTriple();
@@ -181,7 +177,7 @@ public class OntologyTripleParser {
         String oboPattern = ".*\\.owl";
         List<Path> oboFiles;
         try {
-            oboFiles = listFilesMatchingPattern(oboDir.toString(), oboPattern);
+            oboFiles = listFilesMatchingPattern(OBO_DIR.toString(), oboPattern);
             if (oboFiles.isEmpty()) {
                 throw new RuntimeException("No OBO files found matching the pattern " + oboPattern);
             }
@@ -193,7 +189,7 @@ public class OntologyTripleParser {
         String roPattern = "ro.owl";
         List<Path> roFile;
         try {
-            roFile = listFilesMatchingPattern(oboDir.toString(), roPattern);
+            roFile = listFilesMatchingPattern(OBO_DIR.toString(), roPattern);
             if (roFile.isEmpty()) {
                 throw new RuntimeException("No RO file found");
             }

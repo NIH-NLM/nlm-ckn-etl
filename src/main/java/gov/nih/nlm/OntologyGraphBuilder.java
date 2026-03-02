@@ -27,6 +27,7 @@ import java.util.Set;
 import static gov.nih.nlm.OntologyElementParser.createURI;
 import static gov.nih.nlm.OntologyElementParser.parseOntologyElements;
 import static gov.nih.nlm.OntologyTripleParser.collectUniqueTriples;
+import static gov.nih.nlm.PathUtilities.OBO_DIR;
 import static gov.nih.nlm.PathUtilities.listFilesMatchingPattern;
 
 /**
@@ -34,14 +35,12 @@ import static gov.nih.nlm.PathUtilities.listFilesMatchingPattern;
  */
 public class OntologyGraphBuilder {
 
-    // Assign location of ontology and deprecated terms files
-    private static final Path usrDir = Paths.get(System.getProperty("user.dir"));
-    public static final Path oboDir = usrDir.resolve("data/obo");
-    public static final Path deprecatedTermsFile = oboDir.resolve("deprecated_terms.txt");
-    public static final Path edgeLabelsFile = oboDir.resolve("edge_labels.txt");
+    // Assign location of deprecated terms and edge labels files
+    public static final Path DEPRECATED_TERMS_FILE = OBO_DIR.resolve("deprecated_terms.txt");
+    public static final Path EDGE_LABELS_FILE = OBO_DIR.resolve("edge_labels.txt");
 
     // Assign vertices to include in the graph
-    private static final ArrayList<String> validVertices = new ArrayList<>(Arrays.asList("BGS",
+    private static final ArrayList<String> VALID_VERTICES = new ArrayList<>(Arrays.asList("BGS",
             "BMC",
             "CHEBI",
             "CHEMBL",
@@ -96,7 +95,7 @@ public class OntologyGraphBuilder {
         } else {
             return vtuple;
         }
-        Boolean isValidVertex = validVertices.contains(id);
+        boolean isValidVertex = VALID_VERTICES.contains(id);
         return new VTuple(term, id, number, isValidVertex);
     }
 
@@ -243,7 +242,7 @@ public class OntologyGraphBuilder {
         System.out.println("Inserting vertices");
         long startTime = System.nanoTime();
         int nVertices = 0;
-        try (BufferedWriter deprecatedTermsWriter = Files.newBufferedWriter(deprecatedTermsFile, StandardCharsets.US_ASCII)) {
+        try (BufferedWriter deprecatedTermsWriter = Files.newBufferedWriter(DEPRECATED_TERMS_FILE, StandardCharsets.US_ASCII)) {
             for (String id : vertexDocuments.keySet()) {
                 ArangoVertexCollection vertexCollection = vertexCollections.get(id);
                 for (String number : vertexDocuments.get(id).keySet()) {
@@ -489,7 +488,7 @@ public class OntologyGraphBuilder {
     public static void main(String[] args) throws IOException {
 
         // List all ontology files
-        String oboPath = oboDir.toString();
+        String oboPath = OBO_DIR.toString();
         String oboPattern = ".*\\.owl";
         List<Path> oboFiles;
         try {
@@ -552,7 +551,7 @@ public class OntologyGraphBuilder {
         insertEdges(ontologyVertexCollections, ontologyEdgeCollections, ontologyEdgeDocuments);
 
         // Document unique labels, and their normalized values
-        try (BufferedWriter edgeLabelsWriter = Files.newBufferedWriter(edgeLabelsFile, StandardCharsets.US_ASCII)) {
+        try (BufferedWriter edgeLabelsWriter = Files.newBufferedWriter(EDGE_LABELS_FILE, StandardCharsets.US_ASCII)) {
             for (String label : edgeLabels) {
                 edgeLabelsWriter.write(label + ": " + normalizeEdgeLabel(label) + "\n");
             }
@@ -623,7 +622,7 @@ public class OntologyGraphBuilder {
     }
 
     // Define a record describing a vertex
-    public record VTuple(String term, String id, String number, Boolean isValidVertex) {
+    public record VTuple(String term, String id, String number, boolean isValidVertex) {
 
     }
 }
