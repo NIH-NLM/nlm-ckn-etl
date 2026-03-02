@@ -108,7 +108,7 @@ public class OntologyElementParser {
                     String term = Paths.get(uri.getPath()).getFileName().toString();
                     if (term.contains("_")) {
                         String id = term.split("_")[0];
-                        // TODO: Add other unneeded terms here
+                        // Skip terms with non-ontology ids
                         if (!id.equals("valid")) {
                             ontologyElementMap.ids.add(id);
                         }

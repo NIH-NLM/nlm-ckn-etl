@@ -32,6 +32,9 @@ import static gov.nih.nlm.PathUtilities.OBO_DIR;
 import static gov.nih.nlm.PathUtilities.USR_DIR;
 import static gov.nih.nlm.PathUtilities.listFilesMatchingPattern;
 
+/**
+ * Loads tuples parsed from results JSON files into a local ArangoDB server instance.
+ */
 public class ResultsGraphBuilder {
 
     // Assign location of tuples and schema files
@@ -51,6 +54,14 @@ public class ResultsGraphBuilder {
     private static final int QUADRUPLE_PREDICATE_IDX = 2;
     private static final int QUADRUPLE_LITERAL_IDX = 3;
 
+    /**
+     * Read a JSON file containing tuples, parsing each element as a URI or literal node, and validating the resulting
+     * triples and quadruples.
+     *
+     * @param jsonFilePath Path to the JSON file containing tuples
+     * @return List of tuples, each represented as a list of nodes
+     * @throws IOException if the file cannot be read, contains invalid JSON, or contains invalid tuples
+     */
     public static ArrayList<ArrayList<Node>> readJsonFile(String jsonFilePath) throws IOException {
         ArrayList<ArrayList<Node>> tuplesArrayList = new ArrayList<>();
         String content;
@@ -196,9 +207,13 @@ public class ResultsGraphBuilder {
     }
 
     /**
+     * Construct edges using tuples parsed from a results file that contain a filled subject and object each which
+     * contains an ontology ID contained in the valid vertices' collection.
+     *
      * @param tuplesArrayList     list of tuples parsed from a results file
      * @param ontologyElementMaps Maps terms and labels
      * @param graph               ArangoDB graph
+     * @param edgeKeys            ArangoDB edge keys for deduplication
      * @param edgeCollections     ArangoDB edge collections
      * @param edgeDocuments       ArangoDB edge documents
      */
