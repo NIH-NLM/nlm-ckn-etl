@@ -1,0 +1,9 @@
+# NCBI E-Utilities credentials
+# Copy this file to .zshenv and fill in your values.
+# .zshenv is gitignored; .zshenv.example is committed as a template.
+#
+# Register for an NCBI API key at:
+#   https://www.ncbi.nlm.nih.gov/account/
+#
+export NCBI_EMAIL="your-email@example.com"
+export NCBI_API_KEY="your-ncbi-api-key"

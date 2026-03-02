@@ -36,11 +36,15 @@ build/
 
 ### Dev ###
 *~
+.arangodb-password
 .built
+.built-ontology
+.built-results
 .ai
 .archived
 .poetry/
 .pybiomart.sqlite
+.pytest_cache/
 .tern-port
 .venv/
 .zshenv
@@ -48,9 +52,15 @@ __pycache__/
 # data
 docs/java/
 log/
-data/obo/*.owl
-data/obo/edge_labels.txt
+data/arangodb/
+data/external/
+data/obo/
 data/results-*/
 data/scores-*/
-data/external/
+data/tuples/
 python/tests/arangodb/
+# archives
+arangodb.tar.gz
+arangodb-*.tar.gz
+obo.tar.gz
+obo-*.tar.gz
