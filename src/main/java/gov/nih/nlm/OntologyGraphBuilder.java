@@ -12,7 +12,6 @@ import org.apache.jena.graph.Triple;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.net.URI;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -243,37 +242,36 @@ public class OntologyGraphBuilder {
                                       Map<String, Map<String, BaseDocument>> vertexDocuments) throws IOException {
         System.out.println("Inserting vertices");
         long startTime = System.nanoTime();
-        Charset charset = StandardCharsets.US_ASCII;
-        BufferedWriter deprecatedTermsWriter = Files.newBufferedWriter(deprecatedTermsFile, charset);
         int nVertices = 0;
-        for (String id : vertexDocuments.keySet()) {
-            ArangoVertexCollection vertexCollection = vertexCollections.get(id);
-            for (String number : vertexDocuments.get(id).keySet()) {
-                nVertices++;
-                BaseDocument doc = vertexDocuments.get(id).get(number);
-                if (vertexCollection.getVertex(doc.getKey(), doc.getClass()) == null) {
-                    Object deprecated = doc.getAttribute("deprecated");
-                    Object label = doc.getAttribute("label");
-                    if ((deprecated != null && deprecated.toString().contains("true")) || (label != null && label.toString().contains(
-                            "obsolete"))) {
-                        deprecatedTermsWriter.write(id + "_" + number + "\n");
-                        continue;
-                    }
-                    try {
-                        vertexCollection.insertVertex(doc);
-                    } catch (Exception e) {
-                        System.err.println("Error inserting vertex " + doc + ": " + e.getMessage());
-                    }
-                } else {
-                    try {
-                        vertexCollection.updateVertex(doc.getKey(), doc);
-                    } catch (Exception e) {
-                        System.err.println("Error updating vertex " + doc + ": " + e.getMessage());
+        try (BufferedWriter deprecatedTermsWriter = Files.newBufferedWriter(deprecatedTermsFile, StandardCharsets.US_ASCII)) {
+            for (String id : vertexDocuments.keySet()) {
+                ArangoVertexCollection vertexCollection = vertexCollections.get(id);
+                for (String number : vertexDocuments.get(id).keySet()) {
+                    nVertices++;
+                    BaseDocument doc = vertexDocuments.get(id).get(number);
+                    if (vertexCollection.getVertex(doc.getKey(), doc.getClass()) == null) {
+                        Object deprecated = doc.getAttribute("deprecated");
+                        Object label = doc.getAttribute("label");
+                        if ((deprecated != null && deprecated.toString().contains("true")) || (label != null && label.toString().contains(
+                                "obsolete"))) {
+                            deprecatedTermsWriter.write(id + "_" + number + "\n");
+                            continue;
+                        }
+                        try {
+                            vertexCollection.insertVertex(doc);
+                        } catch (Exception e) {
+                            System.err.println("Error inserting vertex " + doc + ": " + e.getMessage());
+                        }
+                    } else {
+                        try {
+                            vertexCollection.updateVertex(doc.getKey(), doc);
+                        } catch (Exception e) {
+                            System.err.println("Error updating vertex " + doc + ": " + e.getMessage());
+                        }
                     }
                 }
             }
         }
-        deprecatedTermsWriter.close();
         long stopTime = System.nanoTime();
         System.out.println("Inserted " + nVertices + " vertices in " + (stopTime - startTime) / 1e9 + " s");
     }
@@ -554,12 +552,11 @@ public class OntologyGraphBuilder {
         insertEdges(ontologyVertexCollections, ontologyEdgeCollections, ontologyEdgeDocuments);
 
         // Document unique labels, and their normalized values
-        Charset charset = StandardCharsets.US_ASCII;
-        BufferedWriter edgeLabelsWriter = Files.newBufferedWriter(edgeLabelsFile, charset);
-        for (String label : edgeLabels) {
-            edgeLabelsWriter.write(label + ": " + normalizeEdgeLabel(label) + "\n");
+        try (BufferedWriter edgeLabelsWriter = Files.newBufferedWriter(edgeLabelsFile, StandardCharsets.US_ASCII)) {
+            for (String label : edgeLabels) {
+                edgeLabelsWriter.write(label + ": " + normalizeEdgeLabel(label) + "\n");
+            }
         }
-        edgeLabelsWriter.close();
 
         // List the Cell Ontology file
         oboPattern = "cl.owl";

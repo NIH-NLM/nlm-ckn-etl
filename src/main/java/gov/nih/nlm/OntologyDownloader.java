@@ -95,6 +95,9 @@ public class OntologyDownloader {
             // Download to a temporary file
             HttpRequest request = HttpRequest.newBuilder().uri(uri).build();
             HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() != 200) {
+                throw new IOException("HTTP " + response.statusCode() + " for " + url);
+            }
 
             Path newFile = downloadDir.resolve(stem + "-new" + suffix);
             System.out.println("Writing " + newFile);
