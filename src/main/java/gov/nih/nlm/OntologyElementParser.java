@@ -110,7 +110,7 @@ public class OntologyElementParser {
                         String id = term.split("_")[0];
                         // Skip terms with non-ontology ids
                         if (!id.equals("valid")) {
-                            ontologyElementMap.ids.add(id);
+                            ontologyElementMap.getIds().add(id);
                         }
                     }
 
@@ -119,7 +119,7 @@ public class OntologyElementParser {
                     if (nodeList.getLength() > 0) {
                         Element labelElement = (Element) nodeList.item(0);
                         String label = labelElement.getTextContent();
-                        ontologyElementMap.terms.put(term, new OntologyElementMap.OntologyTerm(uri, label));
+                        ontologyElementMap.getTerms().put(term, new OntologyElementMap.OntologyTerm(uri, label));
                     }
                 }
             }
@@ -150,27 +150,27 @@ public class OntologyElementParser {
             // Get title
             Element titleElement = (Element) doc.getElementsByTagName("dc:title").item(0);
             if (titleElement != null) {
-                ontologyElementMap.title = titleElement.getTextContent();
+                ontologyElementMap.setTitle(titleElement.getTextContent());
             }
             // Get description
             Element descriptionElement = (Element) doc.getElementsByTagName("dc:description").item(0);
             if (descriptionElement != null) {
-                ontologyElementMap.description = descriptionElement.getTextContent();
+                ontologyElementMap.setDescription(descriptionElement.getTextContent());
             }
             // Get PURL
             Element purlElement = (Element) doc.getElementsByTagName("owl:Ontology").item(0);
             if (purlElement != null) {
-                ontologyElementMap.purl = URI.create(purlElement.getAttribute("rdf:about"));
+                ontologyElementMap.setPurl(URI.create(purlElement.getAttribute("rdf:about")));
                 // Get version
                 Element versionElement = (Element) purlElement.getElementsByTagName("owl:versionIRI").item(0);
                 if (versionElement != null) {
-                    ontologyElementMap.versionIRI = URI.create(versionElement.getAttribute("rdf:resource"));
+                    ontologyElementMap.setVersionIRI(URI.create(versionElement.getAttribute("rdf:resource")));
                 }
             }
             // Get root
             Element rootElement = (Element) doc.getElementsByTagName("obo:IAO_0000700").item(0);
             if (rootElement != null) {
-                ontologyElementMap.root = URI.create(rootElement.getAttribute("rdf:resource"));
+                ontologyElementMap.setRoot(URI.create(rootElement.getAttribute("rdf:resource")));
             }
             // Parse the first node
             parseOntologyNode(doc.getDocumentElement(), ontologyElementMap);

@@ -115,8 +115,8 @@ public class OntologyGraphBuilder {
                 label = createURI(p.getURI()).getPath();
                 if (label != null) {
                     label = label.substring(label.lastIndexOf("/") + 1);
-                    if (ontologyElementMaps.get("ro").terms.containsKey(label)) {
-                        label = ontologyElementMaps.get("ro").terms.get(label).label;
+                    if (ontologyElementMaps.get("ro").getTerms().containsKey(label)) {
+                        label = ontologyElementMaps.get("ro").getTerms().get(label).label();
                     }
                 }
             }
