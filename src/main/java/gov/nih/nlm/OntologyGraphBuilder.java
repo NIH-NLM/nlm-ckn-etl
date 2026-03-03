@@ -282,18 +282,13 @@ public class OntologyGraphBuilder {
      * @return Normalized source
      */
     public static String normalizeEdgeSource(String source) {
-        switch (source) {
-            case "mondo-simple":
-                return "MONDO";
-            case "taxslim":
-                return "NCBITAXON";
-            case "go-plus":
-                return "GO";
-            case "uberon-base":
-                return "UBERON";
-            default:
-                return source.toUpperCase();
-        }
+        return switch (source) {
+            case "mondo-simple" -> "MONDO";
+            case "taxslim" -> "NCBITAXON";
+            case "go-plus" -> "GO";
+            case "uberon-base" -> "UBERON";
+            default -> source.toUpperCase();
+        };
     }
 
     /**
@@ -304,22 +299,15 @@ public class OntologyGraphBuilder {
      * @return Normalized attribute value
      */
     public static String normalizeEdgeLabel(String label) {
-        switch (label) {
-            case "subClassOf":
-                return "SUB_CLASS_OF";
-            case "disjointWith":
-                return "DISJOINT_WITH";
-            case "crossSpeciesExactMatch":
-                return "CROSS_SPECIES_EXACT_MATCH";
-            case "exactMatch":
-                return "EXACT_MATCH";
-            case "equivalentClass":
-                return "EQUIVALENT_CLASS";
-            case "seeAlso":
-                return "SEE_ALSO";
-            default:
-                return label.toUpperCase().replace(" ", "_");
-        }
+        return switch (label) {
+            case "subClassOf" -> "SUB_CLASS_OF";
+            case "disjointWith" -> "DISJOINT_WITH";
+            case "crossSpeciesExactMatch" -> "CROSS_SPECIES_EXACT_MATCH";
+            case "exactMatch" -> "EXACT_MATCH";
+            case "equivalentClass" -> "EQUIVALENT_CLASS";
+            case "seeAlso" -> "SEE_ALSO";
+            default -> label.toUpperCase().replace(" ", "_");
+        };
     }
 
     /**
