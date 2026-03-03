@@ -1,0 +1,25 @@
+{
+  "tuples": [
+    [
+      "http://purl.obolibrary.org/obo/CL_0000235",
+      "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+      "http://purl.obolibrary.org/obo/CL_0000145"
+    ],
+    [
+      "http://purl.obolibrary.org/obo/CL_0000235",
+      "http://purl.obolibrary.org/obo/RO_0002215",
+      "http://purl.obolibrary.org/obo/GO_0031268"
+    ],
+    [
+      "http://purl.obolibrary.org/obo/CL_0000235",
+      "http://www.w3.org/2000/01/rdf-schema#label",
+      "macrophage"
+    ],
+    [
+      "http://purl.obolibrary.org/obo/CL_0000235",
+      "http://purl.obolibrary.org/obo/GO_0031268",
+      "http://purl.obolibrary.org/obo/RO_0002215",
+      "some edge attribute"
+    ]
+  ]
+}
