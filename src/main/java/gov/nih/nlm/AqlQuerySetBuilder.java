@@ -430,7 +430,8 @@ public class AqlQuerySetBuilder {
         for (AqlQuerySet aqlQuerySet : aqlQuerySets) {
             System.out.println(aqlQuerySet.queryStr().lines().collect(Collectors.joining()).replaceAll("\\s+", " "));
             long startTime = System.nanoTime();
-            List<Map> queryPaths = db.query(aqlQuerySet.queryStr(),
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> queryPaths = (List<Map<String, Object>>) (List<?>) db.query(aqlQuerySet.queryStr(),
                     Map.class,
                     aqlQuerySet.bindVars(),
                     queryOpts).asListRemaining();

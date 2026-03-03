@@ -33,7 +33,7 @@ class PhenotypeGraphBuilderTest {
     @Test
     void getVertexDocuments_collectsUniqueVertices() {
         // Build two paths that share a vertex (CL/0000235)
-        List<Map> paths = new ArrayList<>();
+        List<Map<String, Object>> paths = new ArrayList<>();
 
         Map<String, Object> path1 = new LinkedHashMap<>();
         ArrayList<LinkedHashMap> vertices1 = new ArrayList<>();
@@ -66,7 +66,7 @@ class PhenotypeGraphBuilderTest {
     @Test
     void getEdgeDocuments_collectsUniqueEdges() {
         // Build two paths that share an edge (CL-GO/0000235-0031268)
-        List<Map> paths = new ArrayList<>();
+        List<Map<String, Object>> paths = new ArrayList<>();
 
         Map<String, Object> path1 = new LinkedHashMap<>();
         path1.put("vertices", new ArrayList<>());
