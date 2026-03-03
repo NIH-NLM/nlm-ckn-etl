@@ -116,7 +116,7 @@ public class PhenotypeGraphBuilder {
      * @param paths All identified paths
      * @return Unique vertex documents
      */
-    private static List<BaseDocument> getVertexDocuments(List<Map> paths) {
+    static List<BaseDocument> getVertexDocuments(List<Map> paths) {
         System.out.println("Collecting unique vertex documents from " + paths.size() + " identified paths");
         long startTime = System.nanoTime();
         List<BaseDocument> vertexDocuments = new ArrayList<>();
@@ -141,7 +141,7 @@ public class PhenotypeGraphBuilder {
      * @param paths All identified paths
      * @return Unique edge documents
      */
-    private static List<BaseEdgeDocument> getEdgeDocuments(List<Map> paths) {
+    static List<BaseEdgeDocument> getEdgeDocuments(List<Map> paths) {
         System.out.println("Collecting unique edge documents from " + paths.size() + " identified paths");
         long startTime = System.nanoTime();
         List<BaseEdgeDocument> edgeDocuments = new ArrayList<>();
