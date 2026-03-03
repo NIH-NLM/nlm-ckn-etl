@@ -115,8 +115,8 @@ public class OntologyGraphBuilder {
                 label = createURI(p.getURI()).getPath();
                 if (label != null) {
                     label = label.substring(label.lastIndexOf("/") + 1);
-                    if (ontologyElementMaps.get("ro").terms.containsKey(label)) {
-                        label = ontologyElementMaps.get("ro").terms.get(label).label;
+                    if (ontologyElementMaps.get("ro").getTerms().containsKey(label)) {
+                        label = ontologyElementMaps.get("ro").getTerms().get(label).label();
                     }
                 }
             }
@@ -282,18 +282,13 @@ public class OntologyGraphBuilder {
      * @return Normalized source
      */
     public static String normalizeEdgeSource(String source) {
-        switch (source) {
-            case "mondo-simple":
-                return "MONDO";
-            case "taxslim":
-                return "NCBITAXON";
-            case "go-plus":
-                return "GO";
-            case "uberon-base":
-                return "UBERON";
-            default:
-                return source.toUpperCase();
-        }
+        return switch (source) {
+            case "mondo-simple" -> "MONDO";
+            case "taxslim" -> "NCBITAXON";
+            case "go-plus" -> "GO";
+            case "uberon-base" -> "UBERON";
+            default -> source.toUpperCase();
+        };
     }
 
     /**
@@ -304,22 +299,15 @@ public class OntologyGraphBuilder {
      * @return Normalized attribute value
      */
     public static String normalizeEdgeLabel(String label) {
-        switch (label) {
-            case "subClassOf":
-                return "SUB_CLASS_OF";
-            case "disjointWith":
-                return "DISJOINT_WITH";
-            case "crossSpeciesExactMatch":
-                return "CROSS_SPECIES_EXACT_MATCH";
-            case "exactMatch":
-                return "EXACT_MATCH";
-            case "equivalentClass":
-                return "EQUIVALENT_CLASS";
-            case "seeAlso":
-                return "SEE_ALSO";
-            default:
-                return label.toUpperCase().replace(" ", "_");
-        }
+        return switch (label) {
+            case "subClassOf" -> "SUB_CLASS_OF";
+            case "disjointWith" -> "DISJOINT_WITH";
+            case "crossSpeciesExactMatch" -> "CROSS_SPECIES_EXACT_MATCH";
+            case "exactMatch" -> "EXACT_MATCH";
+            case "equivalentClass" -> "EQUIVALENT_CLASS";
+            case "seeAlso" -> "SEE_ALSO";
+            default -> label.toUpperCase().replace(" ", "_");
+        };
     }
 
     /**
@@ -490,14 +478,9 @@ public class OntologyGraphBuilder {
         // List all ontology files
         String oboPath = OBO_DIR.toString();
         String oboPattern = ".*\\.owl";
-        List<Path> oboFiles;
-        try {
-            oboFiles = listFilesMatchingPattern(oboPath, oboPattern);
-            if (oboFiles.isEmpty()) {
-                throw new RuntimeException("No OBO files found matching the pattern " + oboPattern);
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        List<Path> oboFiles = listFilesMatchingPattern(oboPath, oboPattern);
+        if (oboFiles.isEmpty()) {
+            throw new RuntimeException("No OBO files found matching the pattern " + oboPattern);
         }
 
         // Parse ontology elements, and collect unique triples
@@ -521,33 +504,18 @@ public class OntologyGraphBuilder {
                 ontologyGraph,
                 ontologyVertexCollections,
                 ontologyVertexDocuments);
-        try {
-            updateVertices(ontologyTriples, ontologyElementMaps, ontologyVertexDocuments);
-        } catch (RuntimeException e) {
-            throw new RuntimeException(e);
-        }
-        try {
-            insertVertices(ontologyVertexCollections, ontologyVertexDocuments);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        updateVertices(ontologyTriples, ontologyElementMaps, ontologyVertexDocuments);
+        insertVertices(ontologyVertexCollections, ontologyVertexDocuments);
 
         // Create, and insert the edges, capturing unique labels
         Map<String, ArangoEdgeCollection> ontologyEdgeCollections = new HashMap<>();
         Map<String, Map<String, BaseEdgeDocument>> ontologyEdgeDocuments = new HashMap<>();
-        HashSet<String> edgeLabels = new HashSet<>();
-        try {
-            edgeLabels.addAll(constructEdges(ontologyTriples,
-                    ontologyElementMaps,
-                    arangoDbUtilities,
-                    ontologyGraph,
-                    ontologyEdgeCollections,
-                    ontologyEdgeDocuments));
-        } catch (RuntimeException e) {
-            throw new RuntimeException(e);
-        } catch (IOException e) {
-            throw new IOException(e);
-        }
+        HashSet<String> edgeLabels = new HashSet<>(constructEdges(ontologyTriples,
+                ontologyElementMaps,
+                arangoDbUtilities,
+                ontologyGraph,
+                ontologyEdgeCollections,
+                ontologyEdgeDocuments));
         insertEdges(ontologyVertexCollections, ontologyEdgeCollections, ontologyEdgeDocuments);
 
         // Document unique labels, and their normalized values
@@ -559,13 +527,9 @@ public class OntologyGraphBuilder {
 
         // List the Cell Ontology file
         oboPattern = "cl.owl";
-        try {
-            oboFiles = listFilesMatchingPattern(oboPath, oboPattern);
-            if (oboFiles.isEmpty()) {
-                throw new RuntimeException("No CL files found matching the pattern " + oboPattern);
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        oboFiles = listFilesMatchingPattern(oboPath, oboPattern);
+        if (oboFiles.isEmpty()) {
+            throw new RuntimeException("No CL files found matching the pattern " + oboPattern);
         }
 
         // Parse Cell Ontology elements, and collect unique triples
@@ -589,32 +553,18 @@ public class OntologyGraphBuilder {
                 phenotypeGraph,
                 phenotypeVertexCollections,
                 phenotypeVertexDocuments);
-        try {
-            updateVertices(phenotypeTriples, phenotypeElementMaps, phenotypeVertexDocuments);
-        } catch (RuntimeException e) {
-            throw new RuntimeException(e);
-        }
-        try {
-            insertVertices(phenotypeVertexCollections, phenotypeVertexDocuments);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        updateVertices(phenotypeTriples, phenotypeElementMaps, phenotypeVertexDocuments);
+        insertVertices(phenotypeVertexCollections, phenotypeVertexDocuments);
 
         // Create, and insert the edges, capturing unique labels
         Map<String, ArangoEdgeCollection> phenotypeEdgeCollections = new HashMap<>();
         Map<String, Map<String, BaseEdgeDocument>> phenotypeEdgeDocuments = new HashMap<>();
-        try {
-            edgeLabels.addAll(constructEdges(phenotypeTriples,
-                    phenotypeElementMaps,
-                    arangoDbUtilities,
-                    phenotypeGraph,
-                    phenotypeEdgeCollections,
-                    phenotypeEdgeDocuments));
-        } catch (RuntimeException e) {
-            throw new RuntimeException(e);
-        } catch (IOException e) {
-            throw new IOException(e);
-        }
+        edgeLabels.addAll(constructEdges(phenotypeTriples,
+                phenotypeElementMaps,
+                arangoDbUtilities,
+                phenotypeGraph,
+                phenotypeEdgeCollections,
+                phenotypeEdgeDocuments));
         insertEdges(phenotypeVertexCollections, phenotypeEdgeCollections, phenotypeEdgeDocuments);
 
         // Disconnect from a local ArangoDB server instance

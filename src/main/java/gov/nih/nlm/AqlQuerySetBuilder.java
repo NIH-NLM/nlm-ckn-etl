@@ -15,9 +15,6 @@ import java.util.stream.Collectors;
  */
 public class AqlQuerySetBuilder {
 
-    // Construct ArangoDB utilities
-    private static final ArangoDbUtilities arangoDbUtilities = new ArangoDbUtilities();
-
     /**
      * Get AQL query set to identify a path with one edge.
      *
@@ -357,6 +354,7 @@ public class AqlQuerySetBuilder {
      */
     public static void main(String[] args) {
 
+        ArangoDbUtilities arangoDbUtilities = new ArangoDbUtilities();
         String database = "Cell-KN-Ontologies";
         String graph = "KN-Ontologies-v2.0";
         ArangoDatabase db = arangoDbUtilities.createOrGetDatabase(database);
@@ -432,7 +430,8 @@ public class AqlQuerySetBuilder {
         for (AqlQuerySet aqlQuerySet : aqlQuerySets) {
             System.out.println(aqlQuerySet.queryStr().lines().collect(Collectors.joining()).replaceAll("\\s+", " "));
             long startTime = System.nanoTime();
-            List<Map> queryPaths = db.query(aqlQuerySet.queryStr(),
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> queryPaths = (List<Map<String, Object>>) (List<?>) db.query(aqlQuerySet.queryStr(),
                     Map.class,
                     aqlQuerySet.bindVars(),
                     queryOpts).asListRemaining();

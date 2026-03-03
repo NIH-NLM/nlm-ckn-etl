@@ -81,19 +81,19 @@ class OntologyElementParserTest {
         OntologyElementParser.parseOntologyNode(doc.getDocumentElement(), map);
 
         // Should contain CL ids from macrophage.owl
-        assertTrue(map.ids.contains("CL"));
+        assertTrue(map.getIds().contains("CL"));
 
         // Should contain the macrophage term with its label
-        assertTrue(map.terms.containsKey("CL_0000235"));
-        assertEquals("macrophage", map.terms.get("CL_0000235").label);
-        assertEquals(URI.create("http://purl.obolibrary.org/obo/CL_0000235"), map.terms.get("CL_0000235").purl);
+        assertTrue(map.getTerms().containsKey("CL_0000235"));
+        assertEquals("macrophage", map.getTerms().get("CL_0000235").label());
+        assertEquals(URI.create("http://purl.obolibrary.org/obo/CL_0000235"), map.getTerms().get("CL_0000235").purl());
 
         // Should contain other CL terms
-        assertTrue(map.terms.containsKey("CL_0000000"));
-        assertEquals("cell", map.terms.get("CL_0000000").label);
+        assertTrue(map.getTerms().containsKey("CL_0000000"));
+        assertEquals("cell", map.getTerms().get("CL_0000000").label());
 
-        assertTrue(map.terms.containsKey("CL_0000576"));
-        assertEquals("monocyte", map.terms.get("CL_0000576").label);
+        assertTrue(map.getTerms().containsKey("CL_0000576"));
+        assertEquals("monocyte", map.getTerms().get("CL_0000576").label());
     }
 
     @Test
@@ -104,16 +104,16 @@ class OntologyElementParserTest {
         OntologyElementParser.parseOntologyNode(doc.getDocumentElement(), map);
 
         // Should contain RO and IAO ids
-        assertTrue(map.ids.contains("RO"));
-        assertTrue(map.ids.contains("IAO"));
+        assertTrue(map.getIds().contains("RO"));
+        assertTrue(map.getIds().contains("IAO"));
 
         // The "develops from" term (RO_0002202) should be present
-        assertTrue(map.terms.containsKey("RO_0002202"));
-        assertEquals("develops from", map.terms.get("RO_0002202").label);
+        assertTrue(map.getTerms().containsKey("RO_0002202"));
+        assertEquals("develops from", map.getTerms().get("RO_0002202").label());
 
         // The "capable of" term (RO_0002215) should be present
-        assertTrue(map.terms.containsKey("RO_0002215"));
-        assertEquals("capable of", map.terms.get("RO_0002215").label);
+        assertTrue(map.getTerms().containsKey("RO_0002215"));
+        assertEquals("capable of", map.getTerms().get("RO_0002215").label());
     }
 
     @Test
@@ -124,7 +124,7 @@ class OntologyElementParserTest {
         OntologyElementParser.parseOntologyNode(doc.getDocumentElement(), map);
 
         // Should not contain "valid" as an id
-        assertFalse(map.ids.contains("valid"));
+        assertFalse(map.getIds().contains("valid"));
     }
 
     // --- parseOntologyElements tests ---
@@ -140,22 +140,22 @@ class OntologyElementParserTest {
         OntologyElementMap map = maps.get("macrophage");
 
         // macrophage.owl uses owl:Ontology with rdf:about for PURL
-        assertEquals(URI.create("http://purl.obolibrary.org/obo/cl.owl"), map.purl);
+        assertEquals(URI.create("http://purl.obolibrary.org/obo/cl.owl"), map.getPurl());
 
         // macrophage.owl has owl:versionIRI
-        assertEquals(URI.create("http://purl.obolibrary.org/obo/cl/releases/2024-09-26/cl.owl"), map.versionIRI);
+        assertEquals(URI.create("http://purl.obolibrary.org/obo/cl/releases/2024-09-26/cl.owl"), map.getVersionIRI());
 
         // macrophage.owl does not have dc:title or dc:description
-        assertNull(map.title);
-        assertNull(map.description);
+        assertNull(map.getTitle());
+        assertNull(map.getDescription());
 
         // macrophage.owl has obo:IAO_0000700 pointing to CL_0000000
-        assertEquals(URI.create("http://purl.obolibrary.org/obo/CL_0000000"), map.root);
+        assertEquals(URI.create("http://purl.obolibrary.org/obo/CL_0000000"), map.getRoot());
 
         // Should contain CL terms
-        assertTrue(map.ids.contains("CL"));
-        assertTrue(map.terms.containsKey("CL_0000235"));
-        assertEquals("macrophage", map.terms.get("CL_0000235").label);
+        assertTrue(map.getIds().contains("CL"));
+        assertTrue(map.getTerms().containsKey("CL_0000235"));
+        assertEquals("macrophage", map.getTerms().get("CL_0000235").label());
     }
 
     @Test
@@ -169,15 +169,15 @@ class OntologyElementParserTest {
         OntologyElementMap map = maps.get("ro");
 
         // ro.owl uses owl:Ontology with rdf:about for PURL
-        assertEquals(URI.create("http://purl.obolibrary.org/obo/ro.owl"), map.purl);
+        assertEquals(URI.create("http://purl.obolibrary.org/obo/ro.owl"), map.getPurl());
 
         // ro.owl has owl:versionIRI
-        assertEquals(URI.create("http://purl.obolibrary.org/obo/ro/releases/2024-04-24/ro.owl"), map.versionIRI);
+        assertEquals(URI.create("http://purl.obolibrary.org/obo/ro/releases/2024-04-24/ro.owl"), map.getVersionIRI());
 
         // Should contain RO terms
-        assertTrue(map.ids.contains("RO"));
-        assertTrue(map.terms.containsKey("RO_0002202"));
-        assertEquals("develops from", map.terms.get("RO_0002202").label);
+        assertTrue(map.getIds().contains("RO"));
+        assertTrue(map.getTerms().containsKey("RO_0002202"));
+        assertEquals("develops from", map.getTerms().get("RO_0002202").label());
     }
 
     @Test

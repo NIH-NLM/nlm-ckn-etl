@@ -47,7 +47,7 @@ public class PhenotypeGraphBuilder {
      * @param graphName    Name of fully populated graph
      * @return All identified paths
      */
-    private static List<Map> getPaths(String databaseName, String graphName) {
+    private static List<Map<String, Object>> getPaths(String databaseName, String graphName) {
 
         List<AqlQuerySet> aqlQuerySets = new ArrayList<>();
 
@@ -95,11 +95,12 @@ public class PhenotypeGraphBuilder {
 
         ArangoDatabase db = arangoDbUtilities.createOrGetDatabase(databaseName);
         AqlQueryOptions queryOpts = new AqlQueryOptions();
-        List<Map> paths = new ArrayList<>();
+        List<Map<String, Object>> paths = new ArrayList<>();
         for (AqlQuerySet aqlQuerySet : aqlQuerySets) {
             System.out.println(aqlQuerySet.queryStr().lines().collect(Collectors.joining()).replaceAll("\\s+", " "));
             long startTime = System.nanoTime();
-            List<Map> queryPaths = db.query(aqlQuerySet.queryStr(),
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> queryPaths = (List<Map<String, Object>>) (List<?>) db.query(aqlQuerySet.queryStr(),
                     Map.class,
                     aqlQuerySet.bindVars(),
                     queryOpts).asListRemaining();
@@ -116,12 +117,12 @@ public class PhenotypeGraphBuilder {
      * @param paths All identified paths
      * @return Unique vertex documents
      */
-    static List<BaseDocument> getVertexDocuments(List<Map> paths) {
+    static List<BaseDocument> getVertexDocuments(List<Map<String, Object>> paths) {
         System.out.println("Collecting unique vertex documents from " + paths.size() + " identified paths");
         long startTime = System.nanoTime();
         List<BaseDocument> vertexDocuments = new ArrayList<>();
         Set<String> seenVertexIds = new HashSet<>();
-        for (Map path : paths) {
+        for (Map<String, Object> path : paths) {
             ArrayList<LinkedHashMap> vertices = (ArrayList<LinkedHashMap>) path.get("vertices");
             for (LinkedHashMap vertex : vertices) {
                 BaseDocument vertexDoc = new BaseDocument(vertex);
@@ -141,12 +142,12 @@ public class PhenotypeGraphBuilder {
      * @param paths All identified paths
      * @return Unique edge documents
      */
-    static List<BaseEdgeDocument> getEdgeDocuments(List<Map> paths) {
+    static List<BaseEdgeDocument> getEdgeDocuments(List<Map<String, Object>> paths) {
         System.out.println("Collecting unique edge documents from " + paths.size() + " identified paths");
         long startTime = System.nanoTime();
         List<BaseEdgeDocument> edgeDocuments = new ArrayList<>();
         Set<String> seenEdgeIds = new HashSet<>();
-        for (Map path : paths) {
+        for (Map<String, Object> path : paths) {
             ArrayList<LinkedHashMap> edges = (ArrayList<LinkedHashMap>) path.get("edges");
             for (LinkedHashMap edge : edges) {
                 BaseEdgeDocument edgeDoc = new BaseEdgeDocument(edge);
@@ -239,7 +240,7 @@ public class PhenotypeGraphBuilder {
         String ontologyGraphName = "KN-Ontologies-v2.0";
         ArangoDatabase ontologyDb = arangoDbUtilities.createOrGetDatabase(ontologyDatabaseName);
         ArangoGraph ontologyGraph = arangoDbUtilities.createOrGetGraph(ontologyDb, ontologyGraphName);
-        List<Map> paths = getPaths(ontologyDatabaseName, ontologyGraphName);
+        List<Map<String, Object>> paths = getPaths(ontologyDatabaseName, ontologyGraphName);
 
         // Initialize the phenotype database and subgraph
         String phenotypeDatabaseName = "Cell-KN-Phenotypes";
