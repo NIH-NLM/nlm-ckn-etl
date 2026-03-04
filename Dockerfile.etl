@@ -1,0 +1,61 @@
+# Dockerfile.etl — runtime image for the NLM-CKN ETL pipeline
+#
+# This image runs pipeline.py, which in turn spawns child Docker containers
+# (maven:3-eclipse-temurin-21, eclipse-temurin:21, nlm-ckn-etl-python).
+# At runtime the host Docker socket must be bind-mounted so those child
+# containers can be created:
+#
+#   docker run --rm \
+#     -v /var/run/docker.sock:/var/run/docker.sock \
+#     -v $(pwd):/app \
+#     -e ARANGO_DB_HOST=<host> \
+#     -e ARANGO_DB_PASSWORD=<password> \
+#     -e NCBI_EMAIL=<email> \
+#     -e NCBI_API_KEY=<key> \
+#     nlm-ckn-etl \
+#     --run-results
+#
+# On AWS EC2 the Docker socket is available at /var/run/docker.sock after
+# installing Docker via UserData (see cloudformation/etl.yaml).
+#
+# Only Prefect is installed here.  The heavy scientific Python deps
+# (cellxgene-census, scanpy, etc.) live in Dockerfile.python and run inside
+# the nlm-ckn-etl-python child container.
+
+FROM python:3.12-slim
+
+# ── Docker CLI (client only — the daemon runs on the host) ─────────────────
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        gnupg \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg \
+       | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+    && chmod a+r /etc/apt/keyrings/docker.gpg \
+    && echo \
+       "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+        https://download.docker.com/linux/debian \
+        $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+       | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── uv — fast Python package installer ────────────────────────────────────
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+ENV UV_SYSTEM_PYTHON=1
+
+# ── Pipeline runtime dependencies ─────────────────────────────────────────
+# Prefect orchestrates the flow; awscli is used by pipeline.py to sync
+# data/external/, data/tuples/, and archives to and from S3.
+# The heavy scientific Python deps live in Dockerfile.python (child container).
+RUN uv pip install --system "prefect>=3.0" awscli
+
+WORKDIR /app
+
+# ── Entrypoint ─────────────────────────────────────────────────────────────
+# The repo root is expected to be mounted at /app at runtime.
+# Pass stage flags (e.g. --run-results) as CMD arguments or docker run args.
+ENTRYPOINT ["python", "/app/python/src/pipeline.py"]

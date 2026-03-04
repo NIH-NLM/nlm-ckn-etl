@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  NLM-CKN ECR — container registry for the nlm-ckn-etl-python image.
+  Deploy this stack once, then push the image before deploying fetch.yaml.
+
+# ── Resources ───────────────────────────────────────────────────────────────
+Resources:
+
+  PythonImageRepo:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain   # keep images if the stack is deleted
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: nlm-ckn-etl-python
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep the last 5 images; expire older ones",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: nlm-ckn-etl
+
+# ── Outputs ─────────────────────────────────────────────────────────────────
+Outputs:
+
+  RepositoryUri:
+    Description: >
+      Full ECR URI for the nlm-ckn-etl-python image.
+      Use this as the image URI in fetch.yaml and any ECS task definitions.
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/nlm-ckn-etl-python"
+    Export:
+      Name: !Sub "${AWS::StackName}-RepositoryUri"
+
+  RepositoryName:
+    Description: ECR repository name.
+    Value: !Ref PythonImageRepo
+    Export:
+      Name: !Sub "${AWS::StackName}-RepositoryName"
+
+  PushCommands:
+    Description: >
+      Run these commands (from the repo root) to build and push the image
+      after the stack is deployed.  Replace REGION and ACCOUNT_ID as needed.
+    Value: !Sub |
+      aws ecr get-login-password --region ${AWS::Region} \
+        | docker login --username AWS --password-stdin \
+          ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+      docker build --platform linux/amd64 \
+        -t nlm-ckn-etl-python \
+        -f src/main/shell/Dockerfile.python .
+      docker tag nlm-ckn-etl-python \
+        ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/nlm-ckn-etl-python:latest
+      docker push \
+        ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/nlm-ckn-etl-python:latest

@@ -35,3 +35,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     cd python \
     && poetry export --without dev --without-hashes -f requirements.txt -o /tmp/requirements.txt \
     && uv pip install --system -r /tmp/requirements.txt
+
+# AWS CLI — used by the scheduled fetch entrypoint to sync data/external/
+# to and from S3.  Installed after the science deps so it does not
+# interfere with the uv BuildKit cache layer above.
+RUN pip install --no-cache-dir awscli
+
+# Scheduled-fetch entrypoint: syncs the external cache from S3, runs the
+# Prefect fetch flow, then pushes the updated cache back to S3.
+# Used by the ECS Fargate task defined in cloudformation/fetch.yaml.
+COPY src/main/shell/fetch-entrypoint.sh /usr/local/bin/fetch-entrypoint
+RUN chmod +x /usr/local/bin/fetch-entrypoint
