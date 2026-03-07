@@ -6,59 +6,28 @@ successes, failures, and ambiguities.
 """
 
 import ast
+import inspect
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 
+import ckn_schema.pydantic.ckn_schema as ckn_module
 from ckn_schema.pydantic.ckn_schema import (
     AnatomicalStructure,
-    AnatomicalStructurePartOfAnatomicalStructure,
+    Association,
     BiomarkerCombination,
-    BiomarkerCombinationSubclusterOfBinaryGeneSet,
     BinaryGeneSet,
     CellSet,
-    CellSetComposedPrimarilyOfCellType,
     CellSetDataset,
-    CellSetDatasetHasSourcePublication,
-    CellSetDerivesFromAnatomicalStructure,
-    CellSetExactMatchCellSet,
-    CellSetExpressesBinaryGeneSet,
-    CellSetHasCharacterizingMarkerSetBiomarkerCombination,
-    CellSetHasSourceCellSetDataset,
     CellType,
-    CellTypeDevelopsFromCellType,
-    CellTypeExpressesGene,
-    CellTypeHasExemplarDataCellSetDataset,
-    CellTypeHasPlasmaMembranePartProtein,
-    CellTypeInteractsWithCellType,
-    CellTypeLacksPlasmaMembranePartProtein,
-    CellTypePartOfAnatomicalStructure,
-    CellTypeSubclassOfCellType,
     ClinicalTrial,
     Disease,
     Drug,
-    DrugEvaluatedInClinicalTrial,
-    DrugIsSubstanceThatTreatsDisease,
-    DrugMolecularlyInteractsWithGene,
-    DrugMolecularlyInteractsWithProtein,
-    Gene,
-    GeneGeneticallyInteractsWithGene,
-    GeneHasQualityMutation,
-    GeneIsGeneticBasisForDisease,
-    GeneMolecularlyInteractsWithDrug,
-    GenePartOfBiomarkerCombination,
-    GeneProducesProtein,
     Mutation,
-    MutationHasPharamcologicalEffectDrug,
     Protein,
-    ProteinCapableOfMolecularFunction,
-    ProteinInvolvedInBiologicalProcess,
-    ProteinLocatedInCellularComponent,
-    ProteinPartOfCellType,
     Publication,
 )
 
@@ -131,43 +100,16 @@ def try_create(cls, **kwargs) -> tuple[Any | None, str | None]:
 
 
 # ---------------------------------------------------------------------------
-# Result tracking
+# Auto-discover Association subclasses from the schema module
 # ---------------------------------------------------------------------------
 
-ALL_ASSOCIATIONS = [
-    "CellTypePartOfAnatomicalStructure",
-    "AnatomicalStructurePartOfAnatomicalStructure",
-    "CellTypeExpressesGene",
-    "CellSetComposedPrimarilyOfCellType",
-    "CellSetDerivesFromAnatomicalStructure",
-    "CellSetHasSourceCellSetDataset",
-    "CellSetDatasetHasSourcePublication",
-    "CellTypeHasExemplarDataCellSetDataset",
-    "GenePartOfBiomarkerCombination",
-    "CellSetHasCharacterizingMarkerSetBiomarkerCombination",
-    "BiomarkerCombinationSubclusterOfBinaryGeneSet",
-    "CellSetExpressesBinaryGeneSet",
-    "GeneIsGeneticBasisForDisease",
-    "GeneProducesProtein",
-    "GeneGeneticallyInteractsWithGene",
-    "DrugIsSubstanceThatTreatsDisease",
-    "DrugMolecularlyInteractsWithGene",
-    "GeneMolecularlyInteractsWithDrug",
-    "DrugEvaluatedInClinicalTrial",
-    "DrugMolecularlyInteractsWithProtein",
-    "CellTypeSubclassOfCellType",
-    "CellTypeInteractsWithCellType",
-    "CellTypeDevelopsFromCellType",
-    "CellTypeHasPlasmaMembranePartProtein",
-    "CellTypeLacksPlasmaMembranePartProtein",
-    "ProteinPartOfCellType",
-    "GeneHasQualityMutation",
-    "MutationHasPharamcologicalEffectDrug",
-    "CellSetExactMatchCellSet",
-    "ProteinCapableOfMolecularFunction",
-    "ProteinInvolvedInBiologicalProcess",
-    "ProteinLocatedInCellularComponent",
-]
+ASSOCIATION_CLASSES: dict[str, type[Association]] = {
+    name: cls
+    for name, cls in inspect.getmembers(ckn_module, inspect.isclass)
+    if issubclass(cls, Association) and cls is not Association
+}
+
+ALL_ASSOCIATIONS = sorted(ASSOCIATION_CLASSES.keys())
 
 results: dict[str, dict] = {}
 
@@ -248,7 +190,7 @@ def from_hubmap() -> None:
     for ct in cell_types:
         for uberon_id in ct.get("ccf_located_in", []):
             inst, err = try_create(
-                CellTypePartOfAnatomicalStructure,
+                ASSOCIATION_CLASSES["CellTypePartOfAnatomicalStructure"],
                 subject=CellType(ontology_purl=ct["id"]),
                 predicate="part_of",
                 object=AnatomicalStructure(ontology_purl=uberon_id),
@@ -265,7 +207,7 @@ def from_hubmap() -> None:
     for as_ in anat_structs:
         for parent_id in as_.get("ccf_part_of", []):
             inst, err = try_create(
-                AnatomicalStructurePartOfAnatomicalStructure,
+                ASSOCIATION_CLASSES["AnatomicalStructurePartOfAnatomicalStructure"],
                 subject=AnatomicalStructure(ontology_purl=as_["id"]),
                 predicate="part_of",
                 object=AnatomicalStructure(ontology_purl=parent_id),
@@ -313,7 +255,7 @@ def from_nsforest() -> None:
     if markers:
         gene_symbol = markers[0]
         inst, err = try_create(
-            GenePartOfBiomarkerCombination,
+            ASSOCIATION_CLASSES["GenePartOfBiomarkerCombination"],
             subject=gene_symbol,
             predicate="part_of",
             object=bmc,
@@ -325,7 +267,7 @@ def from_nsforest() -> None:
 
     # --- CellSetHasCharacterizingMarkerSetBiomarkerCombination ---
     inst, err = try_create(
-        CellSetHasCharacterizingMarkerSetBiomarkerCombination,
+        ASSOCIATION_CLASSES["CellSetHasCharacterizingMarkerSetBiomarkerCombination"],
         subject=cell_set,
         predicate="has_characterizing_marker_set",
         object=bmc,
@@ -337,7 +279,7 @@ def from_nsforest() -> None:
 
     # --- BiomarkerCombinationSubclusterOfBinaryGeneSet ---
     inst, err = try_create(
-        BiomarkerCombinationSubclusterOfBinaryGeneSet,
+        ASSOCIATION_CLASSES["BiomarkerCombinationSubclusterOfBinaryGeneSet"],
         subject=bmc,
         predicate="subcluster_of",
         object=bgs,
@@ -402,7 +344,7 @@ def from_author_to_cl() -> None:
     # --- CellTypePartOfAnatomicalStructure ---
     if "CellTypePartOfAnatomicalStructure" not in results:
         inst, err = try_create(
-            CellTypePartOfAnatomicalStructure,
+            ASSOCIATION_CLASSES["CellTypePartOfAnatomicalStructure"],
             subject=cell_type,
             predicate="part_of",
             object=anat_struct,
@@ -414,7 +356,7 @@ def from_author_to_cl() -> None:
 
     # --- CellSetComposedPrimarilyOfCellType ---
     inst, err = try_create(
-        CellSetComposedPrimarilyOfCellType,
+        ASSOCIATION_CLASSES["CellSetComposedPrimarilyOfCellType"],
         subject=cell_set,
         predicate="composed_primarily_of",
         object=cell_type,
@@ -426,7 +368,7 @@ def from_author_to_cl() -> None:
 
     # --- CellSetDerivesFromAnatomicalStructure ---
     inst, err = try_create(
-        CellSetDerivesFromAnatomicalStructure,
+        ASSOCIATION_CLASSES["CellSetDerivesFromAnatomicalStructure"],
         subject=cell_set,
         predicate="derives_from",
         object=anat_struct,
@@ -438,7 +380,7 @@ def from_author_to_cl() -> None:
 
     # --- CellSetHasSourceCellSetDataset ---
     inst, err = try_create(
-        CellSetHasSourceCellSetDataset,
+        ASSOCIATION_CLASSES["CellSetHasSourceCellSetDataset"],
         subject=cell_set,
         predicate="source",
         object=dataset,
@@ -450,7 +392,7 @@ def from_author_to_cl() -> None:
 
     # --- CellSetDatasetHasSourcePublication ---
     inst, err = try_create(
-        CellSetDatasetHasSourcePublication,
+        ASSOCIATION_CLASSES["CellSetDatasetHasSourcePublication"],
         subject=dataset,
         predicate="source",
         object=publication,
@@ -463,7 +405,7 @@ def from_author_to_cl() -> None:
 
     # --- CellTypeHasExemplarDataCellSetDataset ---
     inst, err = try_create(
-        CellTypeHasExemplarDataCellSetDataset,
+        ASSOCIATION_CLASSES["CellTypeHasExemplarDataCellSetDataset"],
         subject=cell_type,
         predicate="has_exemplar_data",
         object=dataset,
@@ -476,7 +418,7 @@ def from_author_to_cl() -> None:
     # --- CellTypeExpressesGene ---
     if markers:
         inst, err = try_create(
-            CellTypeExpressesGene,
+            ASSOCIATION_CLASSES["CellTypeExpressesGene"],
             subject=cell_type,
             predicate="expresses",
             object=markers[0],
@@ -489,7 +431,7 @@ def from_author_to_cl() -> None:
 
     # --- CellSetExpressesBinaryGeneSet ---
     inst, err = try_create(
-        CellSetExpressesBinaryGeneSet,
+        ASSOCIATION_CLASSES["CellSetExpressesBinaryGeneSet"],
         subject=cell_set,
         predicate="expresses",
         object=bgs,
@@ -502,7 +444,7 @@ def from_author_to_cl() -> None:
     # --- Repeat BMC/BGS associations if not already recorded ---
     if "GenePartOfBiomarkerCombination" not in results and markers:
         inst, err = try_create(
-            GenePartOfBiomarkerCombination,
+            ASSOCIATION_CLASSES["GenePartOfBiomarkerCombination"],
             subject=markers[0],
             predicate="part_of",
             object=bmc,
@@ -514,7 +456,7 @@ def from_author_to_cl() -> None:
 
     if "CellSetHasCharacterizingMarkerSetBiomarkerCombination" not in results:
         inst, err = try_create(
-            CellSetHasCharacterizingMarkerSetBiomarkerCombination,
+            ASSOCIATION_CLASSES["CellSetHasCharacterizingMarkerSetBiomarkerCombination"],
             subject=cell_set,
             predicate="has_characterizing_marker_set",
             object=bmc,
@@ -525,7 +467,7 @@ def from_author_to_cl() -> None:
 
     if "BiomarkerCombinationSubclusterOfBinaryGeneSet" not in results:
         inst, err = try_create(
-            BiomarkerCombinationSubclusterOfBinaryGeneSet,
+            ASSOCIATION_CLASSES["BiomarkerCombinationSubclusterOfBinaryGeneSet"],
             subject=bmc,
             predicate="subcluster_of",
             object=bgs,
@@ -552,11 +494,46 @@ def from_external_api() -> None:
     if gene_ids:
         gene_id = gene_ids[0]
         gene_data = ot.get(gene_id, {})
+
         target = gene_data.get("target", {})
-        gene_symbol = target.get("approvedSymbol", "")
         diseases = gene_data.get("diseases", [])
         drugs = gene_data.get("drugs", [])
         interactions = gene_data.get("interactions", [])
+        pharmacogenetics = gene_data.get("pharmacogenetics", [])
+
+        gene_symbol = target.get("approvedSymbol", "")
+
+        # --- GeneGeneticallyInteractsWithGene ---
+        if interactions:
+            ix = interactions[0]
+            target_b = ix.get("targetB", {})
+            gene_b_symbol = target_b.get("approvedSymbol", "")
+            inst, err = try_create(
+                ASSOCIATION_CLASSES["GeneGeneticallyInteractsWithGene"],
+                subject=gene_symbol,
+                predicate="genetically_interacts_with",
+                object=gene_b_symbol,
+            )
+            record("GeneGeneticallyInteractsWithGene",
+                   "Created" if inst else "FAILED",
+                   "external-api (opentargets)", inst, err,
+                   f"{gene_symbol} <-> {gene_b_symbol}")
+
+        # --- GeneHasQualityMutation ---
+        if pharmacogenetics:
+            pg = pharmacogenetics[0]
+            variantRsId = pg["variantRsId"]
+            if variantRsId:
+                inst, err = try_create(
+                    ASSOCIATION_CLASSES["GeneHasQualityMutation"],
+                    subject=gene_symbol,
+                    predicate="has_quality",
+                    object=Mutation(reference_sequence_identifier=variantRsId),
+                )
+                record("GeneHasQualityMutation",
+                       "Created" if inst else "FAILED",
+                       "external-api (opentargets)", inst, err,
+                       f"{gene_symbol} <-> {variantRsId}")
 
         # --- GeneIsGeneticBasisForDisease ---
         if diseases:
@@ -566,7 +543,7 @@ def from_external_api() -> None:
             # Convert MONDO_0009061 to MONDO:0009061
             disease_curie = disease_id.replace("_", ":")
             inst, err = try_create(
-                GeneIsGeneticBasisForDisease,
+                ASSOCIATION_CLASSES["GeneIsGeneticBasisForDisease"],
                 subject=gene_symbol,
                 predicate="is_genetic_basis_for_condition",
                 object=Disease(
@@ -580,49 +557,13 @@ def from_external_api() -> None:
                    "external-api (opentargets)", inst, err,
                    f"{gene_symbol} -> Disease({disease_curie})")
 
-        # --- DrugIsSubstanceThatTreatsDisease ---
-        if drugs:
-            drug_entry = drugs[0]
-            drug_info = drug_entry.get("drug", {})
-            drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
-            disease_id = drug_entry.get("diseaseId", "")
-            disease_curie = disease_id.replace("_", ":")
-            inst, err = try_create(
-                DrugIsSubstanceThatTreatsDisease,
-                subject=Drug(name=drug_name,
-                             mechanism_of_action=drug_entry.get("mechanismOfAction")),
-                predicate="is_substance_that_treats",
-                object=Disease(ontology_purl=disease_curie),
-            )
-            record("DrugIsSubstanceThatTreatsDisease",
-                   "Created" if inst else "FAILED",
-                   "external-api (opentargets)", inst, err,
-                   f"Drug({drug_name}) -> Disease({disease_curie}). "
-                   f"Note: diseaseId uses EFO namespace, not MONDO")
-
-        # --- DrugMolecularlyInteractsWithGene ---
-        if drugs:
-            drug_entry = drugs[0]
-            drug_info = drug_entry.get("drug", {})
-            drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
-            inst, err = try_create(
-                DrugMolecularlyInteractsWithGene,
-                subject=Drug(name=drug_name),
-                predicate="molecularly_interacts_with",
-                object=gene_symbol,
-            )
-            record("DrugMolecularlyInteractsWithGene",
-                   "Created" if inst else "FAILED",
-                   "external-api (opentargets)", inst, err,
-                   f"Drug({drug_name}) -> Gene({gene_symbol})")
-
         # --- GeneMolecularlyInteractsWithDrug ---
         if drugs:
             drug_entry = drugs[0]
             drug_info = drug_entry.get("drug", {})
             drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
             inst, err = try_create(
-                GeneMolecularlyInteractsWithDrug,
+                ASSOCIATION_CLASSES["GeneMolecularlyInteractsWithDrug"],
                 subject=gene_symbol,
                 predicate="molecularly_interacts_with",
                 object=Drug(name=drug_name),
@@ -631,48 +572,6 @@ def from_external_api() -> None:
                    "Created" if inst else "FAILED",
                    "external-api (opentargets)", inst, err,
                    f"Gene({gene_symbol}) -> Drug({drug_name})")
-
-        # --- DrugEvaluatedInClinicalTrial ---
-        ct_created = False
-        for drug_entry in drugs:
-            ct_ids = drug_entry.get("ctIds", [])
-            if ct_ids:
-                drug_info = drug_entry.get("drug", {})
-                drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
-                ct_id = ct_ids[0]
-                inst, err = try_create(
-                    DrugEvaluatedInClinicalTrial,
-                    subject=Drug(name=drug_name),
-                    predicate="evaluated_in",
-                    object=ClinicalTrial(study_id=ct_id),
-                )
-                record("DrugEvaluatedInClinicalTrial",
-                       "Created" if inst else "FAILED",
-                       "external-api (opentargets)", inst, err,
-                       f"Drug({drug_name}) -> ClinicalTrial({ct_id}). "
-                       "Note: only some drugs have ctIds")
-                ct_created = True
-                break
-        if not ct_created:
-            record("DrugEvaluatedInClinicalTrial", "PARTIAL",
-                   "external-api (opentargets)", None, None,
-                   "No drugs in test data have ctIds")
-
-        # --- GeneGeneticallyInteractsWithGene ---
-        if interactions:
-            ix = interactions[0]
-            target_b = ix.get("targetB", {})
-            gene_b_symbol = target_b.get("approvedSymbol", "")
-            inst, err = try_create(
-                GeneGeneticallyInteractsWithGene,
-                subject=gene_symbol,
-                predicate="genetically_interacts_with",
-                object=gene_b_symbol,
-            )
-            record("GeneGeneticallyInteractsWithGene",
-                   "Created" if inst else "FAILED",
-                   "external-api (opentargets)", inst, err,
-                   f"{gene_symbol} <-> {gene_b_symbol}")
 
         # --- GeneProducesProtein ---
         # Get protein IDs from target or interactions
@@ -690,7 +589,7 @@ def from_external_api() -> None:
                     break
         if uniprot_id:
             inst, err = try_create(
-                GeneProducesProtein,
+                ASSOCIATION_CLASSES["GeneProducesProtein"],
                 subject=gene_symbol,
                 predicate="produces",
                 object=Protein(uniprot_id=uniprot_id),
@@ -704,13 +603,75 @@ def from_external_api() -> None:
                    "external-api (opentargets)", None, None,
                    "No UniProt ID found in target proteinIds")
 
+        # --- DrugIsSubstanceThatTreatsDisease ---
+        if drugs:
+            drug_entry = drugs[0]
+            drug_info = drug_entry.get("drug", {})
+            drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
+            disease_id = drug_entry.get("diseaseId", "")
+            disease_curie = disease_id.replace("_", ":")
+            inst, err = try_create(
+                ASSOCIATION_CLASSES["DrugIsSubstanceThatTreatsDisease"],
+                subject=Drug(name=drug_name,
+                             mechanism_of_action=drug_entry.get("mechanismOfAction")),
+                predicate="is_substance_that_treats",
+                object=Disease(ontology_purl=disease_curie),
+            )
+            record("DrugIsSubstanceThatTreatsDisease",
+                   "Created" if inst else "FAILED",
+                   "external-api (opentargets)", inst, err,
+                   f"Drug({drug_name}) -> Disease({disease_curie}). "
+                   f"Note: diseaseId uses EFO namespace, not MONDO")
+
+        # --- DrugEvaluatedInClinicalTrial ---
+        ct_created = False
+        for drug_entry in drugs:
+            ct_ids = drug_entry.get("ctIds", [])
+            if ct_ids:
+                drug_info = drug_entry.get("drug", {})
+                drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
+                ct_id = ct_ids[0]
+                inst, err = try_create(
+                    ASSOCIATION_CLASSES["DrugEvaluatedInClinicalTrial"],
+                    subject=Drug(name=drug_name),
+                    predicate="evaluated_in",
+                    object=ClinicalTrial(study_id=ct_id),
+                )
+                record("DrugEvaluatedInClinicalTrial",
+                       "Created" if inst else "FAILED",
+                       "external-api (opentargets)", inst, err,
+                       f"Drug({drug_name}) -> ClinicalTrial({ct_id}). "
+                       "Note: only some drugs have ctIds")
+                ct_created = True
+                break
+        if not ct_created:
+            record("DrugEvaluatedInClinicalTrial", "PARTIAL",
+                   "external-api (opentargets)", None, None,
+                   "No drugs in test data have ctIds")
+
+        # --- DrugMolecularlyInteractsWithGene ---
+        if drugs:
+            drug_entry = drugs[0]
+            drug_info = drug_entry.get("drug", {})
+            drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
+            inst, err = try_create(
+                ASSOCIATION_CLASSES["DrugMolecularlyInteractsWithGene"],
+                subject=Drug(name=drug_name),
+                predicate="molecularly_interacts_with",
+                object=gene_symbol,
+            )
+            record("DrugMolecularlyInteractsWithGene",
+                   "Created" if inst else "FAILED",
+                   "external-api (opentargets)", inst, err,
+                   f"Drug({drug_name}) -> Gene({gene_symbol})")
+
         # --- DrugMolecularlyInteractsWithProtein ---
         if drugs and uniprot_id:
             drug_entry = drugs[0]
             drug_info = drug_entry.get("drug", {})
             drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
             inst, err = try_create(
-                DrugMolecularlyInteractsWithProtein,
+                ASSOCIATION_CLASSES["DrugMolecularlyInteractsWithProtein"],
                 subject=Drug(name=drug_name),
                 predicate="molecularly_interacts_with",
                 object=Protein(uniprot_id=uniprot_id),
@@ -725,27 +686,59 @@ def from_external_api() -> None:
                    "external-api (opentargets)", None, None,
                    "No drugs in test data")
 
+        # --- MutationHasPharamcologicalEffectDrug ---
+        if pharmacogenetics:
+            pg = pharmacogenetics[0]
+            variantRsId = pg["variantRsId"]
+            drugs = pg["drugs"]
+            if variantRsId and drugs:
+                drug_name=drugs[0]["drug"]["name"]
+                inst, err = try_create(
+                    ASSOCIATION_CLASSES["MutationHasPharamcologicalEffectDrug"],
+                    subject=Mutation(reference_sequence_identifier=variantRsId),
+                    predicate="has_pharmacological_effect",
+                    object=Drug(name=drug_name),
+                )
+                record("MutationHasPharamcologicalEffectDrug",
+                       "Created" if inst else "FAILED",
+                       "external-api (opentargets)", inst, err,
+                       f"Mutation({variantRsId}) -> Drug({drug_name})")
 
 # ---------------------------------------------------------------------------
-# Mark associations with no data available
+# Associations without a handler implemented above
 # ---------------------------------------------------------------------------
 
 NO_DATA = {
-    # From CL?
-    "CellTypeSubclassOfCellType": "No cell-cell interaction data in test files",
-    "CellTypeInteractsWithCellType": "No cell-cell interaction data in test files",
-    "CellTypeDevelopsFromCellType": "No developmental lineage data in test files",
-    "CellTypeHasPlasmaMembranePartProtein": "No plasma membrane protein data",
-    "CellTypeLacksPlasmaMembranePartProtein": "No plasma membrane protein data",
-    # From Open Targets?
-    "GeneHasQualityMutation": "No mutation data in results sections",
-    "MutationHasPharamcologicalEffectDrug": "No mutation-drug data in results sections",
-    # ?
-    "ProteinPartOfCellType": "No protein-celltype data",
-    "ProteinCapableOfMolecularFunction": "No protein function data",
-    "ProteinInvolvedInBiologicalProcess": "No protein-process data",
-    "ProteinLocatedInCellularComponent": "No protein-component data",
-    # From FRMatch?
+    # --- CL-CL -------------------------------------------------------------
+    # ADJACENT_TO
+    "CellTypeDevelopsFromCellType": "In CL",
+    # HAS_PART
+    # HAS_POTENTIAL_TO_DIRECTLY_DEVELOP_INTO
+    # HAS_POTENTIAL_TO_DEVELOP_INTO
+    # HAS_SYNAPTIC_TERMINAL_IN
+    # INNERVATES
+    "CellTypeInteractsWithCellType": "Not in CL",
+    # PART_OF
+    "CellTypeSubclassOfCellType": "In CL",
+    # SYNAPSED_TO
+    # SYNAPSED_BY
+    # TERM_REPLACED_BY
+
+    # --- CL-PR -------------------------------------------------------------
+    # EXPRESSES
+    # HAS_HIGH_PLASMA_MEMBRANE_AMOUNT
+    # HAS_LOW_PLASMA_MEMBRANE_AMOUNT
+    # HAS_PART
+    "CellTypeHasPlasmaMembranePartProtein": "In CL",
+    "CellTypeLacksPlasmaMembranePartProtein": "In CL",
+
+    # --- In GO? ------------------------------------------------------------
+    "ProteinPartOfCellType": "No proteincelltype data",
+    "ProteinCapableOfMolecularFunction": "No protein-molecular function data",
+    "ProteinInvolvedInBiologicalProcess": "No protein-biological process data",
+    "ProteinLocatedInCellularComponent": "No protein-cellular component data",
+
+    # --- From FRMatch? -----------------------------------------------------
     "CellSetExactMatchCellSet": "No cell set matching data",
 }
 
@@ -764,11 +757,11 @@ def print_report() -> None:
     partial = 0
     failed = 0
     not_possible = 0
+    not_handled = 0
 
     for name in ALL_ASSOCIATIONS:
         r = results.get(name)
         if r is None:
-            # Should have been recorded somewhere
             status = "NOT RECORDED"
             source = "???"
             notes = ""
@@ -789,8 +782,11 @@ def print_report() -> None:
         elif status == "Not possible":
             marker = "--"
             not_possible += 1
-        else:
+        elif status == "Not handled":
             marker = "??"
+            not_handled += 1
+        else:
+            marker = "!!"
 
         print(f"\n[{marker}] {name}")
         print(f"     Status: {status}")
@@ -810,6 +806,7 @@ def print_report() -> None:
     print(f"  Partial:      {partial}")
     print(f"  Failed:       {failed}")
     print(f"  Not possible: {not_possible}")
+    print(f"  Not handled:  {not_handled}")
     print(f"  Total:        {len(ALL_ASSOCIATIONS)}")
 
     print("\n" + "=" * 90)
@@ -846,22 +843,24 @@ def print_report() -> None:
 
 
 def main() -> None:
-    # from_test_triples()
+    print(f"Discovered {len(ALL_ASSOCIATIONS)} Association subclasses "
+          f"in ckn_schema.pydantic.ckn_schema\n")
+
     from_hubmap()
     from_nsforest()
     from_author_to_cl()
     from_external_api()
 
-    # Mark associations with no data
+    # Mark known associations with no data
     for name, reason in NO_DATA.items():
         if name not in results:
             record(name, "Not possible", "N/A", notes=reason)
 
-    # Catch any unrecorded associations
+    # Flag any auto-discovered associations not yet handled
     for name in ALL_ASSOCIATIONS:
         if name not in results:
-            record(name, "NOT RECORDED", "N/A",
-                   notes="Not attempted - check source functions")
+            record(name, "Not handled", "N/A",
+                   notes="New association class - needs handler implementation")
 
     print_report()
 
