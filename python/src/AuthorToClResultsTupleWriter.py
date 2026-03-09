@@ -123,6 +123,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{cl_term}"),
+                URIRef(f"{PURLBASE}/BFO_0000050"),
                 URIRef(f"{PURLBASE}/{uberon_term}"),
                 URIRef(f"{RDFSBASE}#Source"),
                 Literal("Manual Mapping"),
@@ -142,6 +143,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{cs_term}"),
+                URIRef(f"{PURLBASE}/RO_0001000"),
                 URIRef(f"{PURLBASE}/{uberon_term}"),
                 URIRef(f"{RDFSBASE}#Source"),
                 Literal("Manual Mapping"),
@@ -163,6 +165,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{cl_term}"),
+                    URIRef(f"{PURLBASE}/RO_0015001"),
                     URIRef(f"{PURLBASE}/{csd_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("Manual Mapping"),
@@ -181,6 +184,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{cs_term}"),
+                    URIRef(f"{RDFSBASE}/dc#Source"),
                     URIRef(f"{PURLBASE}/{csd_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("Manual Mapping"),
@@ -199,6 +203,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{cs_term}"),
+                URIRef(f"{PURLBASE}/RO_0002473"),
                 URIRef(f"{PURLBASE}/{cl_term}"),
                 URIRef(f"{RDFSBASE}#Source"),
                 Literal("Manual Mapping"),
@@ -216,6 +221,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{cs_term}"),
+                URIRef(f"{PURLBASE}/RO_0002292"),
                 URIRef(f"{PURLBASE}/{bgs_term}"),
                 URIRef(f"{RDFSBASE}#Source"),
                 Literal("NSForest"),
@@ -236,6 +242,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
         # tuples.append(
         #     (
         #         URIRef(f"{PURLBASE}/{bmc_term}"),
+        #         URIRef(f"{PURLBASE}/RO_0015004"),
         #         URIRef(f"{PURLBASE}/{cl_term}"),
         #         URIRef(f"{RDFSBASE}#Source"),
         #         Literal("Manual Mapping"),
@@ -279,6 +286,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{cs_term}"),
+                URIRef(f"{PURLBASE}/RO_0002473"),
                 URIRef(f"{PURLBASE}/{cl_term}"),
                 URIRef(f"{RDFSBASE}#Match"),
                 Literal(row["match"]),
@@ -287,6 +295,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{cs_term}"),
+                URIRef(f"{PURLBASE}/RO_0002473"),
                 URIRef(f"{PURLBASE}/{cl_term}"),
                 URIRef(f"{RDFSBASE}#Mapping_method"),
                 Literal(row["mapping_method"]),
@@ -310,6 +319,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{gs_term}"),
+                    URIRef(f"{PURLBASE}/BFO_0000050"),
                     URIRef(f"{PURLBASE}/{cl_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("NSForest"),
@@ -334,6 +344,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{cl_term}"),
+                    URIRef(f"{RDFSBASE}#SELECTIVELY_EXPRESS"),
                     URIRef(f"{PURLBASE}/{gs_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("Manual Mapping"),
@@ -352,6 +363,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{gs_term}"),
+                    URIRef(f"{PURLBASE}/BFO_0000050"),
                     URIRef(f"{PURLBASE}/{cl_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("NSForest"),
@@ -371,6 +383,7 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
             # tuples.append(
             #     (
             #         URIRef(f"{PURLBASE}/{gs_term}"),
+            #         URIRef(f"{PURLBASE}/RO_0002206"),
             #         URIRef(f"{PURLBASE}/{uberon_term}"),
             #         URIRef(f"{RDFSBASE}#Source"),
             #         Literal("Manual Mapping"),

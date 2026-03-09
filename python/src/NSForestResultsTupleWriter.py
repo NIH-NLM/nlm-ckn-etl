@@ -61,6 +61,7 @@ def create_tuples_from_nsforest(nsforest_results):
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{bmc_term}"),
+                URIRef(f"{RDFSBASE}/rdf#type"),
                 URIRef(f"{PURLBASE}/SO_0001260"),
                 URIRef(f"{RDFSBASE}#Source"),
                 Literal("NSForest"),
@@ -81,6 +82,7 @@ def create_tuples_from_nsforest(nsforest_results):
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{gs_term}"),
+                    URIRef(f"{PURLBASE}/BFO_0000050"),
                     URIRef(f"{PURLBASE}/{bmc_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("NSForest"),
@@ -99,6 +101,7 @@ def create_tuples_from_nsforest(nsforest_results):
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{cs_term}"),
+                URIRef(f"{PURLBASE}/RO_0015004"),
                 URIRef(f"{PURLBASE}/{bmc_term}"),
                 URIRef(f"{RDFSBASE}#Source"),
                 Literal("NSForest"),
@@ -117,6 +120,7 @@ def create_tuples_from_nsforest(nsforest_results):
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{bmc_term}"),
+                URIRef(f"{PURLBASE}/RO_0015003"),
                 URIRef(f"{PURLBASE}/{bgs_term}"),
                 URIRef(f"{RDFSBASE}#Source"),
                 Literal("NSForest"),
@@ -191,18 +195,21 @@ def create_tuples_from_nsforest(nsforest_results):
             [
                 (
                     URIRef(f"{PURLBASE}/{cs_term}"),
+                    URIRef(f"{PURLBASE}/RO_0015004"),
                     URIRef(f"{PURLBASE}/{bmc_term}"),
                     URIRef(f"{PURLBASE}/#source_algorithm"),  # [IAO_0000064]
                     Literal("NSForest-v4.0_dev"),
                 ),
                 (
                     URIRef(f"{PURLBASE}/{cs_term}"),
+                    URIRef(f"{PURLBASE}/RO_0015004"),
                     URIRef(f"{PURLBASE}/{bmc_term}"),
                     URIRef(f"{RDFSBASE}#F_beta_confidence_score"),  # [STAT:0000663]
                     Literal(str(row["f_score"])),
                 ),
                 (
                     URIRef(f"{PURLBASE}/{cs_term}"),
+                    URIRef(f"{PURLBASE}/RO_0015004"),
                     URIRef(f"{PURLBASE}/{bmc_term}"),
                     URIRef(f"{RDFSBASE}#Precision"),  # [STAT:0000416]
                     Literal(str(row["precision"])),
@@ -213,6 +220,7 @@ def create_tuples_from_nsforest(nsforest_results):
         # tuples.append(
         #     (
         #         URIRef(f"{PURLBASE}/{cs_term}"),
+        #         URIRef(f"{PURLBASE}/RO_0015004"),
         #         URIRef(f"{PURLBASE}/{bmc_term}"),
         #         URIRef(f"{RDFSBASE}#Recall"),  # [STAT:0000233]
         #         Literal(str(row["recall"])),
@@ -222,6 +230,7 @@ def create_tuples_from_nsforest(nsforest_results):
             [
                 (
                     URIRef(f"{PURLBASE}/{cs_term}"),
+                    URIRef(f"{PURLBASE}/RO_0015004"),
                     URIRef(f"{PURLBASE}/{bmc_term}"),
                     URIRef(f"{RDFSBASE}#TN"),  # [STAT:0000597]
                     Literal(str(row["TN"])),
@@ -229,23 +238,27 @@ def create_tuples_from_nsforest(nsforest_results):
                 (
                     URIRef(f"{PURLBASE}/{cs_term}"),
                     URIRef(f"{PURLBASE}/{bmc_term}"),
+                    URIRef(f"{PURLBASE}/RO_0015004"),
                     URIRef(f"{RDFSBASE}#TP"),  # [STAT:0000595]
                     Literal(str(row["TP"])),
                 ),
                 (
                     URIRef(f"{PURLBASE}/{cs_term}"),
+                    URIRef(f"{PURLBASE}/RO_0015004"),
                     URIRef(f"{PURLBASE}/{bmc_term}"),
                     URIRef(f"{RDFSBASE}#FN"),  # [STAT:0000598]
                     Literal(str(row["FN"])),
                 ),
                 (
                     URIRef(f"{PURLBASE}/{cs_term}"),
+                    URIRef(f"{PURLBASE}/RO_0015004"),
                     URIRef(f"{PURLBASE}/{bmc_term}"),
                     URIRef(f"{RDFSBASE}#FP"),  # [STAT:0000596]
                     Literal(str(row["FP"])),
                 ),
                 (
                     URIRef(f"{PURLBASE}/{cs_term}"),
+                    URIRef(f"{PURLBASE}/RO_0015004"),
                     URIRef(f"{PURLBASE}/{bmc_term}"),
                     URIRef(f"{RDFSBASE}#Marker_count"),  # [STAT:0000047]
                     Literal(str(row["marker_count"])),
@@ -253,8 +266,8 @@ def create_tuples_from_nsforest(nsforest_results):
             ]
         )
 
+        # TODO: Determine on which edge this attribute belongs
         # Edge annotations for BGC terms
-        # TODO: Restore when available in data
         # tuples.append(
         #     (
         #         URIRef(f"{PURLBASE}/{cs_term}"),

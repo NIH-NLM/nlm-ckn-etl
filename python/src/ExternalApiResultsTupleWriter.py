@@ -147,6 +147,7 @@ def create_tuples_from_cellxgene(cellxgene_results, summarize=False):
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{csd_term}"),
+                URIRef(f"{RDFSBASE}/dc#Source"),
                 URIRef(f"{PURLBASE}/{pub_term}"),
                 URIRef(f"{RDFSBASE}#Source"),
                 Literal("Manual Mapping"),
@@ -311,6 +312,7 @@ def create_tuples_from_opentargets(opentargets_results, gene_results, summarize=
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{gs_term}"),
+                    URIRef(f"{RDFSBASE}#GENETIC_BASIS_FOR"),
                     URIRef(f"{PURLBASE}/{mondo_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("Open Targets"),
@@ -339,6 +341,7 @@ def create_tuples_from_opentargets(opentargets_results, gene_results, summarize=
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{gs_term}"),
+                    URIRef(f"{RDFSBASE}#GENETIC_BASIS_FOR"),
                     URIRef(f"{PURLBASE}/{mondo_term}"),
                     URIRef(f"{RDFSBASE}#Score"),
                     Literal(str(disease["score"])),
@@ -372,6 +375,7 @@ def create_tuples_from_opentargets(opentargets_results, gene_results, summarize=
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{chembl_term}"),
+                    URIRef(f"{RDFSBASE}#IS_SUBSTANCE_THAT_TREATS"),
                     URIRef(f"{PURLBASE}/{mondo_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("Open Targets"),
@@ -395,6 +399,7 @@ def create_tuples_from_opentargets(opentargets_results, gene_results, summarize=
                 tuples.append(
                     (
                         URIRef(f"{PURLBASE}/{chembl_term}"),
+                        URIRef(f"{RDFSBASE}#MOLECULARLY_INTERACTS_WITH"),
                         URIRef(f"{PURLBASE}/{pr_term}"),
                         URIRef(f"{RDFSBASE}#Source"),
                         Literal("Open Targets and UniProt"),
@@ -436,6 +441,7 @@ def create_tuples_from_opentargets(opentargets_results, gene_results, summarize=
                 tuples.append(
                     (
                         URIRef(f"{PURLBASE}/{chembl_term}"),
+                        URIRef(f"{RDFSBASE}#EVALUATED_IN"),
                         URIRef(f"{PURLBASE}/{nct_term}"),
                         URIRef(f"{RDFSBASE}#Source"),
                         Literal("Open Targets"),
@@ -544,6 +550,7 @@ def create_tuples_from_opentargets(opentargets_results, gene_results, summarize=
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{gs_term}"),
+                    URIRef(f"{RDFSBASE}#HAS_QUALITY"),
                     URIRef(f"{PURLBASE}/{rs_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("Open Targets"),
@@ -561,6 +568,7 @@ def create_tuples_from_opentargets(opentargets_results, gene_results, summarize=
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{rs_term}"),
+                    URIRef(f"{RDFSBASE}#INVOLVED_IN"),
                     URIRef(f"{PURLBASE}/{so_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("Open Targets"),
@@ -588,6 +596,7 @@ def create_tuples_from_opentargets(opentargets_results, gene_results, summarize=
                 tuples.append(
                     (
                         URIRef(f"{PURLBASE}/{rs_term}"),
+                        URIRef(f"{RDFSBASE}#HAS_PHARMACOLOGICAL_EFFECT"),
                         URIRef(f"{PURLBASE}/{pharmacogenetic_chembl_term}"),
                         URIRef(f"{RDFSBASE}#Source"),
                         Literal("Open Targets"),
@@ -678,6 +687,7 @@ def create_tuples_from_opentargets(opentargets_results, gene_results, summarize=
             # tuples.append(
             #     (
             #         URIRef(f"{PURLBASE}/{gs_term}"),
+            #         URIRef(f"{RDFSBASE}#EXPRESSED_IN"),
             #         URIRef(f"{PURLBASE}/{exp_term}"),
             #         URIRef(f"{RDFSBASE}#Source"),
             #         Literal("Open Targets"),
@@ -691,24 +701,28 @@ def create_tuples_from_opentargets(opentargets_results, gene_results, summarize=
             #     [
             #         (
             #             URIRef(f"{PURLBASE}/{gs_term}"),
+            #             URIRef(f"{RDFSBASE}#EXPRESSED_IN"),
             #             URIRef(f"{PURLBASE}/{exp_term}"),
             #             URIRef(f"{RDFSBASE}#RNA_zscore"),
             #             Literal(str(expression["rna"]["zscore"])),
             #         ),
             #         (
             #             URIRef(f"{PURLBASE}/{gs_term}"),
+            #             URIRef(f"{RDFSBASE}#EXPRESSED_IN"),
             #             URIRef(f"{PURLBASE}/{exp_term}"),
             #             URIRef(f"{RDFSBASE}#RNA_value"),
             #             Literal(str(expression["rna"]["value"])),
             #         ),
             #         (
             #             URIRef(f"{PURLBASE}/{gs_term}"),
+            #             URIRef(f"{RDFSBASE}#EXPRESSED_IN"),
             #             URIRef(f"{PURLBASE}/{exp_term}"),
             #             URIRef(f"{RDFSBASE}#RNA_unit"),
             #             Literal(str(expression["rna"]["unit"])),
             #         ),
             #         (
             #             URIRef(f"{PURLBASE}/{gs_term}"),
+            #             URIRef(f"{RDFSBASE}#EXPRESSED_IN"),
             #             URIRef(f"{PURLBASE}/{exp_term}"),
             #             URIRef(f"{RDFSBASE}#RNA_level"),
             #             Literal(str(expression["rna"]["level"])),
@@ -805,6 +819,7 @@ def create_tuples_from_gene(gene_results, summarize=False):
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{gs_term}"),
+                    URIRef(f"{RDFSBASE}#PRODUCES"),
                     URIRef(f"{PURLBASE}/{pr_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("UniProt"),
@@ -955,6 +970,7 @@ def create_tuples_from_hubmap(hubmap_data, cl_terms, summarize=False):
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{s_uberon_term}"),
+                    URIRef(f"{RDFSBASE}#PART_OF"),
                     URIRef(f"{PURLBASE}/{o_uberon_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("HuBMAP"),
@@ -1006,6 +1022,7 @@ def create_tuples_from_hubmap(hubmap_data, cl_terms, summarize=False):
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{cl_term}"),
+                    URIRef(f"{RDFSBASE}#PART_OF"),
                     URIRef(f"{PURLBASE}/{uberon_term}"),
                     URIRef(f"{RDFSBASE}#Source"),
                     Literal("HuBMAP"),
