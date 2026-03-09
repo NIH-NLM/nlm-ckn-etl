@@ -2,7 +2,8 @@
 
 Systematically attempts to instantiate each Association class from the
 available test data's results/data sections (not tuples), reporting
-successes, failures, and ambiguities.
+successes, failures, and ambiguities. Maps as many entity fields as
+possible from the available data sources.
 """
 
 import ast
@@ -18,8 +19,8 @@ import ckn_schema.pydantic.ckn_schema as ckn_module
 from ckn_schema.pydantic.ckn_schema import (
     AnatomicalStructure,
     Association,
-    BiomarkerCombination,
     BinaryGeneSet,
+    BiomarkerCombination,
     CellSet,
     CellSetDataset,
     CellType,
@@ -99,6 +100,57 @@ def try_create(cls, **kwargs) -> tuple[Any | None, str | None]:
         return None, str(e)
 
 
+def extract_uniprot_id_from_link(link: str) -> str | None:
+    """Extract UniProt ID from a URL like 'https://www.uniprot.org/uniprot/P19022'."""
+    m = re.search(r"/uniprot/([A-Z0-9]+)$", link)
+    return m.group(1) if m else None
+
+
+# ---------------------------------------------------------------------------
+# Load all data sources once
+# ---------------------------------------------------------------------------
+
+def load_all_data() -> dict[str, Any]:
+    """Load and return all test data sources."""
+    data = {}
+
+    with open(SUMMARIES / "hubmap-allen-brain-v1.7.json") as f:
+        data["hubmap"] = json.load(f)
+
+    with open(SUMMARIES / "nlm-ckn-nsforest-results-li-2023.json") as f:
+        data["nsforest"] = json.load(f)
+
+    with open(SUMMARIES / "nlm-ckn-map-author-to-cl-li-2023.json") as f:
+        data["author_to_cl"] = json.load(f)
+
+    with open(SUMMARIES / "nlm-ckn-external-api-results.json") as f:
+        data["external_api"] = json.load(f)
+
+    return data
+
+
+# ---------------------------------------------------------------------------
+# Extract tuples metadata (author, title, year, journal from tuples section)
+# ---------------------------------------------------------------------------
+
+def extract_publication_from_tuples(tuples: list) -> dict[str, str]:
+    """Extract publication metadata from RDF tuples."""
+    pub = {}
+    for t in tuples:
+        if len(t) >= 3:
+            pred = t[1]
+            obj = t[2]
+            if pred.endswith("#Author"):
+                pub["author_list"] = obj
+            elif pred.endswith("#Title"):
+                pub["title"] = obj
+            elif pred.endswith("#Year"):
+                pub["year"] = obj
+            elif pred.endswith("#Journal"):
+                pub["journal"] = obj
+    return pub
+
+
 # ---------------------------------------------------------------------------
 # Auto-discover Association subclasses from the schema module
 # ---------------------------------------------------------------------------
@@ -127,71 +179,24 @@ def record(name: str, status: str, source: str, instance: Any = None,
 
 
 # ---------------------------------------------------------------------------
-# 1. test-triples.json (tuples section - RDF triples)
+# 1. hubmap-allen-brain-v1.7.json (data section)
 # ---------------------------------------------------------------------------
 
-# def from_test_triples() -> None:
-#     """Extract associations from test-triples.json tuples."""
-#     with open(TUPLES / "test-triples.json") as f:
-#         data = json.load(f)
-
-#     tuples = data.get("tuples", [])
-
-#     # Triple: [CL_0000235, rdfs:subClassOf, CL_0000145]
-#     for t in tuples:
-#         if len(t) >= 3 and "subClassOf" in t[1]:
-#             subj_curie = purl_to_curie(t[0])
-#             obj_curie = purl_to_curie(t[2])
-#             inst, err = try_create(
-#                 CellTypeSubclassOfCellType,
-#                 subject=CellType(ontology_purl=subj_curie),
-#                 predicate="subclass_of",
-#                 object=CellType(ontology_purl=obj_curie),
-#             )
-#             record("CellTypeSubclassOfCellType", "Created" if inst else "FAILED",
-#                    "test-triples.json", inst, err,
-#                    f"{subj_curie} subClassOf {obj_curie}")
-#             return
-
-
-# ---------------------------------------------------------------------------
-# 2. hubmap-allen-brain-v1.7.json (data section)
-# ---------------------------------------------------------------------------
-
-def from_hubmap() -> None:
+def from_hubmap(data: dict) -> None:
     """Extract associations from HuBMAP data section."""
-    with open(SUMMARIES / "hubmap-allen-brain-v1.7.json") as f:
-        data = json.load(f)
-
-    hubmap = data.get("data", {}).get("hubmap", {})
+    hubmap = data["hubmap"]["data"]["hubmap"]
     cell_types = hubmap.get("cell_types", [])
     anat_structs = hubmap.get("anatomical_structures", [])
-
-    # --- CellTypeSubclassOfCellType from ccf_ct_isa ---
-    # for ct in cell_types:
-    #     for parent_id in ct.get("ccf_ct_isa", []):
-    #         subj_curie = ct["id"]  # e.g. "CL:0000236"
-    #         obj_curie = parent_id  # e.g. "CL:0000000"
-    #         inst, err = try_create(
-    #             CellTypeSubclassOfCellType,
-    #             subject=CellType(ontology_purl=subj_curie),
-    #             predicate="subclass_of",
-    #             object=CellType(ontology_purl=obj_curie),
-    #         )
-    #         if "CellTypeSubclassOfCellType" not in results:
-    #             record("CellTypeSubclassOfCellType",
-    #                    "Created" if inst else "FAILED",
-    #                    "hubmap", inst, err,
-    #                    f"{subj_curie} subClassOf {obj_curie}")
-    #         break
-    #     break
 
     # --- CellTypePartOfAnatomicalStructure from ccf_located_in ---
     for ct in cell_types:
         for uberon_id in ct.get("ccf_located_in", []):
             inst, err = try_create(
                 ASSOCIATION_CLASSES["CellTypePartOfAnatomicalStructure"],
-                subject=CellType(ontology_purl=ct["id"]),
+                subject=CellType(
+                    ontology_purl=ct["id"],
+                    label=ct.get("ccf_pref_label"),
+                ),
                 predicate="part_of",
                 object=AnatomicalStructure(ontology_purl=uberon_id),
             )
@@ -208,7 +213,10 @@ def from_hubmap() -> None:
         for parent_id in as_.get("ccf_part_of", []):
             inst, err = try_create(
                 ASSOCIATION_CLASSES["AnatomicalStructurePartOfAnatomicalStructure"],
-                subject=AnatomicalStructure(ontology_purl=as_["id"]),
+                subject=AnatomicalStructure(
+                    ontology_purl=as_["id"],
+                    label=as_.get("ccf_pref_label"),
+                ),
                 predicate="part_of",
                 object=AnatomicalStructure(ontology_purl=parent_id),
             )
@@ -221,15 +229,13 @@ def from_hubmap() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. nlm-ckn-nsforest-results-li-2023.json (results section)
+# 2. nlm-ckn-nsforest-results-li-2023.json (results section)
 # ---------------------------------------------------------------------------
 
-def from_nsforest() -> None:
+def from_nsforest(data: dict) -> None:
     """Extract associations from NSForest results."""
-    with open(SUMMARIES / "nlm-ckn-nsforest-results-li-2023.json") as f:
-        data = json.load(f)
-
-    row = get_columnar_row(data.get("results", {}))
+    nsforest = data["nsforest"]
+    row = get_columnar_row(nsforest.get("results", {}))
     cluster_name = row.get("clusterName", "")
     cluster_size = row.get("clusterSize")
     f_score = row.get("f_score")
@@ -240,7 +246,7 @@ def from_nsforest() -> None:
     markers = parse_string_list(markers_str)
     binary_genes = parse_string_list(binary_str)
 
-    # Build entities
+    # Build entities with all available fields
     bmc = BiomarkerCombination(
         markers=" ".join(markers),
         f_beta_score=f_score,
@@ -249,6 +255,8 @@ def from_nsforest() -> None:
     cell_set = CellSet(
         author_cell_term=cluster_name,
         cell_count=int(cluster_size) if cluster_size else None,
+        biomarker_combination=" ".join(markers),
+        binary_gene_set=" ".join(binary_genes),
     )
 
     # --- GenePartOfBiomarkerCombination ---
@@ -291,15 +299,18 @@ def from_nsforest() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. nlm-ckn-map-author-to-cl-li-2023.json (results section)
+# 3. nlm-ckn-map-author-to-cl-li-2023.json (results + tuples sections)
 # ---------------------------------------------------------------------------
 
-def from_author_to_cl() -> None:
+def from_author_to_cl(data: dict) -> None:
     """Extract associations from author-to-CL mapping results."""
-    with open(SUMMARIES / "nlm-ckn-map-author-to-cl-li-2023.json") as f:
-        data = json.load(f)
+    author_to_cl = data["author_to_cl"]
+    row = get_columnar_row(author_to_cl.get("results", {}))
+    tuples = author_to_cl.get("tuples", [])
 
-    row = get_columnar_row(data.get("results", {}))
+    # Extract publication metadata from tuples section
+    pub_meta = extract_publication_from_tuples(tuples)
+
     cl_purl = row.get("cell_ontology_id", "")
     cl_curie = purl_to_curie(cl_purl)
     uberon_purl = row.get("uberon_entity_id", "")
@@ -311,16 +322,22 @@ def from_author_to_cl() -> None:
     dataset_version_id = row.get("dataset_version_id", "")
     dataset_id = row.get("dataset_id", "")
     collection_id = row.get("collection_id", "")
+    collection_version_id = row.get("collection_version_id", "")
     pmid = str(row.get("PMID", ""))
     pmcid = row.get("PMCID", "")
     doi = row.get("DOI", "")
+    dataset_source = row.get("dataset_source", "")
+    mapping_method = row.get("mapping_method", "")
     markers_str = row.get("NSForest_markers", "")
     binary_str = row.get("binary_genes", "")
     markers = parse_string_list(markers_str)
     binary_genes = parse_string_list(binary_str)
 
-    # Build entities
-    cell_type = CellType(ontology_purl=cl_curie, label=row.get("cell_ontology_term"))
+    # Build entities with all available fields populated
+    cell_type = CellType(
+        ontology_purl=cl_curie,
+        label=row.get("cell_ontology_term"),
+    )
     anat_struct = AnatomicalStructure(
         ontology_purl=uberon_curie,
         label=row.get("uberon_entity_term"),
@@ -328,15 +345,42 @@ def from_author_to_cl() -> None:
     cell_set = CellSet(
         author_cell_term=author_cell_term,
         cell_count=int(cluster_size) if cluster_size else None,
+        ontology_purl=cell_type,
+        anatomical_structure=uberon_curie,
+        species="Homo sapiens",
+        publication=doi,
+        dataset_name="snRNA-seq of human retina - all cells",
+        biomarker_combination=" ".join(markers),
+        binary_gene_set=" ".join(binary_genes),
+        expressed_genes=" ".join(binary_genes),
+        cellxgene_collection=(
+            f"cellxgene.cziscience.com/collections/{collection_id}"
+        ),
+        cellxgene_dataset=(
+            f"datasets.cellxgene.cziscience.com/{dataset_version_id}.h5ad"
+        ),
     )
     dataset = CellSetDataset(
+        dataset_name="snRNA-seq of human retina - all cells",
         dataset_identifier=dataset_version_id,
+        species="Homo sapiens",
+        dataset_collection_version=collection_version_id,
         publication=doi,
+        anatomical_structure=row.get("uberon_entity_term"),
+        disease_status="normal",
+        cell_type=row.get("cell_ontology_term"),
+        cellxgene_collection=(
+            f"cellxgene.cziscience.com/collections/{collection_id}"
+        ),
     )
     publication = Publication(
         pmid=pmid,
         pmcid=pmcid,
         publication_doi_identifier=doi,
+        title=pub_meta.get("title"),
+        author_list=pub_meta.get("author_list"),
+        year=pub_meta.get("year"),
+        journal=pub_meta.get("journal"),
     )
     bmc = BiomarkerCombination(markers=" ".join(markers))
     bgs = BinaryGeneSet(markers=" ".join(binary_genes))
@@ -401,7 +445,7 @@ def from_author_to_cl() -> None:
            "Created" if inst else "FAILED",
            "author-to-cl", inst, err,
            f"CellSetDataset -> Publication(PMID:{pmid}). "
-           "Note: title/year/journal only in tuples section")
+           "Publication fields populated from both results and tuples")
 
     # --- CellTypeHasExemplarDataCellSetDataset ---
     inst, err = try_create(
@@ -478,231 +522,358 @@ def from_author_to_cl() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 5. nlm-ckn-external-api-results.json (results section)
+# 4. nlm-ckn-external-api-results.json (results section)
 # ---------------------------------------------------------------------------
 
-def from_external_api() -> None:
+def from_external_api(data: dict) -> None:
     """Extract associations from external API results."""
-    with open(SUMMARIES / "nlm-ckn-external-api-results.json") as f:
-        data = json.load(f)
+    api_data = data["external_api"]
+    api_results = api_data.get("results", {})
+    api_tuples = api_data.get("tuples", {})
 
-    api_results = data.get("results", {})
+    # --- CELLxGENE data for enriching CellSetDataset ---
+    cellxgene = api_results.get("cellxgene", {})
+    cxg_record = None
+    for cxg_id, cxg_data in cellxgene.items():
+        if isinstance(cxg_data, dict):
+            cxg_record = cxg_data
+            break
+
+    # --- Gene data from NCBI Gene ---
+    gene_section = api_results.get("gene", {})
+    gene_entrez_ids = gene_section.get("gene_entrez_ids", [])
+    gene_data = None
+    if gene_entrez_ids:
+        gene_data = gene_section.get(gene_entrez_ids[0])
+        if isinstance(gene_data, dict):
+            pass  # gene_data is the dict we want
+        else:
+            gene_data = None
+
+    # --- UniProt data ---
+    uniprot_section = api_results.get("uniprot", {})
+    protein_accessions = uniprot_section.get("protein_accessions", [])
+    uniprot_data = None
+    if protein_accessions:
+        uniprot_data = uniprot_section.get(protein_accessions[0])
+        if isinstance(uniprot_data, dict):
+            pass
+        else:
+            uniprot_data = None
 
     # --- OpenTargets ---
     ot = api_results.get("opentargets", {})
     gene_ids = ot.get("gene_ensembl_ids", [])
-    if gene_ids:
-        gene_id = gene_ids[0]
-        gene_data = ot.get(gene_id, {})
+    if not gene_ids:
+        return
+    gene_id = gene_ids[0]
+    ot_data = ot.get(gene_id, {})
 
-        target = gene_data.get("target", {})
-        diseases = gene_data.get("diseases", [])
-        drugs = gene_data.get("drugs", [])
-        interactions = gene_data.get("interactions", [])
-        pharmacogenetics = gene_data.get("pharmacogenetics", [])
+    target = ot_data.get("target", {})
+    diseases = ot_data.get("diseases", [])
+    drugs = ot_data.get("drugs", [])
+    interactions = ot_data.get("interactions", [])
+    pharmacogenetics = ot_data.get("pharmacogenetics", [])
 
-        gene_symbol = target.get("approvedSymbol", "")
+    gene_symbol = target.get("approvedSymbol", "")
 
-        # --- GeneGeneticallyInteractsWithGene ---
-        if interactions:
-            ix = interactions[0]
-            target_b = ix.get("targetB", {})
-            gene_b_symbol = target_b.get("approvedSymbol", "")
+    # Find UniProt SwissProt ID from target
+    protein_ids = target.get("proteinIds", [])
+    uniprot_id = None
+    for pid in protein_ids:
+        if pid.get("source") == "uniprot_swissprot":
+            uniprot_id = pid["id"]
+            break
+
+    # Build a fully-populated Protein from both OpenTargets and UniProt data
+    protein_kwargs: dict[str, Any] = {}
+    if uniprot_id:
+        protein_kwargs["uniprot_id"] = uniprot_id
+    if uniprot_data:
+        protein_kwargs.setdefault("uniprot_id", uniprot_data.get("UniProt_ID"))
+        protein_kwargs["label"] = uniprot_data.get("Protein_name")
+        protein_kwargs["number_of_amino_acids"] = uniprot_data.get(
+            "Number_of_amino_acids"
+        )
+        protein_kwargs["protein_function"] = uniprot_data.get("Function")
+        protein_kwargs["species"] = uniprot_data.get("Organism")
+        protein_kwargs["gene_name"] = uniprot_data.get("Gene_name")
+        ann_score = uniprot_data.get("Annotation_score")
+        if ann_score is not None:
+            protein_kwargs["annotation_score"] = int(ann_score)
+
+    # --- GeneGeneticallyInteractsWithGene ---
+    if interactions:
+        ix = interactions[0]
+        target_b = ix.get("targetB", {})
+        gene_b_symbol = target_b.get("approvedSymbol", "")
+        inst, err = try_create(
+            ASSOCIATION_CLASSES["GeneGeneticallyInteractsWithGene"],
+            subject=gene_symbol,
+            predicate="genetically_interacts_with",
+            object=gene_b_symbol,
+        )
+        record("GeneGeneticallyInteractsWithGene",
+               "Created" if inst else "FAILED",
+               "external-api (opentargets)", inst, err,
+               f"{gene_symbol} <-> {gene_b_symbol}")
+
+    # --- GeneHasQualityMutation ---
+    if pharmacogenetics:
+        pg = pharmacogenetics[0]
+        variantRsId = pg["variantRsId"]
+        if variantRsId:
             inst, err = try_create(
-                ASSOCIATION_CLASSES["GeneGeneticallyInteractsWithGene"],
+                ASSOCIATION_CLASSES["GeneHasQualityMutation"],
                 subject=gene_symbol,
-                predicate="genetically_interacts_with",
-                object=gene_b_symbol,
+                predicate="has_quality",
+                object=Mutation(reference_sequence_identifier=variantRsId),
             )
-            record("GeneGeneticallyInteractsWithGene",
+            record("GeneHasQualityMutation",
                    "Created" if inst else "FAILED",
                    "external-api (opentargets)", inst, err,
-                   f"{gene_symbol} <-> {gene_b_symbol}")
+                   f"{gene_symbol} <-> {variantRsId}")
 
-        # --- GeneHasQualityMutation ---
-        if pharmacogenetics:
-            pg = pharmacogenetics[0]
-            variantRsId = pg["variantRsId"]
-            if variantRsId:
-                inst, err = try_create(
-                    ASSOCIATION_CLASSES["GeneHasQualityMutation"],
-                    subject=gene_symbol,
-                    predicate="has_quality",
-                    object=Mutation(reference_sequence_identifier=variantRsId),
-                )
-                record("GeneHasQualityMutation",
-                       "Created" if inst else "FAILED",
-                       "external-api (opentargets)", inst, err,
-                       f"{gene_symbol} <-> {variantRsId}")
+    # --- GeneIsGeneticBasisForDisease ---
+    if diseases:
+        d = diseases[0]
+        disease_info = d.get("disease", {})
+        disease_id = disease_info.get("id", "")
+        # Convert MONDO_0009061 to MONDO:0009061
+        disease_curie = disease_id.replace("_", ":")
+        # Collect dbXRefs as database_cross_reference
+        db_xrefs = disease_info.get("dbXRefs", [])
+        db_xref_str = ", ".join(db_xrefs) if db_xrefs else None
+        inst, err = try_create(
+            ASSOCIATION_CLASSES["GeneIsGeneticBasisForDisease"],
+            subject=gene_symbol,
+            predicate="is_genetic_basis_for_condition",
+            object=Disease(
+                ontology_purl=disease_curie,
+                label=disease_info.get("name"),
+                definition=disease_info.get("description"),
+                database_cross_reference=db_xref_str,
+            ),
+        )
+        record("GeneIsGeneticBasisForDisease",
+               "Created" if inst else "FAILED",
+               "external-api (opentargets)", inst, err,
+               f"{gene_symbol} -> Disease({disease_curie})")
 
-        # --- GeneIsGeneticBasisForDisease ---
-        if diseases:
-            d = diseases[0]
-            disease_info = d.get("disease", {})
-            disease_id = disease_info.get("id", "")
-            # Convert MONDO_0009061 to MONDO:0009061
-            disease_curie = disease_id.replace("_", ":")
-            inst, err = try_create(
-                ASSOCIATION_CLASSES["GeneIsGeneticBasisForDisease"],
-                subject=gene_symbol,
-                predicate="is_genetic_basis_for_condition",
-                object=Disease(
-                    ontology_purl=disease_curie,
-                    label=disease_info.get("name"),
-                    definition=disease_info.get("description"),
-                ),
-            )
-            record("GeneIsGeneticBasisForDisease",
-                   "Created" if inst else "FAILED",
-                   "external-api (opentargets)", inst, err,
-                   f"{gene_symbol} -> Disease({disease_curie})")
+    # --- GeneMolecularlyInteractsWithDrug ---
+    if drugs:
+        drug_entry = drugs[0]
+        drug_info = drug_entry.get("drug", {})
+        drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
+        trade_names = drug_info.get("tradeNames", [])
+        synonyms = drug_info.get("synonyms", [])
+        is_approved = drug_info.get("isApproved", False)
+        inst, err = try_create(
+            ASSOCIATION_CLASSES["GeneMolecularlyInteractsWithDrug"],
+            subject=gene_symbol,
+            predicate="molecularly_interacts_with",
+            object=Drug(
+                name=drug_name,
+                mechanism_of_action=drug_entry.get("mechanismOfAction"),
+                trade_names=", ".join(trade_names) if trade_names else None,
+                exact_synonym=", ".join(synonyms) if synonyms else None,
+                approval_status="approved" if is_approved else "not approved",
+                uniprot_id=uniprot_id,
+                protein_target=gene_symbol,
+            ),
+        )
+        record("GeneMolecularlyInteractsWithDrug",
+               "Created" if inst else "FAILED",
+               "external-api (opentargets)", inst, err,
+               f"Gene({gene_symbol}) -> Drug({drug_name})")
 
-        # --- GeneMolecularlyInteractsWithDrug ---
-        if drugs:
-            drug_entry = drugs[0]
+    # --- GeneProducesProtein ---
+    if protein_kwargs.get("uniprot_id"):
+        protein = Protein(**protein_kwargs)
+        inst, err = try_create(
+            ASSOCIATION_CLASSES["GeneProducesProtein"],
+            subject=gene_symbol,
+            predicate="produces",
+            object=protein,
+        )
+        record("GeneProducesProtein",
+               "Created" if inst else "FAILED",
+               "external-api (opentargets+uniprot)", inst, err,
+               f"{gene_symbol} -> Protein({protein_kwargs.get('uniprot_id')}). "
+               f"Protein fields from UniProt: label, function, amino_acids, "
+               f"annotation_score, species, gene_name")
+    else:
+        record("GeneProducesProtein", "PARTIAL",
+               "external-api (opentargets)", None, None,
+               "No UniProt ID found in target proteinIds")
+
+    # --- DrugIsSubstanceThatTreatsDisease ---
+    if drugs:
+        drug_entry = drugs[0]
+        drug_info = drug_entry.get("drug", {})
+        drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
+        trade_names = drug_info.get("tradeNames", [])
+        synonyms = drug_info.get("synonyms", [])
+        is_approved = drug_info.get("isApproved", False)
+        disease_id = drug_entry.get("diseaseId", "")
+        disease_curie = disease_id.replace("_", ":")
+        # Look up indication details from the drug's indications
+        indications = drug_info.get("indications", {}).get("rows", [])
+        disease_label = None
+        disease_desc = None
+        for ind in indications:
+            ind_disease = ind.get("disease", {})
+            if ind_disease.get("id", "").replace("_", ":") == disease_curie:
+                disease_label = ind_disease.get("name")
+                disease_desc = ind_disease.get("description")
+                break
+        inst, err = try_create(
+            ASSOCIATION_CLASSES["DrugIsSubstanceThatTreatsDisease"],
+            subject=Drug(
+                name=drug_name,
+                mechanism_of_action=drug_entry.get("mechanismOfAction"),
+                trade_names=", ".join(trade_names) if trade_names else None,
+                exact_synonym=", ".join(synonyms) if synonyms else None,
+                approval_status="approved" if is_approved else "not approved",
+                disease=disease_curie,
+                uniprot_id=uniprot_id,
+                protein_target=gene_symbol,
+            ),
+            predicate="is_substance_that_treats",
+            object=Disease(
+                ontology_purl=disease_curie,
+                label=disease_label,
+                definition=disease_desc,
+            ),
+        )
+        record("DrugIsSubstanceThatTreatsDisease",
+               "Created" if inst else "FAILED",
+               "external-api (opentargets)", inst, err,
+               f"Drug({drug_name}) -> Disease({disease_curie}). "
+               f"Note: diseaseId uses EFO namespace, not MONDO")
+
+    # --- DrugEvaluatedInClinicalTrial ---
+    ct_created = False
+    for drug_entry in drugs:
+        ct_ids = drug_entry.get("ctIds", [])
+        if ct_ids:
             drug_info = drug_entry.get("drug", {})
             drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
+            trade_names = drug_info.get("tradeNames", [])
+            synonyms = drug_info.get("synonyms", [])
+            is_approved = drug_info.get("isApproved", False)
+            ct_id = ct_ids[0]
             inst, err = try_create(
-                ASSOCIATION_CLASSES["GeneMolecularlyInteractsWithDrug"],
-                subject=gene_symbol,
-                predicate="molecularly_interacts_with",
+                ASSOCIATION_CLASSES["DrugEvaluatedInClinicalTrial"],
+                subject=Drug(
+                    name=drug_name,
+                    mechanism_of_action=drug_entry.get("mechanismOfAction"),
+                    trade_names=(
+                        ", ".join(trade_names) if trade_names else None
+                    ),
+                    exact_synonym=(
+                        ", ".join(synonyms) if synonyms else None
+                    ),
+                    approval_status=(
+                        "approved" if is_approved else "not approved"
+                    ),
+                    study=ct_id,
+                ),
+                predicate="evaluated_in",
+                object=ClinicalTrial(study_id=ct_id),
+            )
+            record("DrugEvaluatedInClinicalTrial",
+                   "Created" if inst else "FAILED",
+                   "external-api (opentargets)", inst, err,
+                   f"Drug({drug_name}) -> ClinicalTrial({ct_id}). "
+                   "Note: only some drugs have ctIds")
+            ct_created = True
+            break
+    if not ct_created:
+        record("DrugEvaluatedInClinicalTrial", "PARTIAL",
+               "external-api (opentargets)", None, None,
+               "No drugs in test data have ctIds")
+
+    # --- DrugMolecularlyInteractsWithGene ---
+    if drugs:
+        drug_entry = drugs[0]
+        drug_info = drug_entry.get("drug", {})
+        drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
+        trade_names = drug_info.get("tradeNames", [])
+        synonyms = drug_info.get("synonyms", [])
+        is_approved = drug_info.get("isApproved", False)
+        inst, err = try_create(
+            ASSOCIATION_CLASSES["DrugMolecularlyInteractsWithGene"],
+            subject=Drug(
+                name=drug_name,
+                mechanism_of_action=drug_entry.get("mechanismOfAction"),
+                trade_names=", ".join(trade_names) if trade_names else None,
+                exact_synonym=", ".join(synonyms) if synonyms else None,
+                approval_status="approved" if is_approved else "not approved",
+                uniprot_id=uniprot_id,
+                protein_target=gene_symbol,
+            ),
+            predicate="molecularly_interacts_with",
+            object=gene_symbol,
+        )
+        record("DrugMolecularlyInteractsWithGene",
+               "Created" if inst else "FAILED",
+               "external-api (opentargets)", inst, err,
+               f"Drug({drug_name}) -> Gene({gene_symbol})")
+
+    # --- DrugMolecularlyInteractsWithProtein ---
+    if drugs and protein_kwargs.get("uniprot_id"):
+        drug_entry = drugs[0]
+        drug_info = drug_entry.get("drug", {})
+        drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
+        trade_names = drug_info.get("tradeNames", [])
+        synonyms = drug_info.get("synonyms", [])
+        is_approved = drug_info.get("isApproved", False)
+        protein = Protein(**protein_kwargs)
+        inst, err = try_create(
+            ASSOCIATION_CLASSES["DrugMolecularlyInteractsWithProtein"],
+            subject=Drug(
+                name=drug_name,
+                mechanism_of_action=drug_entry.get("mechanismOfAction"),
+                trade_names=", ".join(trade_names) if trade_names else None,
+                exact_synonym=", ".join(synonyms) if synonyms else None,
+                approval_status="approved" if is_approved else "not approved",
+                uniprot_id=uniprot_id,
+                protein_target=gene_symbol,
+            ),
+            predicate="molecularly_interacts_with",
+            object=protein,
+        )
+        record("DrugMolecularlyInteractsWithProtein",
+               "Created" if inst else "FAILED",
+               "external-api (opentargets+uniprot)", inst, err,
+               f"Drug({drug_name}) -> Protein({uniprot_id}). "
+               "Note: indirect - drug targets gene, gene produces protein")
+    elif not drugs:
+        record("DrugMolecularlyInteractsWithProtein", "PARTIAL",
+               "external-api (opentargets)", None, None,
+               "No drugs in test data")
+
+    # --- MutationHasPharamcologicalEffectDrug ---
+    if pharmacogenetics:
+        pg = pharmacogenetics[0]
+        variantRsId = pg["variantRsId"]
+        pg_drugs = pg["drugs"]
+        if variantRsId and pg_drugs:
+            pg_drug_info = pg_drugs[0].get("drug", {})
+            drug_name = pg_drug_info.get("name", "")
+            inst, err = try_create(
+                ASSOCIATION_CLASSES["MutationHasPharamcologicalEffectDrug"],
+                subject=Mutation(
+                    reference_sequence_identifier=variantRsId,
+                ),
+                predicate="has_pharmacological_effect",
                 object=Drug(name=drug_name),
             )
-            record("GeneMolecularlyInteractsWithDrug",
+            record("MutationHasPharamcologicalEffectDrug",
                    "Created" if inst else "FAILED",
                    "external-api (opentargets)", inst, err,
-                   f"Gene({gene_symbol}) -> Drug({drug_name})")
-
-        # --- GeneProducesProtein ---
-        # Get protein IDs from target or interactions
-        protein_ids = target.get("proteinIds", [])
-        uniprot_id = None
-        for pid in protein_ids:
-            if pid.get("source") == "uniprot_swissprot":
-                uniprot_id = pid["id"]
-                break
-        if not uniprot_id and interactions:
-            ix = interactions[0]
-            for pid in ix.get("targetA", {}).get("proteinIds", []):
-                if "uniprot" in pid.get("source", ""):
-                    uniprot_id = pid["id"]
-                    break
-        if uniprot_id:
-            inst, err = try_create(
-                ASSOCIATION_CLASSES["GeneProducesProtein"],
-                subject=gene_symbol,
-                predicate="produces",
-                object=Protein(uniprot_id=uniprot_id),
-            )
-            record("GeneProducesProtein",
-                   "Created" if inst else "FAILED",
-                   "external-api (opentargets)", inst, err,
-                   f"{gene_symbol} -> Protein({uniprot_id})")
-        else:
-            record("GeneProducesProtein", "PARTIAL",
-                   "external-api (opentargets)", None, None,
-                   "No UniProt ID found in target proteinIds")
-
-        # --- DrugIsSubstanceThatTreatsDisease ---
-        if drugs:
-            drug_entry = drugs[0]
-            drug_info = drug_entry.get("drug", {})
-            drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
-            disease_id = drug_entry.get("diseaseId", "")
-            disease_curie = disease_id.replace("_", ":")
-            inst, err = try_create(
-                ASSOCIATION_CLASSES["DrugIsSubstanceThatTreatsDisease"],
-                subject=Drug(name=drug_name,
-                             mechanism_of_action=drug_entry.get("mechanismOfAction")),
-                predicate="is_substance_that_treats",
-                object=Disease(ontology_purl=disease_curie),
-            )
-            record("DrugIsSubstanceThatTreatsDisease",
-                   "Created" if inst else "FAILED",
-                   "external-api (opentargets)", inst, err,
-                   f"Drug({drug_name}) -> Disease({disease_curie}). "
-                   f"Note: diseaseId uses EFO namespace, not MONDO")
-
-        # --- DrugEvaluatedInClinicalTrial ---
-        ct_created = False
-        for drug_entry in drugs:
-            ct_ids = drug_entry.get("ctIds", [])
-            if ct_ids:
-                drug_info = drug_entry.get("drug", {})
-                drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
-                ct_id = ct_ids[0]
-                inst, err = try_create(
-                    ASSOCIATION_CLASSES["DrugEvaluatedInClinicalTrial"],
-                    subject=Drug(name=drug_name),
-                    predicate="evaluated_in",
-                    object=ClinicalTrial(study_id=ct_id),
-                )
-                record("DrugEvaluatedInClinicalTrial",
-                       "Created" if inst else "FAILED",
-                       "external-api (opentargets)", inst, err,
-                       f"Drug({drug_name}) -> ClinicalTrial({ct_id}). "
-                       "Note: only some drugs have ctIds")
-                ct_created = True
-                break
-        if not ct_created:
-            record("DrugEvaluatedInClinicalTrial", "PARTIAL",
-                   "external-api (opentargets)", None, None,
-                   "No drugs in test data have ctIds")
-
-        # --- DrugMolecularlyInteractsWithGene ---
-        if drugs:
-            drug_entry = drugs[0]
-            drug_info = drug_entry.get("drug", {})
-            drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
-            inst, err = try_create(
-                ASSOCIATION_CLASSES["DrugMolecularlyInteractsWithGene"],
-                subject=Drug(name=drug_name),
-                predicate="molecularly_interacts_with",
-                object=gene_symbol,
-            )
-            record("DrugMolecularlyInteractsWithGene",
-                   "Created" if inst else "FAILED",
-                   "external-api (opentargets)", inst, err,
-                   f"Drug({drug_name}) -> Gene({gene_symbol})")
-
-        # --- DrugMolecularlyInteractsWithProtein ---
-        if drugs and uniprot_id:
-            drug_entry = drugs[0]
-            drug_info = drug_entry.get("drug", {})
-            drug_name = drug_info.get("name", drug_entry.get("approvedName", ""))
-            inst, err = try_create(
-                ASSOCIATION_CLASSES["DrugMolecularlyInteractsWithProtein"],
-                subject=Drug(name=drug_name),
-                predicate="molecularly_interacts_with",
-                object=Protein(uniprot_id=uniprot_id),
-            )
-            record("DrugMolecularlyInteractsWithProtein",
-                   "Created" if inst else "FAILED",
-                   "external-api (opentargets)", inst, err,
-                   f"Drug({drug_name}) -> Protein({uniprot_id}). "
-                   "Note: indirect - drug targets gene, gene produces protein")
-        elif not drugs:
-            record("DrugMolecularlyInteractsWithProtein", "PARTIAL",
-                   "external-api (opentargets)", None, None,
-                   "No drugs in test data")
-
-        # --- MutationHasPharamcologicalEffectDrug ---
-        if pharmacogenetics:
-            pg = pharmacogenetics[0]
-            variantRsId = pg["variantRsId"]
-            drugs = pg["drugs"]
-            if variantRsId and drugs:
-                drug_name=drugs[0]["drug"]["name"]
-                inst, err = try_create(
-                    ASSOCIATION_CLASSES["MutationHasPharamcologicalEffectDrug"],
-                    subject=Mutation(reference_sequence_identifier=variantRsId),
-                    predicate="has_pharmacological_effect",
-                    object=Drug(name=drug_name),
-                )
-                record("MutationHasPharamcologicalEffectDrug",
-                       "Created" if inst else "FAILED",
-                       "external-api (opentargets)", inst, err,
-                       f"Mutation({variantRsId}) -> Drug({drug_name})")
+                   f"Mutation({variantRsId}) -> Drug({drug_name})")
 
 # ---------------------------------------------------------------------------
 # Associations without a handler implemented above
@@ -710,30 +881,16 @@ def from_external_api() -> None:
 
 NO_DATA = {
     # --- CL-CL -------------------------------------------------------------
-    # ADJACENT_TO
     "CellTypeDevelopsFromCellType": "In CL",
-    # HAS_PART
-    # HAS_POTENTIAL_TO_DIRECTLY_DEVELOP_INTO
-    # HAS_POTENTIAL_TO_DEVELOP_INTO
-    # HAS_SYNAPTIC_TERMINAL_IN
-    # INNERVATES
     "CellTypeInteractsWithCellType": "Not in CL",
-    # PART_OF
     "CellTypeSubclassOfCellType": "In CL",
-    # SYNAPSED_TO
-    # SYNAPSED_BY
-    # TERM_REPLACED_BY
 
     # --- CL-PR -------------------------------------------------------------
-    # EXPRESSES
-    # HAS_HIGH_PLASMA_MEMBRANE_AMOUNT
-    # HAS_LOW_PLASMA_MEMBRANE_AMOUNT
-    # HAS_PART
     "CellTypeHasPlasmaMembranePartProtein": "In CL",
     "CellTypeLacksPlasmaMembranePartProtein": "In CL",
 
     # --- In GO? ------------------------------------------------------------
-    "ProteinPartOfCellType": "No proteincelltype data",
+    "ProteinPartOfCellType": "No protein-celltype data",
     "ProteinCapableOfMolecularFunction": "No protein-molecular function data",
     "ProteinInvolvedInBiologicalProcess": "No protein-biological process data",
     "ProteinLocatedInCellularComponent": "No protein-cellular component data",
@@ -741,6 +898,62 @@ NO_DATA = {
     # --- From FRMatch? -----------------------------------------------------
     "CellSetExactMatchCellSet": "No cell set matching data",
 }
+
+
+# ---------------------------------------------------------------------------
+# Field coverage report
+# ---------------------------------------------------------------------------
+
+def print_field_coverage(instance: Any, source: str, cls_name: str) -> None:
+    """Print which fields are populated vs None for an entity instance."""
+    if instance is None:
+        return
+    fields = instance.model_fields
+    populated = []
+    empty = []
+    for fname in fields:
+        val = getattr(instance, fname, None)
+        if val is not None:
+            populated.append(fname)
+        else:
+            empty.append(fname)
+    total = len(fields)
+    filled = len(populated)
+    print(f"     Fields: {filled}/{total} populated")
+    if populated:
+        print(f"       Populated: {', '.join(populated)}")
+    if empty:
+        print(f"       Empty:     {', '.join(empty)}")
+
+
+def print_entity_field_coverage(instance: Any, role: str) -> None:
+    """Print field coverage for subject/object entities in an association."""
+    if instance is None:
+        return
+    if isinstance(instance, str):
+        print(f"     {role}: str = {instance!r}")
+        return
+    cls_name = type(instance).__name__
+    fields = instance.model_fields
+    populated = []
+    empty = []
+    for fname in fields:
+        val = getattr(instance, fname, None)
+        if val is not None:
+            populated.append(f"{fname}={getattr(instance, fname)!r}")
+        else:
+            empty.append(fname)
+    total = len(fields)
+    filled = len(populated)
+    print(f"     {role} ({cls_name}): {filled}/{total} fields")
+    if populated:
+        for p in populated:
+            # Truncate long values
+            if len(p) > 100:
+                p = p[:100] + "..."
+            print(f"       + {p}")
+    if empty:
+        print(f"       - empty: {', '.join(empty)}")
 
 
 # ---------------------------------------------------------------------------
@@ -799,6 +1012,14 @@ def print_report() -> None:
             for line in err_lines[1:4]:
                 print(f"             {line}")
 
+        # Print field coverage for created associations
+        if r and r.get("instance"):
+            inst = r["instance"]
+            print_entity_field_coverage(getattr(inst, "subject", None),
+                                        "subject")
+            print_entity_field_coverage(getattr(inst, "object", None),
+                                        "object")
+
     print("\n" + "=" * 90)
     print("SUMMARY")
     print("=" * 90)
@@ -810,7 +1031,7 @@ def print_report() -> None:
     print(f"  Total:        {len(ALL_ASSOCIATIONS)}")
 
     print("\n" + "=" * 90)
-    print("KEY AMBIGUITIES")
+    print("KEY AMBIGUITIES AND FIELD MAPPING NOTES")
     print("=" * 90)
     ambiguities = [
         ("PURL-to-CURIE conversion",
@@ -818,9 +1039,12 @@ def print_report() -> None:
          "CellType.ontology_purl validates CL:[0-9]{7} - must convert"),
         ("Gene typed as str in Associations",
          "CellTypeExpressesGene.object is Optional[str] (gene symbol), "
-         "not Optional[Gene]"),
+         "not Optional[Gene]. Gene entity class exists but is not used "
+         "in associations"),
         ("Species format",
-         "Data has 'Homo sapiens' but schema expects CURIEs like NCBITaxon:9606"),
+         "Data has 'Homo sapiens' but schema expects CURIEs like "
+         "NCBITaxon:9606 for Species entity. CellSet.species and "
+         "CellSetDataset.species accept free-text str"),
         ("ccf_located_in vs part_of",
          "Semantic mismatch - HuBMAP uses ccf_located_in but schema "
          "relation is part_of"),
@@ -830,10 +1054,30 @@ def print_report() -> None:
         ("Drug disease ID namespace",
          "Drug diseaseId uses EFO (EFO_0000684) but diseases use MONDO"),
         ("NSForest_markers as string",
-         "Stored as \"['SLC12A7', 'OTOGL']\" - needs ast.literal_eval parsing"),
-        ("Missing Publication fields",
-         "From results: only PMID/PMCID/DOI available. "
-         "Title/year/journal/authors only in tuples section"),
+         "Stored as \"['SLC12A7', 'OTOGL']\" - needs ast.literal_eval "
+         "parsing"),
+        ("Publication fields split across sections",
+         "From results: PMID/PMCID/DOI. From tuples: title, year, "
+         "journal, author_list. Both sections needed for full coverage"),
+        ("Protein data split across sources",
+         "OpenTargets provides uniprot_id; UniProt API provides "
+         "label, function, amino_acids, annotation_score, species, "
+         "gene_name. Both needed for full Protein coverage"),
+        ("Drug fields from OpenTargets",
+         "name, mechanism_of_action, trade_names, synonyms (as "
+         "exact_synonym), approval_status, study (ctIds). "
+         "Drug.disease and Drug.protein_target derived indirectly"),
+        ("CellSet.ontology_purl type",
+         "CellSet.ontology_purl is Optional[CellType], not str. "
+         "Must pass a CellType instance, not a CURIE string"),
+        ("CellSetDataset enrichment from CELLxGENE",
+         "CELLxGENE results provide: dataset_name, cell_count, "
+         "species (Organism), anatomical_structure (Tissue), "
+         "disease_status, cellxgene_collection, and publication link"),
+        ("NCBI Gene data not used in associations",
+         "Gene entity has fields (gene_symbol, label, uniprot_id, "
+         "species, gene_type, refseq_summary, mrna_nm_and_protein_np_"
+         "sequences) but Gene is only used as str in associations"),
     ]
     for i, (title, desc) in enumerate(ambiguities, 1):
         print(f"  {i}. {title}")
@@ -846,10 +1090,12 @@ def main() -> None:
     print(f"Discovered {len(ALL_ASSOCIATIONS)} Association subclasses "
           f"in ckn_schema.pydantic.ckn_schema\n")
 
-    from_hubmap()
-    from_nsforest()
-    from_author_to_cl()
-    from_external_api()
+    data = load_all_data()
+
+    from_hubmap(data)
+    from_nsforest(data)
+    from_author_to_cl(data)
+    from_external_api(data)
 
     # Mark known associations with no data
     for name, reason in NO_DATA.items():
