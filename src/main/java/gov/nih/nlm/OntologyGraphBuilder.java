@@ -106,24 +106,25 @@ public class OntologyGraphBuilder {
      * @param p                   Predicate node to parse
      * @return Label resulting from parsing the node
      */
-    public static String parsePredicate(Map<String, OntologyElementMap> ontologyElementMaps,
+    public static PTuple parsePredicate(Map<String, OntologyElementMap> ontologyElementMaps,
                                         Node p) throws RuntimeException {
+        String term = null;
         String label;
         if (p.isURI()) {
             label = createURI(p.getURI()).getFragment();
             if (label == null) {
-                label = createURI(p.getURI()).getPath();
-                if (label != null) {
-                    label = label.substring(label.lastIndexOf("/") + 1);
-                    if (ontologyElementMaps.get("ro").getTerms().containsKey(label)) {
-                        label = ontologyElementMaps.get("ro").getTerms().get(label).label();
+                String path = createURI(p.getURI()).getPath();
+                if (path != null) {
+                    term = path.substring(path.lastIndexOf("/") + 1);
+                    if (ontologyElementMaps.get("ro").getTerms().containsKey(term)) {
+                        label = ontologyElementMaps.get("ro").getTerms().get(term).label().replace(" ", "-");
                     }
                 }
             }
         } else {
             throw new RuntimeException("Unexpected predicate " + p);
         }
-        return label;
+        return new PTuple(term, label);
     }
 
     /**
@@ -210,7 +211,7 @@ public class OntologyGraphBuilder {
             if (vtuple.isValidVertex) {
 
                 // Parse the predicate
-                String attribute = parsePredicate(ontologyElementMaps, triple.getPredicate());
+                String attribute = parsePredicate(ontologyElementMaps, triple.getPredicate()).label();
 
                 // Parse the object
                 String literal = o.getLiteralValue().toString();
@@ -242,7 +243,8 @@ public class OntologyGraphBuilder {
         System.out.println("Inserting vertices");
         long startTime = System.nanoTime();
         int nVertices = 0;
-        try (BufferedWriter deprecatedTermsWriter = Files.newBufferedWriter(DEPRECATED_TERMS_FILE, StandardCharsets.US_ASCII)) {
+        try (BufferedWriter deprecatedTermsWriter = Files.newBufferedWriter(DEPRECATED_TERMS_FILE,
+                StandardCharsets.US_ASCII)) {
             for (String id : vertexDocuments.keySet()) {
                 ArangoVertexCollection vertexCollection = vertexCollections.get(id);
                 for (String number : vertexDocuments.get(id).keySet()) {
@@ -347,7 +349,7 @@ public class OntologyGraphBuilder {
             if (!objectVTuple.isValidVertex) continue;
 
             // Parse the predicate and collect unique labels
-            String label = parsePredicate(ontologyElementMaps, triple.getPredicate());
+            String label = parsePredicate(ontologyElementMaps, triple.getPredicate()).label();
             edgeLabels.add(label);
 
             // Create an edge collection, if needed
@@ -364,7 +366,7 @@ public class OntologyGraphBuilder {
             }
 
             // Construct the edge, if needed
-            String key = subjectVTuple.number + "-" + objectVTuple.number;
+            String key = subjectVTuple.number + "-" + label + "-" + objectVTuple.number;
             String normalizedSource = normalizeEdgeSource(subjectVTuple.id);
             String normalizedLabel = normalizeEdgeLabel(label);
             if (!edgeKeys.get(idPair).contains(key)) {
@@ -573,6 +575,11 @@ public class OntologyGraphBuilder {
 
     // Define a record describing a vertex
     public record VTuple(String term, String id, String number, boolean isValidVertex) {
+
+    }
+
+    // Define a record describing a predicate
+    public record PTuple(String term, String label) {
 
     }
 }
