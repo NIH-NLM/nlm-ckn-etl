@@ -35,7 +35,6 @@ import json
 import os
 import subprocess
 from datetime import datetime, timezone
-from pathlib import Path
 
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import create_markdown_artifact
@@ -43,15 +42,64 @@ from prefect.artifacts import create_markdown_artifact
 from _common import (
     REPO_ROOT,
     S3_BUCKET,
-    build_python_docker_image,
+    _run_python_script,
     clean_empty_external_files,
     sync_external_from_s3,
     sync_external_to_s3,
     validate_external_files,
-    _run_python_container,
 )
 
 # ── Tasks ──────────────────────────────────────────────────────────────────
+
+
+@task(name="retry-failed-cache-entries", log_prints=True)
+def retry_failed_cache_entries() -> None:
+    """Remove empty ``{}`` entries from every JSON cache file in data/external/.
+
+    ``ExternalApiResultsFetcher.py`` records a failed API call as an empty
+    dict ``{}`` so the fetch loop skips it on the next run.  This task strips
+    those entries *before* the fetcher runs, causing them to be retried while
+    leaving all successfully-fetched data intact.
+
+    Use this as the middle ground between no flags (resume, skip failures) and
+    ``--force`` (wipe everything and start fresh).
+
+    The special ``"gene_entrez_ids"`` bookkeeping key inside ``gene.json`` is
+    preserved so the batch-checkpoint logic continues to work correctly.
+    """
+    logger = get_run_logger()
+    external_dir = REPO_ROOT / "data" / "external"
+    if not external_dir.is_dir():
+        logger.info("data/external/ does not exist — nothing to clean")
+        return
+
+    total_removed = 0
+    for json_file in sorted(external_dir.glob("*.json")):
+        try:
+            data = json.loads(json_file.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning(f"Skipping {json_file.name}: {exc}")
+            continue
+
+        if not isinstance(data, dict):
+            continue
+
+        # Identify empty entries, preserving bookkeeping keys (e.g. "gene_entrez_ids")
+        empty_keys = [
+            k for k, v in data.items()
+            if isinstance(v, dict) and not v and not k.endswith("_ids")
+        ]
+        if not empty_keys:
+            logger.info(f"{json_file.name}: no empty entries")
+            continue
+
+        for k in empty_keys:
+            del data[k]
+        json_file.write_text(json.dumps(data, indent=4))
+        logger.info(f"{json_file.name}: removed {len(empty_keys)} empty entr{'y' if len(empty_keys) == 1 else 'ies'}")
+        total_removed += len(empty_keys)
+
+    logger.info(f"Total empty entries removed: {total_removed}")
 
 
 @task(name="fetch-external-api-results", log_prints=True)
@@ -59,21 +107,33 @@ def fetch_external_api_results(
     arango_db_password: str = "",
     ncbi_email: str = "",
     ncbi_api_key: str = "",
+    force: bool = False,
 ) -> None:
-    """Run ``ExternalApiResultsFetcher.py`` inside the nlm-ckn-etl-python image.
+    """Run ``ExternalApiResultsFetcher.py`` using the host Python interpreter.
 
-    ArangoDB is not required for the fetch — ``arangodb_id`` is always
-    ``None`` here, so no ``--network container:…`` flag is added.  The
-    ``ARANGO_DB_PASSWORD`` env var is injected but ignored by the fetcher.
+    ArangoDB is not required for the fetch; ``ARANGO_DB_PASSWORD`` is
+    forwarded for forward-compatibility but is ignored by the script.
+    NCBI credentials are passed as environment variables.
+
+    Parameters
+    ----------
+    force:
+        Pass ``--force-all`` to ``ExternalApiResultsFetcher.py``, bypassing
+        all on-disk caches and re-fetching everything from scratch.  Use this
+        for scheduled runs so stale or empty cache entries don't persist.
     """
     logger = get_run_logger()
+    if force:
+        logger.info("Force mode: ignoring on-disk cache, re-fetching all sources")
     logger.info("Fetching external API results (ExternalApiResultsFetcher)")
-    _run_python_container(
+    _run_python_script(
         "ExternalApiResultsFetcher.py",
-        arangodb_id=None,  # fetcher never needs a local ArangoDB container
         arango_db_password=arango_db_password,
-        ncbi_email=ncbi_email,
-        ncbi_api_key=ncbi_api_key,
+        extra_env={
+            "NCBI_EMAIL": ncbi_email,
+            "NCBI_API_KEY": ncbi_api_key,
+        },
+        extra_args=["--force-all"] if force else None,
     )
     logger.info("External API results fetched")
 
@@ -158,6 +218,8 @@ def record_fetch_artifact() -> None:
 def nlm_ckn_fetch(
     ncbi_email: str = "",
     ncbi_api_key: str = "",
+    force: bool = False,
+    retry_empty: bool = False,
 ) -> None:
     """NLM-CKN external API fetch flow.
 
@@ -175,12 +237,30 @@ def nlm_ckn_fetch(
     ncbi_api_key:
         NCBI E-Utilities API key.  Falls back to the ``NCBI_API_KEY``
         environment variable.
+    force:
+        Re-fetch all data sources from scratch, ignoring any on-disk cache.
+        Defaults to ``False`` (resume-friendly for development).  Scheduled
+        runs should set this to ``True`` so stale or empty cache entries from
+        previous runs are not carried forward.
+    retry_empty:
+        Strip empty ``{}`` cache entries before fetching, so previously-failed
+        API calls are retried while all successfully-fetched data is kept.
+        Ignored when ``force=True`` (force already discards everything).
     """
     logger = get_run_logger()
 
     # Resolve credentials: explicit parameters take priority, then env vars
     ncbi_email = ncbi_email or os.getenv("NCBI_EMAIL", "")
     ncbi_api_key = ncbi_api_key or os.getenv("NCBI_API_KEY", "")
+
+    missing = [name for name, val in [("NCBI_EMAIL", ncbi_email), ("NCBI_API_KEY", ncbi_api_key)] if not val]
+    if missing:
+        raise RuntimeError(
+            f"Required NCBI credential(s) not set: {', '.join(missing)}.\n"
+            "Provide them via --ncbi-email / --ncbi-api-key flags, or set the "
+            "NCBI_EMAIL / NCBI_API_KEY environment variables."
+        )
+
     # ArangoDB password is not used by the fetcher but is forwarded to the
     # container env for forward-compatibility; ignore if unset.
     arango_db_password = os.getenv("ARANGO_DB_PASSWORD", "")
@@ -190,13 +270,15 @@ def nlm_ckn_fetch(
     else:
         logger.info("Local mode: S3_BUCKET not set, writing to data/external/ only")
 
-    build_python_docker_image()
     sync_external_from_s3()        # restore cache (no-op if no S3)
     clean_empty_external_files()
+    if retry_empty and not force:
+        retry_failed_cache_entries()
     fetch_external_api_results(
         arango_db_password=arango_db_password,
         ncbi_email=ncbi_email,
         ncbi_api_key=ncbi_api_key,
+        force=force,
     )
     validate_external_files()
     record_fetch_artifact()
@@ -221,12 +303,33 @@ if __name__ == "__main__":
         default=os.getenv("NCBI_API_KEY", ""),
         help="NCBI E-Utilities API key (default: $NCBI_API_KEY)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "Re-fetch all data sources from scratch, ignoring any on-disk cache. "
+            "Recommended for scheduled / production runs. "
+            "Without this flag the fetcher resumes from cached data (useful during development)."
+        ),
+    )
+    parser.add_argument(
+        "--retry-empty",
+        action="store_true",
+        help=(
+            "Retry only previously-failed API calls (those stored as empty {} in the cache) "
+            "while keeping all successfully-fetched data. "
+            "Useful during development to recover from transient errors without a full re-fetch. "
+            "Ignored when --force is also set."
+        ),
+    )
     args = parser.parse_args()
 
-if args.ncbi_email is not None and args.ncbi_api_key is not None:
+if args.ncbi_email and args.ncbi_api_key:
     nlm_ckn_fetch(
         ncbi_email=args.ncbi_email,
         ncbi_api_key=args.ncbi_api_key,
+        force=args.force,
+        retry_empty=args.retry_empty,
     )
 else:
-    parser.error("Both NCBI email and API key are required. Use --ncbi-email and --ncbi-api-key to provide them.")
+    parser.error("Both NCBI email and API key are required. Use --ncbi-email and --ncbi-api-key, or set NCBI_EMAIL and NCBI_API_KEY environment variables.")

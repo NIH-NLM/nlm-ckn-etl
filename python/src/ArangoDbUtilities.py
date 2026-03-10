@@ -216,7 +216,7 @@ def create_analyzers(database_name):
     """
     db = create_or_get_database(database_name)
     db.create_analyzer(
-        name=f"n-gram",
+        name="n-gram",
         analyzer_type="ngram",
         properties={
             "min": 3,
@@ -229,7 +229,7 @@ def create_analyzers(database_name):
         features=["frequency", "position", "norm"],
     )
     db.create_analyzer(
-        name=f"text_en_no_stem",
+        name="text_en_no_stem",
         analyzer_type="text",
         properties={
             "locale": "en",

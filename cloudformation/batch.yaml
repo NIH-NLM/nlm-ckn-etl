@@ -1,0 +1,584 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  NLM-CKN ETL — AWS Batch on EC2 with EFS-backed ArangoDB.
+
+  A single EC2 instance runs both the ETL pipeline (our Docker image, as a
+  Batch job) and ArangoDB (as a Docker container started at instance boot by
+  the EC2 launch template).  MinvCpus=0 scales the compute environment to zero
+  between runs; the EFS volume retains ArangoDB data across instance lifetimes.
+
+  Architecture
+  ------------
+  - EFS FileSystem (DeletionPolicy=Retain) replaces the EBS data volume from
+    the old arangodb.yaml.  Data survives instance replacement.
+  - The EC2 launch template mounts EFS at /mnt/arangodb-data and starts the
+    ArangoDB Docker container on the host before any Batch job is dispatched.
+  - The Batch job container uses Docker bridge networking.  172.17.0.1 is the
+    standard Docker bridge gateway (= the EC2 host), so the container reaches
+    ArangoDB at 172.17.0.1:ARANGO_DB_PORT.  pipeline.py treats any non-localhost
+    host as "remote ArangoDB mode" and skips container lifecycle management.
+  - ARANGO_DB_PASSWORD is injected into the job container from SSM Parameter
+    Store via the Batch/ECS secrets mechanism — it is never stored in the job
+    definition or CloudFormation outputs.
+
+  Prerequisites
+  -------------
+  1. Deploy ecr.yaml and push the nlm-ckn-etl image to ECR
+     (done automatically by .github/workflows/build-image.yml on push to main).
+  2. Create an SSM SecureString parameter for the ArangoDB root password
+     (minimum 16 characters) at the path given by ArangoDbPasswordSsmPath:
+
+       aws ssm put-parameter \
+         --name /nlm-ckn-etl/arangodb-password \
+         --value '<password>' \
+         --type SecureString
+
+  3. Deploy this stack.
+  4. Submit a job via the AWS Batch console or the SubmitJobCommand output.
+
+# ── Parameters ──────────────────────────────────────────────────────────────
+Parameters:
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for the Batch compute environment and EFS mount target.
+
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: >
+      Subnet for the Batch EC2 instance and EFS mount target.  Use a private
+      subnet with a NAT gateway (for outbound internet to S3, ECR, NCBI, etc.)
+      or a public subnet with auto-assign public IP enabled.
+
+  ArangoDbPasswordSsmPath:
+    Type: String
+    Default: /nlm-ckn-etl/arangodb-password
+    Description: >
+      SSM Parameter Store path (SecureString) holding the ArangoDB root
+      password.  Create this parameter before deploying the stack (see the
+      template Description for the CLI command).
+
+  ArangoDbPort:
+    Type: Number
+    Default: 8529
+    Description: Port ArangoDB listens on (exposed on the host; reached by the job at 172.17.0.1:PORT).
+
+  EcrImageUri:
+    Type: String
+    Description: >
+      Full ECR URI for the nlm-ckn-etl image, e.g.:
+        123456789012.dkr.ecr.us-east-1.amazonaws.com/nlm-ckn-etl:latest
+      Get this from the ecr.yaml stack Outputs or the build-image.yml workflow log.
+
+  S3Bucket:
+    Type: String
+    Default: "cell-kn-arangodb-data-952291113202"
+    Description: >
+      S3 bucket for all pipeline I/O: external API cache and JAR (inputs from
+      fetcher/CI), NSForest CSVs (inputs from researchers), tuple files and
+      versioned archives (outputs).  Leave empty for local-only mode (no S3 sync).
+
+  InstanceType:
+    Type: String
+    Default: m6i.xlarge
+    AllowedValues:
+      - m6i.large
+      - m6i.xlarge
+      - m6i.2xlarge
+      - r6i.xlarge
+      - r6i.2xlarge
+    Description: >
+      EC2 instance type.  The ETL runs a Java heap (JavaOpts) plus the Python
+      science stack; 16 GiB is the recommended minimum.
+      m6i.xlarge = 4 vCPU / 16 GiB.  r6i.xlarge = 4 vCPU / 32 GiB.
+
+  MaxvCpus:
+    Type: Number
+    Default: 4
+    Description: >
+      Maximum vCPUs for the Batch compute environment.  Set equal to the
+      instance vCPU count (4 for xlarge) so at most one job runs at a time.
+
+  JobVcpus:
+    Type: Number
+    Default: 4
+    Description: vCPUs allocated to each ETL job.  Must be ≤ MaxvCpus.
+
+  JobMemoryMiB:
+    Type: Number
+    Default: 14336
+    Description: >
+      Memory (MiB) for the ETL job container.  Default 14336 (14 GiB) leaves
+      headroom on m6i.xlarge (16 GiB) for the OS and ArangoDB on the same host.
+      Raise to 28672 when using r6i.xlarge.
+
+  JavaOpts:
+    Type: String
+    Default: "-Xmx4g"
+    Description: JVM heap flags for Java graph builders (e.g. -Xmx4g, -Xmx8g).
+
+  ExistingEfsId:
+    Type: String
+    Default: ""
+    Description: >
+      (Optional) ID of an existing EFS FileSystem to reuse for ArangoDB data.
+      Leave empty to create a new FileSystem (retained on stack deletion).
+
+# ── Conditions ──────────────────────────────────────────────────────────────
+Conditions:
+  CreateEfs: !Equals [!Ref ExistingEfsId, ""]
+  HasS3Bucket: !Not [!Equals [!Ref S3Bucket, ""]]
+
+# ── Resources ───────────────────────────────────────────────────────────────
+Resources:
+
+  # ── Security Groups ────────────────────────────────────────────────────────
+
+  # Attached to every Batch EC2 instance.  Outbound-only: needs to reach S3,
+  # ECR, EFS, SSM, and the external APIs called by the pipeline.
+  BatchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: NLM-CKN Batch instances — outbound only
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+          Description: All outbound (S3, ECR, EFS, SSM, external APIs)
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-batch-sg"
+        - Key: Project
+          Value: nlm-ckn-etl
+
+  # Attached to EFS mount targets.  Allows NFS (port 2049) from Batch instances.
+  EfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: NLM-CKN EFS — NFS from Batch instances
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref BatchSecurityGroup
+          Description: NFS from Batch instances
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+          Description: All outbound
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-efs-sg"
+        - Key: Project
+          Value: nlm-ckn-etl
+
+  # ── EFS FileSystem (ArangoDB data, persists across instance replacements) ──
+
+  ArangoDbFileSystem:
+    Type: AWS::EFS::FileSystem
+    Condition: CreateEfs
+    DeletionPolicy: Retain    # keep graph data on stack deletion
+    UpdateReplacePolicy: Retain
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+      ThroughputMode: elastic
+      BackupPolicy:
+        Status: ENABLED
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-arangodb-data"
+        - Key: Project
+          Value: nlm-ckn-etl
+
+  ArangoDbMountTarget:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !If [CreateEfs, !Ref ArangoDbFileSystem, !Ref ExistingEfsId]
+      SubnetId: !Ref SubnetId
+      SecurityGroups:
+        - !Ref EfsSecurityGroup
+
+  # ── IAM: Batch Service Role ────────────────────────────────────────────────
+
+  BatchServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: batch.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
+      Tags:
+        - Key: Project
+          Value: nlm-ckn-etl
+
+  # ── IAM: ECS Instance Role (for the Batch EC2 host) ───────────────────────
+  # Used by the ECS agent on the host, not by the job container.
+  # Needs:
+  #   AmazonEC2ContainerServiceforEC2Role — ECS registration, ECR image pull
+  #   AmazonSSMManagedInstanceCore        — SSM Session Manager (SSH-less access)
+  #   SsmArangoPasswordRead               — fetch DB password for launch template
+
+  EcsInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: SsmArangoPasswordRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ArangoDbPasswordSsmPath}"
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ssm"
+      Tags:
+        - Key: Project
+          Value: nlm-ckn-etl
+
+  EcsInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EcsInstanceRole
+
+  # ── IAM: Batch Execution Role (ECS secrets injection for the job container) ─
+  # The ECS agent uses this role to pull the ArangoDB password from SSM and
+  # inject it as ARANGO_DB_PASSWORD into the job container.
+
+  BatchExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SsmArangoSecretRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ArangoDbPasswordSsmPath}"
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ssm"
+      Tags:
+        - Key: Project
+          Value: nlm-ckn-etl
+
+  # ── IAM: Batch Job Role (S3 access for the pipeline) ─────────────────────
+  # Assumed by the job container itself (not the host ECS agent).
+
+  BatchJobRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: EtlS3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - !If
+                - HasS3Bucket
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:PutObject
+                    - s3:DeleteObject
+                    - s3:ListBucket
+                  Resource:
+                    - !Sub "arn:aws:s3:::${S3Bucket}"
+                    - !Sub "arn:aws:s3:::${S3Bucket}/*"
+                - !Ref AWS::NoValue
+      Tags:
+        - Key: Project
+          Value: nlm-ckn-etl
+
+  # ── CloudWatch Log Group ───────────────────────────────────────────────────
+
+  EtlLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/batch/${AWS::StackName}-etl"
+      RetentionInDays: 30
+
+  # ── EC2 Launch Template ────────────────────────────────────────────────────
+  # Runs at instance boot, before any Batch job is dispatched.
+  # 1. Installs amazon-efs-utils (already present on ECS-optimized AMI).
+  # 2. Mounts EFS at /mnt/arangodb-data (persisted via /etc/fstab).
+  # 3. Fetches the ArangoDB password from SSM.
+  # 4. Starts ArangoDB as a Docker container on the host.
+  # 5. Waits up to 150 seconds for ArangoDB to accept HTTP requests.
+  #
+  # The Batch job container uses bridge networking.  172.17.0.1 is the
+  # standard Docker bridge gateway on Linux (= the EC2 host), so the container
+  # connects to ArangoDB at 172.17.0.1:ArangoDbPort.
+
+  EtlLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${AWS::StackName}-etl-lt"
+      LaunchTemplateData:
+        # 60 GiB root volume — Docker image cache + working data
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 60
+              VolumeType: gp3
+              DeleteOnTermination: true
+        # MIME multipart: Batch appends its own bootstrap part automatically.
+        UserData:
+          Fn::Base64: !Sub
+            - |
+              MIME-Version: 1.0
+              Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+
+              --==BOUNDARY==
+              Content-Type: text/x-shellscript; charset="us-ascii"
+
+              #!/bin/bash
+              set -euxo pipefail
+              exec > >(tee /var/log/user-data.log | logger -t user-data) 2>&1
+
+              # ── Install EFS utils (already present on ECS-optimized AMI) ───
+              yum install -y amazon-efs-utils 2>/dev/null || \
+                apt-get install -y amazon-efs-utils 2>/dev/null || true
+
+              # ── Mount EFS at /mnt/arangodb-data ────────────────────────────
+              mkdir -p /mnt/arangodb-data
+              mount -t efs -o tls ${EfsId}:/ /mnt/arangodb-data
+              echo "${EfsId}:/ /mnt/arangodb-data efs defaults,_netdev,tls 0 0" >> /etc/fstab
+
+              # ── Fetch ArangoDB password from SSM ────────────────────────────
+              REGION=$(curl -sf \
+                http://169.254.169.254/latest/meta-data/placement/region)
+              ARANGO_PASSWORD=$(aws ssm get-parameter \
+                --name "${ArangoDbPasswordSsmPath}" \
+                --with-decryption \
+                --query Parameter.Value \
+                --output text \
+                --region "$REGION")
+
+              # ── Ensure Docker is running ────────────────────────────────────
+              until systemctl is-active --quiet docker; do sleep 2; done
+
+              # ── Start ArangoDB on the host ──────────────────────────────────
+              # Remove any stale container from a previous (unlikely) boot.
+              docker rm -f arangodb 2>/dev/null || true
+              docker pull arangodb:latest
+              docker run -d \
+                --name arangodb \
+                --restart unless-stopped \
+                -e ARANGO_ROOT_PASSWORD="$ARANGO_PASSWORD" \
+                -p ${ArangoDbPort}:8529 \
+                -v /mnt/arangodb-data:/var/lib/arangodb3 \
+                arangodb:latest
+
+              # ── Wait for ArangoDB to accept HTTP requests (up to 150 s) ────
+              # Batch jobs are dispatched only after this script finishes, so
+              # pipeline.py is guaranteed to find ArangoDB ready.
+              echo "Waiting for ArangoDB to become ready..."
+              for i in $(seq 1 30); do
+                if curl -sf "http://localhost:${ArangoDbPort}/_api/version" \
+                    >/dev/null 2>&1; then
+                  echo "ArangoDB ready after ~$((i * 5)) seconds"
+                  break
+                fi
+                sleep 5
+              done
+
+              --==BOUNDARY==--
+            - EfsId: !If [CreateEfs, !Ref ArangoDbFileSystem, !Ref ExistingEfsId]
+
+  # ── Batch Compute Environment ──────────────────────────────────────────────
+  # MinvCpus=0: the instance terminates after all jobs finish and no new jobs
+  # arrive within the scale-in delay (~5 minutes).  A fresh instance (with a
+  # new EFS mount and a new ArangoDB container) starts for the next job.
+  #
+  # DependsOn ArangoDbMountTarget ensures the EFS mount target is accessible
+  # before any instance (and therefore EFS mount attempt) is launched.
+
+  EtlComputeEnvironment:
+    Type: AWS::Batch::ComputeEnvironment
+    DependsOn: ArangoDbMountTarget
+    Properties:
+      ComputeEnvironmentName: !Sub "${AWS::StackName}-etl"
+      Type: MANAGED
+      State: ENABLED
+      ServiceRole: !GetAtt BatchServiceRole.Arn
+      ComputeResources:
+        Type: EC2
+        AllocationStrategy: BEST_FIT_PROGRESSIVE
+        MinvCpus: 0
+        MaxvCpus: !Ref MaxvCpus
+        DesiredvCpus: 0
+        InstanceTypes:
+          - !Ref InstanceType
+        Subnets:
+          - !Ref SubnetId
+        SecurityGroupIds:
+          - !Ref BatchSecurityGroup
+        InstanceRole: !GetAtt EcsInstanceProfile.Arn
+        LaunchTemplate:
+          LaunchTemplateId: !Ref EtlLaunchTemplate
+          Version: "$Latest"
+        Tags:
+          Project: nlm-ckn-etl
+          Name: !Sub "${AWS::StackName}-etl-instance"
+
+  # ── Batch Job Queue ────────────────────────────────────────────────────────
+
+  EtlJobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      JobQueueName: !Sub "${AWS::StackName}-etl"
+      State: ENABLED
+      Priority: 1
+      ComputeEnvironmentOrder:
+        - Order: 1
+          ComputeEnvironment: !Ref EtlComputeEnvironment
+
+  # ── Batch Job Definition ───────────────────────────────────────────────────
+  # Runs the nlm-ckn-etl Docker image.  ArangoDB is accessed at
+  # 172.17.0.1:ArangoDbPort (the Docker bridge gateway = EC2 host).
+  # Because ARANGO_DB_HOST != "localhost", pipeline.py enters "remote ArangoDB
+  # mode": it connects to the database over the network without managing any
+  # local Docker container lifecycle.
+  #
+  # ARANGO_DB_PASSWORD is fetched from SSM by the ECS agent (BatchExecutionRole)
+  # and injected as an environment variable; it never appears in plaintext in
+  # the job definition or CloudFormation outputs.
+  #
+  # Default command: --run-results.  Override at submission time with
+  # --container-overrides (see SubmitJobCommand output).
+
+  EtlJobDefinition:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      JobDefinitionName: !Sub "${AWS::StackName}-etl"
+      Type: container
+      ContainerProperties:
+        Image: !Ref EcrImageUri
+        Vcpus: !Ref JobVcpus
+        Memory: !Ref JobMemoryMiB
+        JobRoleArn: !GetAtt BatchJobRole.Arn
+        ExecutionRoleArn: !GetAtt BatchExecutionRole.Arn
+        Command:
+          - python
+          - pipeline.py
+          - --run-results
+          - --java-opts
+          - !Ref JavaOpts
+        Environment:
+          # 172.17.0.1 = Docker bridge gateway = the EC2 host.
+          # This is the standard value on Linux Docker and is reliable on the
+          # ECS-optimized AMI.  pipeline.py treats any non-localhost host as
+          # remote ArangoDB (no container lifecycle management).
+          - Name: ARANGO_DB_HOST
+            Value: "172.17.0.1"
+          - Name: ARANGO_DB_PORT
+            Value: !Sub "${ArangoDbPort}"
+          - Name: S3_BUCKET
+            Value: !Ref S3Bucket
+          - Name: PYTHONPATH
+            Value: /app/python/src
+        Secrets:
+          - Name: ARANGO_DB_PASSWORD
+            ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ArangoDbPasswordSsmPath}"
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group: !Ref EtlLogGroup
+            awslogs-region: !Ref AWS::Region
+            awslogs-stream-prefix: etl
+      RetryStrategy:
+        Attempts: 1
+      Timeout:
+        AttemptDurationSeconds: 86400    # 24-hour hard limit per attempt
+
+# ── Outputs ─────────────────────────────────────────────────────────────────
+Outputs:
+
+  EfsFileSystemId:
+    Description: >
+      EFS FileSystem ID holding ArangoDB data (DeletionPolicy=Retain).
+      Pass this as ExistingEfsId if you recreate the stack without losing data.
+    Value: !If [CreateEfs, !Ref ArangoDbFileSystem, !Ref ExistingEfsId]
+
+  ComputeEnvironmentArn:
+    Description: ARN of the Batch compute environment.
+    Value: !Ref EtlComputeEnvironment
+
+  JobQueueName:
+    Description: Name of the Batch job queue to submit ETL jobs to.
+    Value: !Ref EtlJobQueue
+
+  JobDefinitionArn:
+    Description: ARN of the Batch job definition.
+    Value: !Ref EtlJobDefinition
+
+  LogGroupName:
+    Description: CloudWatch log group for ETL job output.
+    Value: !Ref EtlLogGroup
+
+  SubmitJobCommand:
+    Description: >
+      Example CLI commands to submit a one-off ETL job.
+      Override --container-overrides to run different pipeline stages.
+    Value: !Sub
+      - |
+        # Default: run the results stage
+        aws batch submit-job \
+          --job-name nlm-ckn-etl-$(date +%Y%m%d-%H%M%S) \
+          --job-queue ${Queue} \
+          --job-definition ${JobDef} \
+          --region ${AWS::Region}
+
+        # Full build (ontology + results + archive):
+        aws batch submit-job \
+          --job-name nlm-ckn-etl-$(date +%Y%m%d-%H%M%S) \
+          --job-queue ${Queue} \
+          --job-definition ${JobDef} \
+          --container-overrides '{"command":["python","pipeline.py","--run-ontology","--run-results","--run-archive","--java-opts","-Xmx4g"]}' \
+          --region ${AWS::Region}
+      - Queue: !Ref EtlJobQueue
+        JobDef: !Ref EtlJobDefinition
+
+  DeploymentOrder:
+    Description: >
+      Stack deployment order for the full NLM-CKN infrastructure.
+    Value: "1. ecr.yaml  →  2. batch.yaml  →  3. fetch.yaml (optional scheduled fetcher)"

@@ -28,6 +28,16 @@ Set ``S3_BUCKET`` to pull inputs from S3 before processing and push outputs
 
     S3_BUCKET=cell-kn-arangodb-data-952291113202 python src/pipeline.py --run-results
 
+JAR
+---
+The Java programs (OntologyDownloader, OntologyGraphBuilder, etc.) require a
+pre-built JAR at ``target/nlm-ckn-etl-1.0.jar``.  The JAR is produced once by
+CI/CD (see ``.github/workflows/build-jar.yml``) and stored in S3.  The
+``ensure_jar`` task downloads it automatically when ``S3_BUCKET`` is set, or
+you can build it locally with::
+
+    mvn clean package -DskipTests
+
 See the README for full instructions.
 """
 
@@ -40,23 +50,25 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+import docker as docker_sdk
 from prefect import flow, get_run_logger, task
 
 from _common import (
     ARANGO_DB_HOME,
     ARANGO_DB_HOST,
+    ARANGO_DB_HOST_HOME,
     ARANGO_DB_PORT,
+    ARANGO_DB_VOLUME_NAME,
     CLASSPATH,
     DEFAULT_JAVA_OPTS,
     REPO_ROOT,
     S3_BUCKET,
-    _arango_net_args,
+    _arango_env,
     _get_arangodb_id,
     _get_or_create_arango_password,
-    _run_python_container,
+    _run_python_script,
     _s3_cp,
     _s3_sync,
-    build_python_docker_image,
     sync_external_from_s3,
     validate_external_files,
 )
@@ -68,60 +80,100 @@ from _common import (
 def stop_arangodb() -> None:
     """Stop and remove the running ArangoDB container, if any."""
     logger = get_run_logger()
-    cid = _get_arangodb_id()
-    if cid:
-        logger.info(f"Stopping ArangoDB container {cid}")
-        subprocess.run(
-            ["docker", "container", "stop", cid], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["docker", "container", "rm", cid], check=True, capture_output=True
-        )
-    else:
+    client = docker_sdk.from_env()
+    containers = client.containers.list(filters={"name": "arangodb"})
+    if not containers:
         logger.info("No running ArangoDB container found")
+        return
+    for container in containers:
+        logger.info(f"Stopping ArangoDB container {container.short_id}")
+        container.stop()
+        container.remove()
+
+
+def _arangodb_volume_source(arango_db_home: str) -> tuple[str, bool]:
+    """Return the Docker volume source for ArangoDB data and whether it is a named volume.
+
+    When the pipeline runs inside a Docker container (detected by
+    ``/.dockerenv``) and ``ARANGO_DB_HOST_HOME`` is not set, the Docker SDK
+    sends volume mounts to the *host* daemon.  Container-internal paths like
+    ``/app/data/arangodb`` are unknown to the host, causing a
+    "path not shared from host" error.  In that case a named Docker volume is
+    used instead — the host daemon manages it without needing a host path.
+
+    Priority order:
+    1. ``ARANGO_DB_HOST_HOME`` env var — explicit host-side bind-mount path.
+    2. Running inside a container (``/.dockerenv`` present) → named volume.
+    3. Otherwise → ``arango_db_home`` directly (direct host execution).
+
+    Returns a ``(source, is_named_volume)`` tuple.
+    """
+    if ARANGO_DB_HOST_HOME:
+        return ARANGO_DB_HOST_HOME, False
+    if Path("/.dockerenv").exists():
+        return ARANGO_DB_VOLUME_NAME, True
+    return arango_db_home, False
 
 
 @task(name="start-arangodb", log_prints=True)
 def start_arangodb(
     arango_db_home: str, arango_db_port: int, arango_db_password: str
 ) -> None:
-    """Start the ArangoDB container with the data directory mounted."""
+    """Start the ArangoDB container with the data directory mounted.
+
+    Uses the Docker SDK (no ``docker`` CLI binary required).  The container
+    runs detached; the caller is responsible for waiting until ArangoDB
+    accepts connections before using it.
+
+    Volume source selection (see ``_arangodb_volume_source``):
+    - ``ARANGO_DB_HOST_HOME`` set → bind-mount that host path.
+    - Running inside a container → named volume ``nlm-ckn-arangodb-data``.
+    - Direct host execution → bind-mount ``arango_db_home``.
+    """
     logger = get_run_logger()
     if _get_arangodb_id():
         logger.info("ArangoDB container already running")
         return
-    Path(arango_db_home).mkdir(parents=True, exist_ok=True)
-    logger.info(f"Starting ArangoDB (home={arango_db_home}, port={arango_db_port})")
-    subprocess.run(
-        [
-            "docker", "run",
-            "-e", f"ARANGO_ROOT_PASSWORD={arango_db_password}",
-            "-p", f"{arango_db_port}:{arango_db_port}",
-            "-d",
-            "-v", f"{arango_db_home}:/var/lib/arangodb3",
-            "arangodb",
-        ],
-        check=True,
-        capture_output=True,
+
+    volume_source, is_named_volume = _arangodb_volume_source(arango_db_home)
+    if is_named_volume:
+        logger.info(
+            f"Starting ArangoDB (named volume={volume_source}, port={arango_db_port})"
+        )
+        volumes = {volume_source: {"bind": "/var/lib/arangodb3", "mode": "rw"}}
+    else:
+        Path(volume_source).mkdir(parents=True, exist_ok=True)
+        logger.info(
+            f"Starting ArangoDB (home={volume_source}, port={arango_db_port})"
+        )
+        volumes = {volume_source: {"bind": "/var/lib/arangodb3", "mode": "rw"}}
+
+    client = docker_sdk.from_env()
+    client.containers.run(
+        "arangodb",
+        name="arangodb",
+        detach=True,
+        environment={"ARANGO_ROOT_PASSWORD": arango_db_password},
+        ports={"8529/tcp": arango_db_port},
+        volumes=volumes,
     )
     logger.info("ArangoDB container started")
 
 
 @task(name="require-arangodb", log_prints=True)
-def require_arangodb() -> str | None:
-    """Return the ArangoDB container ID, or ``None`` for a remote instance.
+def require_arangodb() -> None:
+    """Verify ArangoDB is reachable before starting expensive tasks.
 
     Remote mode (``ARANGO_DB_HOST`` != ``"localhost"``): ArangoDB is
-    managed externally (e.g. a dedicated EC2 instance).  ``None`` is returned
-    and callers skip the ``--network container:…`` Docker flag, relying on the
-    injected ``ARANGO_DB_HOST`` env var instead.
+    managed externally (e.g. a dedicated EC2 instance).  Logs the endpoint
+    and returns.
 
     Local mode: raises ``RuntimeError`` if no ArangoDB container is running.
     """
     logger = get_run_logger()
     if ARANGO_DB_HOST != "localhost":
         logger.info(f"Remote ArangoDB mode: host={ARANGO_DB_HOST}, port={ARANGO_DB_PORT}")
-        return None
+        return
     cid = _get_arangodb_id()
     if not cid:
         raise RuntimeError(
@@ -129,47 +181,75 @@ def require_arangodb() -> str | None:
             "Start it first or run the ontology stage."
         )
     logger.info(f"Local ArangoDB container: {cid}")
-    return cid
 
 
-@task(name="maven-build", log_prints=True)
-def maven_build() -> None:
-    """Run ``mvn clean package -DskipTests`` inside a Maven Docker container."""
+@task(name="ensure-jar", log_prints=True)
+def ensure_jar() -> None:
+    """Ensure the compiled JAR is present, downloading from S3 if necessary.
+
+    The JAR is built once by CI/CD (``mvn clean package -DskipTests``) and
+    stored at ``s3://${S3_BUCKET}/artifacts/nlm-ckn-etl-1.0.jar``.  This
+    task downloads it on first run and reuses it on subsequent runs.
+
+    When ``S3_BUCKET`` is unset (local-only mode), the JAR must already exist
+    at ``target/nlm-ckn-etl-1.0.jar`` — build it with::
+
+        mvn clean package -DskipTests
+    """
     logger = get_run_logger()
-    logger.info("Building Maven package (maven:3-eclipse-temurin-21)")
-    subprocess.run(
-        [
-            "docker", "run", "--rm",
-            "-v", f"{REPO_ROOT}:/app",
-            "-v", f"{Path.home() / '.m2'}:/root/.m2",
-            "-w", "/app",
-            "maven:3-eclipse-temurin-21",
-            "mvn", "clean", "package", "-DskipTests",
-        ],
-        check=True,
-        cwd=REPO_ROOT,
-    )
     jar = REPO_ROOT / CLASSPATH
+    if jar.exists():
+        logger.info(f"JAR already present: {jar.relative_to(REPO_ROOT)} ({jar.stat().st_size:,} bytes)")
+        return
+
+    if not S3_BUCKET:
+        raise FileNotFoundError(
+            f"JAR not found at {jar}.\n"
+            "Either set S3_BUCKET (so it can be downloaded from S3) or build it locally:\n"
+            "    mvn clean package -DskipTests"
+        )
+
+    jar.parent.mkdir(parents=True, exist_ok=True)
+    s3_path = f"s3://{S3_BUCKET}/artifacts/{jar.name}"
+    logger.info(f"Downloading JAR from {s3_path}")
+    subprocess.run(["aws", "s3", "cp", s3_path, str(jar)], check=True)
     if not jar.exists():
-        raise FileNotFoundError(f"JAR not found at {jar} after Maven build")
-    logger.info(f"Maven build successful: {jar}")
+        raise FileNotFoundError(f"JAR download from {s3_path} failed — file not found after aws s3 cp")
+    logger.info(f"JAR downloaded: {jar.relative_to(REPO_ROOT)} ({jar.stat().st_size:,} bytes)")
+
+
+def _java_cmd(
+    main_class: str,
+    arango_db_password: str,
+    java_opts: str = DEFAULT_JAVA_OPTS,
+) -> list[str]:
+    """Return the ``java`` command list for a given main class.
+
+    Parameters
+    ----------
+    main_class:
+        Fully-qualified Java class name (e.g. ``"gov.nih.nlm.OntologyDownloader"``).
+    arango_db_password:
+        ArangoDB root password.  Injected via env (not as a flag).
+    java_opts:
+        Space-separated JVM flags (e.g. ``"-Xmx4g"``).
+    """
+    return ["java"] + java_opts.split() + ["-cp", CLASSPATH, main_class]
 
 
 @task(name="download-ontologies", log_prints=True)
-def download_ontologies(java_opts: str = DEFAULT_JAVA_OPTS) -> None:
+def download_ontologies(
+    arango_db_password: str,
+    java_opts: str = DEFAULT_JAVA_OPTS,
+) -> None:
     """Run OntologyDownloader to fetch OWL files into data/obo/."""
     logger = get_run_logger()
     logger.info(f"Downloading ontologies (gov.nih.nlm.OntologyDownloader, {java_opts})")
     subprocess.run(
-        [
-            "docker", "run", "--rm",
-            "-v", f"{REPO_ROOT}:/app",
-            "-w", "/app",
-            "eclipse-temurin:21",
-            "java", java_opts, "-cp", CLASSPATH, "gov.nih.nlm.OntologyDownloader",
-        ],
+        _java_cmd("gov.nih.nlm.OntologyDownloader", arango_db_password, java_opts),
         check=True,
         cwd=REPO_ROOT,
+        env={**os.environ, **_arango_env(arango_db_password)},
     )
     owl_files = list((REPO_ROOT / "data" / "obo").glob("*.owl"))
     if not owl_files:
@@ -179,8 +259,6 @@ def download_ontologies(java_opts: str = DEFAULT_JAVA_OPTS) -> None:
 
 @task(name="build-ontology-graph", log_prints=True)
 def build_ontology_graph(
-    arangodb_id: str | None,
-    arango_db_port: int,
     arango_db_password: str,
     java_opts: str = DEFAULT_JAVA_OPTS,
 ) -> None:
@@ -188,20 +266,10 @@ def build_ontology_graph(
     logger = get_run_logger()
     logger.info(f"Building ontology graph (gov.nih.nlm.OntologyGraphBuilder, {java_opts})")
     subprocess.run(
-        [
-            "docker", "run", "--rm",
-            "-v", f"{REPO_ROOT}:/app",
-            "-w", "/app",
-            *_arango_net_args(arangodb_id),
-            "-e", f"ARANGO_DB_HOST={ARANGO_DB_HOST}",
-            "-e", f"ARANGO_DB_PORT={arango_db_port}",
-            "-e", "ARANGO_DB_USER=root",
-            "-e", f"ARANGO_DB_PASSWORD={arango_db_password}",
-            "eclipse-temurin:21",
-            "java", java_opts, "-cp", CLASSPATH, "gov.nih.nlm.OntologyGraphBuilder",
-        ],
+        _java_cmd("gov.nih.nlm.OntologyGraphBuilder", arango_db_password, java_opts),
         check=True,
         cwd=REPO_ROOT,
+        env={**os.environ, **_arango_env(arango_db_password)},
     )
     logger.info("Ontology graph built")
 
@@ -215,13 +283,12 @@ def validate_results_sources() -> None:
     If those directories don't exist, it silently returns empty collections and
     the pipeline completes without error but produces an empty results graph.
 
-    This task catches that condition before any expensive Docker containers start
-    and raises a clear ``FileNotFoundError`` listing exactly which directories
-    are missing and which config file declared them.
+    This task catches that condition before any work starts and raises a clear
+    ``FileNotFoundError`` listing exactly which directories are missing and
+    which config file declared them.
 
     Paths in the JSON are relative to ``python/src/`` (the script's working
-    directory inside the container, which mirrors the repo root via the volume
-    mount), so they are resolved relative to ``python/src/`` on the host.
+    directory), so they are resolved relative to ``python/src/`` on the host.
     """
     logger = get_run_logger()
     python_src = REPO_ROOT / "python" / "src"
@@ -295,35 +362,29 @@ def sync_results_from_s3() -> None:
 
 
 @task(name="write-nsforest-tuples", log_prints=True)
-def write_nsforest_tuples(arangodb_id: str | None, arango_db_password: str) -> None:
+def write_nsforest_tuples(arango_db_password: str) -> None:
     """Run NSForestResultsTupleWriter.py to create JSON tuples from NSForest results."""
     logger = get_run_logger()
     logger.info("Writing NSForest result tuples (NSForestResultsTupleWriter)")
-    _run_python_container(
-        "NSForestResultsTupleWriter.py", arangodb_id, arango_db_password
-    )
+    _run_python_script("NSForestResultsTupleWriter.py", arango_db_password)
     logger.info("NSForest tuples written")
 
 
 @task(name="write-author-to-cl-tuples", log_prints=True)
-def write_author_to_cl_tuples(arangodb_id: str | None, arango_db_password: str) -> None:
+def write_author_to_cl_tuples(arango_db_password: str) -> None:
     """Run AuthorToClResultsTupleWriter.py to create JSON tuples from author-CL mappings."""
     logger = get_run_logger()
     logger.info("Writing author-to-CL result tuples (AuthorToClResultsTupleWriter)")
-    _run_python_container(
-        "AuthorToClResultsTupleWriter.py", arangodb_id, arango_db_password
-    )
+    _run_python_script("AuthorToClResultsTupleWriter.py", arango_db_password)
     logger.info("Author-to-CL tuples written")
 
 
 @task(name="write-external-api-tuples", log_prints=True)
-def write_external_api_tuples(arangodb_id: str | None, arango_db_password: str) -> None:
+def write_external_api_tuples(arango_db_password: str) -> None:
     """Run ExternalApiResultsTupleWriter.py to create JSON tuples from external API data."""
     logger = get_run_logger()
     logger.info("Writing external API result tuples (ExternalApiResultsTupleWriter)")
-    _run_python_container(
-        "ExternalApiResultsTupleWriter.py", arangodb_id, arango_db_password
-    )
+    _run_python_script("ExternalApiResultsTupleWriter.py", arango_db_password)
     logger.info("External API tuples written")
 
 
@@ -359,8 +420,6 @@ def validate_tuple_files() -> None:
 
 @task(name="build-results-graph", log_prints=True)
 def build_results_graph(
-    arangodb_id: str | None,
-    arango_db_port: int,
     arango_db_password: str,
     java_opts: str = DEFAULT_JAVA_OPTS,
 ) -> None:
@@ -368,28 +427,16 @@ def build_results_graph(
     logger = get_run_logger()
     logger.info(f"Building results graph (gov.nih.nlm.ResultsGraphBuilder, {java_opts})")
     subprocess.run(
-        [
-            "docker", "run", "--rm",
-            "-v", f"{REPO_ROOT}:/app",
-            "-w", "/app",
-            *_arango_net_args(arangodb_id),
-            "-e", f"ARANGO_DB_HOST={ARANGO_DB_HOST}",
-            "-e", f"ARANGO_DB_PORT={arango_db_port}",
-            "-e", "ARANGO_DB_USER=root",
-            "-e", f"ARANGO_DB_PASSWORD={arango_db_password}",
-            "eclipse-temurin:21",
-            "java", java_opts, "-cp", CLASSPATH, "gov.nih.nlm.ResultsGraphBuilder",
-        ],
+        _java_cmd("gov.nih.nlm.ResultsGraphBuilder", arango_db_password, java_opts),
         check=True,
         cwd=REPO_ROOT,
+        env={**os.environ, **_arango_env(arango_db_password)},
     )
     logger.info("Results graph built")
 
 
 @task(name="build-phenotype-graph", log_prints=True)
 def build_phenotype_graph(
-    arangodb_id: str | None,
-    arango_db_port: int,
     arango_db_password: str,
     java_opts: str = DEFAULT_JAVA_OPTS,
 ) -> None:
@@ -397,32 +444,20 @@ def build_phenotype_graph(
     logger = get_run_logger()
     logger.info(f"Building phenotype graph (gov.nih.nlm.PhenotypeGraphBuilder, {java_opts})")
     subprocess.run(
-        [
-            "docker", "run", "--rm",
-            "-v", f"{REPO_ROOT}:/app",
-            "-w", "/app",
-            *_arango_net_args(arangodb_id),
-            "-e", f"ARANGO_DB_HOST={ARANGO_DB_HOST}",
-            "-e", f"ARANGO_DB_PORT={arango_db_port}",
-            "-e", "ARANGO_DB_USER=root",
-            "-e", f"ARANGO_DB_PASSWORD={arango_db_password}",
-            "eclipse-temurin:21",
-            "java", java_opts, "-cp", CLASSPATH, "gov.nih.nlm.PhenotypeGraphBuilder",
-        ],
+        _java_cmd("gov.nih.nlm.PhenotypeGraphBuilder", arango_db_password, java_opts),
         check=True,
         cwd=REPO_ROOT,
+        env={**os.environ, **_arango_env(arango_db_password)},
     )
     logger.info("Phenotype graph built")
 
 
 @task(name="create-analyzers-and-views", log_prints=True)
-def create_analyzers_and_views(arangodb_id: str | None, arango_db_password: str) -> None:
+def create_analyzers_and_views(arango_db_password: str) -> None:
     """Run CellKnSchemaUtilities.py to create ArangoDB analyzers and search views."""
     logger = get_run_logger()
     logger.info("Creating ArangoDB analyzers and views (CellKnSchemaUtilities)")
-    _run_python_container(
-        "CellKnSchemaUtilities.py", arangodb_id, arango_db_password
-    )
+    _run_python_script("CellKnSchemaUtilities.py", arango_db_password)
     logger.info("Analyzers and views created")
 
 
@@ -594,9 +629,8 @@ def nlm_ckn_etl(
     force_archive:
         Force re-creation and re-upload of the archives.
     java_opts:
-        JVM flags passed to every Java container (default: ``-Xmx2g``).
-        Increase (e.g. ``-Xmx4g``) if you have enough Docker memory, or
-        decrease if the container is OOM-killed (exit 137).
+        JVM flags passed to every Java invocation (default: ``-Xmx2g``).
+        Increase (e.g. ``-Xmx4g``) if you get OOM-killed (exit 137).
     """
     logger = get_run_logger()
 
@@ -622,6 +656,14 @@ def nlm_ckn_etl(
     built_results_file = REPO_ROOT / ".built-results"
     archived_file = REPO_ROOT / ".archived"
 
+    # ── Ensure ArangoDB is running in localhost mode ────────────────────────
+    # When running --run-results without --run-ontology (e.g. in AWS Batch
+    # with EFS-backed data from a previous run), ArangoDB isn't started by
+    # the ontology stage.  start_arangodb is a no-op if already running.
+    if ARANGO_DB_HOST == "localhost" and not (run_ontology or force_ontology):
+        if run_results or force_results:
+            start_arangodb(arango_db_home, ARANGO_DB_PORT, arango_db_password)
+
     # ── Ontology stage ─────────────────────────────────────────────────────
     if run_ontology or force_ontology:
         if built_ontology_file.exists() and not force_ontology:
@@ -646,10 +688,10 @@ def nlm_ckn_etl(
                     f"Remote ArangoDB at {ARANGO_DB_HOST}:{ARANGO_DB_PORT} — "
                     "skipping container start/stop and data-dir wipe"
                 )
-            arangodb_id = require_arangodb()
-            maven_build()
-            download_ontologies(java_opts)
-            build_ontology_graph(arangodb_id, ARANGO_DB_PORT, arango_db_password, java_opts)
+            require_arangodb()
+            ensure_jar()
+            download_ontologies(arango_db_password, java_opts)
+            build_ontology_graph(arango_db_password, java_opts)
             msg = f"Built ontology graph on {datetime.now()}"
             built_ontology_file.write_text(msg)
             archived_file.unlink(missing_ok=True)
@@ -673,25 +715,24 @@ def nlm_ckn_etl(
             validate_results_sources()
             validate_external_files()  # assert fetcher.py ran before this stage
 
-            arangodb_id = require_arangodb()
-            build_python_docker_image()
+            require_arangodb()
 
             tuples_dir = REPO_ROOT / "data" / "tuples"
             tuples_dir.mkdir(parents=True, exist_ok=True)
             for f in tuples_dir.glob("*.json"):
                 f.unlink()
 
-            write_nsforest_tuples(arangodb_id, arango_db_password)
-            write_author_to_cl_tuples(arangodb_id, arango_db_password)
-            write_external_api_tuples(arangodb_id, arango_db_password)
+            write_nsforest_tuples(arango_db_password)
+            write_author_to_cl_tuples(arango_db_password)
+            write_external_api_tuples(arango_db_password)
 
             sync_tuples_to_s3()        # persist tuple output
             validate_tuple_files()
 
-            maven_build()
-            build_results_graph(arangodb_id, ARANGO_DB_PORT, arango_db_password, java_opts)
-            build_phenotype_graph(arangodb_id, ARANGO_DB_PORT, arango_db_password, java_opts)
-            create_analyzers_and_views(arangodb_id, arango_db_password)
+            ensure_jar()
+            build_results_graph(arango_db_password, java_opts)
+            build_phenotype_graph(arango_db_password, java_opts)
+            create_analyzers_and_views(arango_db_password)
 
             msg = f"Built results and phenotype graphs on {datetime.now()}"
             built_results_file.write_text(msg)
@@ -756,9 +797,8 @@ if __name__ == "__main__":
         "--java-opts",
         default=DEFAULT_JAVA_OPTS,
         help=(
-            f"JVM flags for Java containers (default: '{DEFAULT_JAVA_OPTS}'). "
-            "Lower -Xmx if containers are OOM-killed (exit 137), or raise "
-            "Docker Desktop memory in Settings → Resources → Memory first."
+            f"JVM flags for Java programs (default: '{DEFAULT_JAVA_OPTS}'). "
+            "Lower -Xmx if the process is OOM-killed (exit 137)."
         ),
     )
     args = parser.parse_args()

@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  NLM-CKN Scheduled Fetch — runs ExternalApiResultsFetcher.py on a cron
-  schedule via ECS Fargate, writing the output to S3.
-  Deploy ecr.yaml and push the nlm-ckn-etl-python image before this stack.
+  NLM-CKN Scheduled Fetch — runs fetcher.py on a cron schedule via ECS
+  Fargate, writing the external API cache to S3.
+  Deploy ecr.yaml and push the nlm-ckn-etl image before this stack.
 
 # ── Parameters ──────────────────────────────────────────────────────────────
 Parameters:
@@ -11,7 +11,7 @@ Parameters:
     Type: String
     Description: >
       Name of the ecr.yaml CloudFormation stack.  The task definition pulls
-      the nlm-ckn-etl-python image URI from its RepositoryUri export.
+      the nlm-ckn-etl image URI from its RepositoryUri export.
 
   S3Bucket:
     Type: String
@@ -62,15 +62,19 @@ Parameters:
 
   TaskCpu:
     Type: Number
-    Default: 1024
+    Default: 2048
     AllowedValues: [256, 512, 1024, 2048, 4096]
     Description: Fargate task CPU units (1024 = 1 vCPU).
 
   TaskMemory:
     Type: Number
-    Default: 4096
+    Default: 8192
     AllowedValues: [512, 1024, 2048, 4096, 8192, 16384]
-    Description: Fargate task memory (MiB).
+    Description: >
+      Fargate task memory (MiB).  ExternalApiResultsFetcher.py imports scanpy
+      and loads NSForest h5ad files to build gene ID lists; the science stack
+      alone consumes ~3-4 GiB at import time.  8192 MiB is the recommended
+      minimum; increase to 16384 if the task is still OOM-killed.
 
   EphemeralStorageGiB:
     Type: Number

@@ -8,17 +8,14 @@ import shutil
 
 import requests
 
-from E_Utilities import get_data_for_gene_id
+from E_Utilities import get_data_for_gene_id, get_data_for_pmid
 from OpenTargetsGGetQueries import gget_queries
 from LoaderUtilities import (
     EXTERNAL_DIRPATH,
-    load_results,
     collect_results_sources_data,
-    collect_unique_gene_ensembl_ids,
-    collect_unique_gene_entrez_ids,
-    collect_unique_gene_names,
     get_value_or_none,
     get_values_or_none,
+    load_results,
 )
 
 OPENTARGETS_BASE_URL = "https://api.platform.opentargets.org/api/v4/graphql"
@@ -43,6 +40,7 @@ HUBMAP_LATEST_URLS = [
 
 CELLXGENE_PATH = EXTERNAL_DIRPATH / "cellxgene.json"
 OPENTARGETS_PATH = EXTERNAL_DIRPATH / "opentargets.json"
+PUBMED_PATH = EXTERNAL_DIRPATH / "pubmed.json"
 EBI_PATH = EXTERNAL_DIRPATH / "ebi.json"
 RXNAV_PATH = EXTERNAL_DIRPATH / "rxnav.json"
 DRUGBANK_PATH = EXTERNAL_DIRPATH / "drugbank.json"
@@ -267,7 +265,7 @@ def get_opentargets_results(
 
                     opentargets_results[gene_ensembl_id][resource] = resource_data
 
-            except Exception as exc:
+            except Exception:
                 print(
                     f"Could not assign Open Targets resources for gene Ensembl id {gene_ensembl_id}"
                 )
@@ -798,7 +796,7 @@ def get_gene_results(gene_entrez_ids, force=False):
                 print(f"Assigning gene data for gene Entrez id {gene_entrez_id}")
                 gene_results[gene_entrez_id] = get_data_for_gene_id(gene_entrez_id)
 
-            except Exception as exc:
+            except Exception:
                 print(f"Could not assign gene data for gene Entrez id {gene_entrez_id}")
                 gene_results[gene_entrez_id] = {}
 
@@ -1033,6 +1031,54 @@ def get_hubmap_json_urls():
     return json_urls
 
 
+def get_pubmed_results(pmid_list, force=False):
+    """Use PubMed E-utilities to fetch citation metadata for a list of PMIDs.
+
+    Caches results to data/external/pubmed.json, keyed by PMID string.
+    Failed fetches are recorded as {} so --retry-empty can clean and retry
+    them on the next run.
+
+    Parameters
+    ----------
+    pmid_list : list(str)
+        List of PubMed identifiers to fetch
+    force : bool
+        Flag to force fetching, ignoring the on-disk cache
+
+    Returns
+    -------
+    pubmed_results : dict
+        Dictionaries containing PubMed citation data keyed by PMID string
+    """
+    if not PUBMED_PATH.exists() or force:
+        pubmed_results = {}
+    else:
+        print(f"Loading pubmed results from {PUBMED_PATH}")
+        with open(PUBMED_PATH, "r") as fp:
+            pubmed_results = json.load(fp)
+
+    # Always write the file before the loop so it exists even when pmid_list
+    # is empty (e.g. on first run before any author-to-CL paths are found).
+    print(f"Initialising pubmed cache at {PUBMED_PATH}")
+    with open(PUBMED_PATH, "w") as fp:
+        json.dump(pubmed_results, fp, indent=4)
+
+    for pmid in pmid_list:
+        pmid = str(pmid)
+        if pmid in pubmed_results and pubmed_results[pmid]:
+            print(f"Using cached pubmed data for PMID {pmid}")
+            continue
+
+        data = get_data_for_pmid(pmid)
+        pubmed_results[pmid] = data  # {} on failure; retried by --retry-empty
+
+        print(f"Dumping pubmed results to {PUBMED_PATH}")
+        with open(PUBMED_PATH, "w") as fp:
+            json.dump(pubmed_results, fp, indent=4)
+
+    return pubmed_results
+
+
 def download_hubmap_data_tables():
     """Download specified latest HuBMAP data table JSON files,
     archiving any earlier versions.
@@ -1061,7 +1107,7 @@ def download_hubmap_data_tables():
                 try:
                     shutil.move(Path(pathname), HUBMAP_DIRPATH / ".archive")
                     print(f"Archived HuBMAP data table {pathname}")
-                except Exception as exc:
+                except Exception:
                     # Since already archived, though should never happen
                     os.remove(pathname)
                     print(f"Removed HuBMAP data table {pathname}")
@@ -1173,6 +1219,12 @@ def main():
         help="force fetching of uniprot results",
     )
     parser.add_argument(
+        "-p",
+        "--force-pubmed",
+        action="store_true",
+        help="force fetching of pubmed results",
+    )
+    parser.add_argument(
         "--force-all",
         action="store_true",
         help="force fetching of all results",
@@ -1194,6 +1246,19 @@ def main():
         gene_ensembl_ids,
         gene_entrez_ids,
     ) = collect_results_sources_data()
+
+    # Collect unique PMIDs from all author-to-CL mapping files
+    pmids = set()
+    for path in _author_to_cl_paths:
+        if path and path != []:
+            try:
+                df = load_results(path)
+                pmids.add(str(df["PMID"].iloc[0]))
+            except Exception as e:
+                print(f"Warning: could not read PMID from {path}: {e}")
+
+    # Use PubMed E-utilities to fetch citation metadata for each PMID
+    get_pubmed_results(list(pmids), force=args.force_pubmed or args.force_all)
 
     # Use the CELLxGENE curation API for each dataset version id
     # collected

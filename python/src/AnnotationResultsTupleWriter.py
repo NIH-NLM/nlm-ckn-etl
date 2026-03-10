@@ -134,7 +134,7 @@ def normalize_term(annotation, term, mesh2mondo):
             "BMC_"
             + annotation[f"{term}_name"]
             + "-"
-            + annotation[f"subject_identifier"].split("-")[0]
+            + annotation["subject_identifier"].split("-")[0]
         )
 
     elif atype == "Cell_set":
@@ -142,7 +142,7 @@ def normalize_term(annotation, term, mesh2mondo):
             "CS_"
             + hyphenate(annotation[f"{term}_name"])
             + "-"
-            + annotation[f"subject_identifier"].split("-")[0]
+            + annotation["subject_identifier"].split("-")[0]
         )
 
     elif atype == "Cell_set_dataset":
@@ -219,13 +219,13 @@ def create_tuples_from_annotation(annotation_results):
         tuples.append((s, p, o))
 
         p = URIRef(f"{RDFSBASE}#Source")
-        l = Literal("Manual Annotation")
-        tuples.append((s, o, p, l))
+        lit = Literal("Manual Annotation")
+        tuples.append((s, o, p, lit))
 
         if annotation["subject_type"] == "Cell_set":
             p = URIRef(f"{RDFSBASE}#Label")
-            l = Literal(annotation["subject_name"])
-            tuples.append((s, p, l))
+            lit = Literal(annotation["subject_name"])
+            tuples.append((s, p, lit))
 
     return tuples
 
