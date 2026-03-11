@@ -123,6 +123,13 @@ def fetch_external_api_results(
         for scheduled runs so stale or empty cache entries don't persist.
     """
     logger = get_run_logger()
+
+    deprecated_terms_path = REPO_ROOT / "data" / "obo" / "deprecated_terms.txt"
+    if not deprecated_terms_path.exists():
+        logger.info(f"{deprecated_terms_path} not found — creating empty file")
+        deprecated_terms_path.parent.mkdir(parents=True, exist_ok=True)
+        deprecated_terms_path.touch()
+
     if force:
         logger.info("Force mode: ignoring on-disk cache, re-fetching all sources")
     logger.info("Fetching external API results (ExternalApiResultsFetcher)")

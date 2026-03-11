@@ -1,40 +1,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   NLM-CKN ETL — AWS Batch on EC2 with EFS-backed ArangoDB.
-
-  A single EC2 instance runs both the ETL pipeline (our Docker image, as a
-  Batch job) and ArangoDB (as a Docker container started at instance boot by
-  the EC2 launch template).  MinvCpus=0 scales the compute environment to zero
-  between runs; the EFS volume retains ArangoDB data across instance lifetimes.
-
-  Architecture
-  ------------
-  - EFS FileSystem (DeletionPolicy=Retain) replaces the EBS data volume from
-    the old arangodb.yaml.  Data survives instance replacement.
-  - The EC2 launch template mounts EFS at /mnt/arangodb-data and starts the
-    ArangoDB Docker container on the host before any Batch job is dispatched.
-  - The Batch job container uses Docker bridge networking.  172.17.0.1 is the
-    standard Docker bridge gateway (= the EC2 host), so the container reaches
-    ArangoDB at 172.17.0.1:ARANGO_DB_PORT.  pipeline.py treats any non-localhost
-    host as "remote ArangoDB mode" and skips container lifecycle management.
-  - ARANGO_DB_PASSWORD is injected into the job container from SSM Parameter
-    Store via the Batch/ECS secrets mechanism — it is never stored in the job
-    definition or CloudFormation outputs.
-
-  Prerequisites
-  -------------
-  1. Deploy ecr.yaml and push the nlm-ckn-etl image to ECR
-     (done automatically by .github/workflows/build-image.yml on push to main).
-  2. Create an SSM SecureString parameter for the ArangoDB root password
-     (minimum 16 characters) at the path given by ArangoDbPasswordSsmPath:
-
-       aws ssm put-parameter \
-         --name /nlm-ckn-etl/arangodb-password \
-         --value '<password>' \
-         --type SecureString
-
-  3. Deploy this stack.
-  4. Submit a job via the AWS Batch console or the SubmitJobCommand output.
+  One EC2 instance runs the ETL pipeline (Batch job) and ArangoDB (host
+  container started by the launch template). MinvCpus=0 scales to zero between
+  runs. EFS retains ArangoDB data across instance replacements.
+  ARANGO_DB_PASSWORD is injected from SSM SecureString at deploy time via
+  ArangoDbPasswordSsmPath. Deploy ecr.yaml and push the image before this stack.
 
 # ── Parameters ──────────────────────────────────────────────────────────────
 Parameters:
@@ -139,7 +110,7 @@ Resources:
   BatchSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: NLM-CKN Batch instances — outbound only
+      GroupDescription: NLM-CKN Batch instances outbound only
       VpcId: !Ref VpcId
       SecurityGroupEgress:
         - IpProtocol: "-1"
@@ -155,7 +126,7 @@ Resources:
   EfsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: NLM-CKN EFS — NFS from Batch instances
+      GroupDescription: NLM-CKN EFS NFS from Batch instances
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp

@@ -19,16 +19,21 @@ Parameters:
     Description: >
       S3 bucket where external cache files are written.  Must already exist.
 
-  NcbiEmail:
+  NcbiEmailSsmPath:
     Type: String
-    Default: ""
-    Description: NCBI E-Utilities email address (required for Gene/UniProt fetch).
+    Default: /nlm-ckn-etl/ncbi-email
+    Description: >
+      SSM Parameter Store path (SecureString) holding the NCBI E-Utilities
+      email address.  Create this parameter before deploying the stack (see
+      deploy.sh).
 
-  NcbiApiKey:
+  NcbiApiKeySsmPath:
     Type: String
-    NoEcho: true
-    Default: ""
-    Description: NCBI E-Utilities API key (improves rate limits).
+    Default: /nlm-ckn-etl/ncbi-api-key
+    Description: >
+      SSM Parameter Store path (SecureString) holding the NCBI E-Utilities
+      API key.  Create this parameter before deploying the stack (see
+      deploy.sh).
 
   FetchSchedule:
     Type: String
@@ -120,6 +125,21 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SsmNcbiSecretRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NcbiEmailSsmPath}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NcbiApiKeySsmPath}"
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ssm"
       Tags:
         - Key: Project
           Value: nlm-ckn-etl
@@ -157,7 +177,7 @@ Resources:
   FetchSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: NLM-CKN fetch task — outbound only
+      GroupDescription: NLM-CKN fetch task outbound only
       VpcId: !Ref VpcId
       SecurityGroupEgress:
         - IpProtocol: "-1"
@@ -186,15 +206,16 @@ Resources:
             - "${RepoUri}:latest"
             - RepoUri:
                 Fn::ImportValue: !Sub "${EcrStackName}-RepositoryUri"
-          Command:
+          EntryPoint:
             - /usr/local/bin/fetch-entrypoint
           Environment:
             - Name: S3_BUCKET
               Value: !Ref S3Bucket
+          Secrets:
             - Name: NCBI_EMAIL
-              Value: !Ref NcbiEmail
+              ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NcbiEmailSsmPath}"
             - Name: NCBI_API_KEY
-              Value: !Ref NcbiApiKey
+              ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NcbiApiKeySsmPath}"
           LogConfiguration:
             LogDriver: awslogs
             Options:

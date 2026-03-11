@@ -1,0 +1,19 @@
+{
+  "region": "us-east-1",
+  "s3_bucket": "cell-kn-arangodb-data-952291113202",
+  "stacks": {
+    "ecr":   "nlm-ckn-etl-ecr",
+    "batch": "nlm-ckn-etl-batch",
+    "fetch": "nlm-ckn-etl-fetch"
+  },
+  "batch": {
+    "VpcId":        "vpc-8b3fe4ec",
+    "SubnetId":     "subnet-0031722a",
+    "InstanceType": "m6i.xlarge"
+  },
+  "fetch": {
+    "VpcId":          "vpc-8b3fe4ec",
+    "SubnetIds":      "subnet-0031722a,subnet-c2f261a7",
+    "FetchSchedule":  "cron(0 0 * * ? *)"
+  }
+}
