@@ -201,3 +201,90 @@ $ python -m pytest *.py
    $ cd python/src
    $ python CellKnSchemaUtilities.py
    ```
+
+## Prefect Pipeline
+
+`python/src/pipeline.py` is a [Prefect](https://www.prefect.io/) flow that
+replaces `src/main/shell/etl.sh`.  It runs the same Docker commands but adds
+per-step logging, retry support, and an optional Prefect UI.
+
+### Prerequisites
+
+- Docker Desktop running
+- Python 3.10–3.12 with the project's Poetry environment (see **Python** above)
+- `prefect` is listed in `pyproject.toml` and installed by `poetry install`
+
+### Install Prefect
+
+```bash
+cd python
+poetry install          # installs prefect along with all other dependencies
+source .venv/bin/activate
+```
+
+### NCBI credentials (optional but recommended)
+
+Copy the credentials template and fill in your values:
+
+```bash
+cp python/src/.zshenv.example python/src/.zshenv
+# edit python/src/.zshenv — set NCBI_EMAIL and NCBI_API_KEY
+source python/src/.zshenv   # or add to your shell profile
+```
+
+### Running locally (no Prefect server needed)
+
+Run directly from the **repo root** using flags that mirror `etl.sh`:
+lowercase letters check for an existing build first; uppercase force a full
+rebuild.
+
+```bash
+# Full pipeline: ontology → results → archive
+python python/src/pipeline.py -o -r -a
+
+# Force rebuild everything
+python python/src/pipeline.py -O -R -A
+
+# Ontology stage only
+python python/src/pipeline.py -o
+
+# Results stage only (requires ArangoDB already running with ontology graph)
+python python/src/pipeline.py -r
+
+# Archive stage only
+python python/src/pipeline.py -a
+
+# Pass NCBI credentials explicitly (otherwise reads from $NCBI_EMAIL / $NCBI_API_KEY)
+python python/src/pipeline.py -r --ncbi-email you@example.com --ncbi-api-key YOUR_KEY
+
+# Show all options
+python python/src/pipeline.py --help
+```
+
+### Running with the Prefect UI
+
+Start the Prefect server in one terminal:
+
+```bash
+prefect server start
+```
+
+Then run the flow in another terminal — the run will appear in the UI at
+`http://localhost:4200`:
+
+```bash
+python python/src/pipeline.py -o -r -a
+```
+
+### Sentinel files
+
+The pipeline uses the same sentinel files as `etl.sh` to skip stages that
+have already completed:
+
+| File | Created after |
+|---|---|
+| `.built-ontology` | Ontology stage succeeds |
+| `.built-results`  | Results stage succeeds |
+| `.archived`       | Archive stage succeeds |
+
+Delete a sentinel file (or use a force flag) to re-run the corresponding stage.

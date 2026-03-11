@@ -1131,6 +1131,8 @@ def main(summarize=False):
     else:
         output_dirpath = TUPLES_DIRPATH
 
+    output_dirpath.mkdir(parents=True, exist_ok=True)
+
     with open(output_dirpath / "cell-kn-mvp-external-api-results.json", "w") as f:
         data = {}
         if summarize:

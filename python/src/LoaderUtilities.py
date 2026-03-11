@@ -10,7 +10,6 @@ from lxml import etree
 import pandas as pd
 import scanpy as sc
 
-from E_Utilities import find_gene_id_for_gene_name
 from OntologyParserLoader import parse_term
 from UniProtIdMapper import (
     submit_id_mapping,
@@ -117,7 +116,7 @@ def collect_results_sources_data():
             Path(p).resolve()
             for p in glob(
                 str(
-                    Path(results_source["nsforest_dirpath"])
+                    (Path(__file__).parent / results_source["nsforest_dirpath"])
                     / results_source["nsforest_pattern"]
                 )
             )
@@ -155,7 +154,7 @@ def collect_results_sources_data():
                 # Find path to silhouette scores
                 silhouette_path = glob(
                     str(
-                        Path(results_source["silhouette_dirpath"])
+                        (Path(__file__).parent / results_source["silhouette_dirpath"])
                         / results_source["silhouette_pattern"].format(
                             tissue=tissue, author=author, year=year
                         )
@@ -261,7 +260,9 @@ def load_results(results_path):
 
 def hyphenate(iname):
     """Replace spaces, underscores, commas and forward slashes with
-    hyphens, but only one.
+    hyphens, but only one. Also strips non-ASCII characters (via Unicode
+    NFD decomposition) so that the result is safe for use as an ArangoDB
+    document key, which requires ASCII-only values.
 
     Parameters
     ----------
@@ -273,7 +274,10 @@ def hyphenate(iname):
     oname : str
         Output name
     """
-    cname = iname
+    import unicodedata
+    # Decompose accented characters (e.g. ï → i + combining diaeresis)
+    # then drop any byte that isn't plain ASCII.
+    cname = unicodedata.normalize("NFD", iname).encode("ascii", "ignore").decode("ascii")
     for c in [" ", "_", ",", "/"]:
         cname = cname.replace(c, "-")
         oname = cname.replace("--", "-")
@@ -959,7 +963,7 @@ def get_value_or_none(data, keys):
                 value = data[key]
             else:
                 value = value[key]
-        except:
+        except (KeyError, TypeError):
             return None
     return value
 

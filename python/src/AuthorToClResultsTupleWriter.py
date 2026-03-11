@@ -5,8 +5,7 @@ from urllib.parse import urlparse
 
 from rdflib.term import Literal, URIRef
 
-from E_Utilities import get_data_for_pmid
-from ExternalApiResultsFetcher import CELLXGENE_PATH
+from ExternalApiResultsFetcher import CELLXGENE_PATH, PUBMED_PATH
 from LoaderUtilities import (
     DEPRECATED_TERMS,
     MIN_CLUSTER_SIZE,
@@ -18,9 +17,10 @@ from LoaderUtilities import (
 )
 
 TUPLES_DIRPATH = Path(__file__).parents[2] / "data" / "tuples"
+RE_REVIEW_PATH = Path(__file__).parents[2] / "data" / "re-review.json"
 
 
-def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
+def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results, pubmed_results, re_review=None, source_file=None):
     """Creates tuples from manual author cell set to CL term mapping
     consistent with schema v0.7. Exclude clusters smaller than the
     minimum size. Create a cell set dataset for "--" separated lists
@@ -33,6 +33,15 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
     cellxgene_results : dict
         Dictionaries containing cellxgene results dictionaries keyed
         by dataset_version_id
+    pubmed_results : dict
+        Dictionaries containing PubMed citation data keyed by PMID string,
+        as cached by fetcher.py
+    re_review : list, optional
+        If provided, dicts describing datasets that need re-review are
+        appended here (missing Citation, missing CellxGene entry).
+    source_file : str or Path, optional
+        Path to the author-to-CL CSV being processed; included in
+        re-review entries for traceability.
 
     Returns
     -------
@@ -42,18 +51,35 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
     tuples = []
 
     dataset_version_ids = author_to_cl_results["dataset_version_id"].iloc[0].split("--")
-    pmid_data = get_data_for_pmid(author_to_cl_results["PMID"].iloc[0])
+    pmid = str(author_to_cl_results["PMID"].iloc[0])
+    pmid_data = pubmed_results.get(pmid, {})
+    if not pmid_data:
+        print(f"Warning: No PubMed data for PMID {pmid}; run fetcher.py to populate pubmed.json")
     for dataset_version_id in dataset_version_ids:
 
         # CSD node annotations
         csd_term = f"CSD_{dataset_version_id}"
-        tuples.append(
-            (
-                URIRef(f"{PURLBASE}/{csd_term}"),
-                URIRef(f"{RDFSBASE}#Citation"),
-                Literal(pmid_data["Citation"]),
+        if "Citation" not in pmid_data:
+            print(
+                f"Warning: PubMed fetch failed for PMID "
+                f"{author_to_cl_results['PMID'].iloc[0]}; "
+                f"skipping Citation annotation"
             )
-        )
+            if re_review is not None:
+                re_review.append({
+                    "source_file": str(source_file) if source_file else None,
+                    "dataset_version_id": dataset_version_id,
+                    "pmid": pmid,
+                    "reason": "PubMed Citation missing — re-fetch pubmed.json via fetcher.py",
+                })
+        else:
+            tuples.append(
+                (
+                    URIRef(f"{PURLBASE}/{csd_term}"),
+                    URIRef(f"{RDFSBASE}#Citation"),
+                    Literal(pmid_data["Citation"]),
+                )
+            )
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{csd_term}"),
@@ -108,7 +134,6 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
         if cluster_size < MIN_CLUSTER_SIZE:
             continue
         cs_term = f"CS_{author_cell_set}-{uuid}"
-        bmc_term = f"BMC_{uuid}"
         bgs_term = f"BGS_{uuid}"
 
         # Cell_type_Class, PART_OF, Anatomical_structure_Class
@@ -256,17 +281,30 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results):
             "Link_to_CELLxGENE_dataset",
             "Dataset_name",
         ]
-        for key in keys:
-            value = cellxgene_results[dataset_version_id][key]
-            if isinstance(value, str):
-                value = value.replace("https://", "")
-            tuples.append(
-                (
-                    URIRef(f"{PURLBASE}/{cs_term}"),
-                    URIRef(f"{RDFSBASE}#{key.replace(' ', '_')}"),
-                    Literal(value),
-                )
+        if dataset_version_id not in cellxgene_results:
+            print(
+                f"Warning: No CellxGene data for dataset_version_id "
+                f"{dataset_version_id}; skipping CellxGene annotation tuples"
             )
+            if re_review is not None:
+                re_review.append({
+                    "source_file": str(source_file) if source_file else None,
+                    "dataset_version_id": dataset_version_id,
+                    "pmid": pmid,
+                    "reason": "No CellxGene data for dataset_version_id — re-fetch cellxgene.json via fetcher.py",
+                })
+        else:
+            for key in keys:
+                value = cellxgene_results[dataset_version_id][key]
+                if isinstance(value, str):
+                    value = value.replace("https://", "")
+                tuples.append(
+                    (
+                        URIRef(f"{PURLBASE}/{cs_term}"),
+                        URIRef(f"{RDFSBASE}#{key.replace(' ', '_')}"),
+                        Literal(value),
+                    )
+                )
         tuples.append(
             (
                 URIRef(f"{PURLBASE}/{cs_term}"),
@@ -399,7 +437,7 @@ def main(summarize=False):
     """
     # Collect paths to all NSForest results, and author cell set to CL
     # term mappings identified in the results sources, and load the
-    # CELLxGENE results.
+    # CELLxGENE and PubMed results from the fetcher cache.
     (
         nsforest_paths,
         _silhouette_paths,
@@ -412,6 +450,9 @@ def main(summarize=False):
     ) = collect_results_sources_data()
     with open(CELLXGENE_PATH, "r") as fp:
         cellxgene_results = json.load(fp)
+    with open(PUBMED_PATH, "r") as fp:
+        pubmed_results = json.load(fp)
+    re_review_entries = []
     for author_to_cl_path, nsforest_path in zip(author_to_cl_paths, nsforest_paths):
         if author_to_cl_path == []:
             print(
@@ -453,7 +494,8 @@ def main(summarize=False):
 
         print(f"Creating tuples from {author_to_cl_path}")
         author_to_cl_tuples = create_tuples_from_author_to_cl(
-            author_to_cl_results, cellxgene_results
+            author_to_cl_results, cellxgene_results, pubmed_results,
+            re_review=re_review_entries, source_file=author_to_cl_path,
         )
         if summarize:
             output_dirpath = TUPLES_DIRPATH / "summaries"
@@ -471,6 +513,12 @@ def main(summarize=False):
 
         if summarize:
             break
+
+    RE_REVIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(RE_REVIEW_PATH, "w") as f:
+        json.dump(re_review_entries, f, indent=4)
+    if re_review_entries:
+        print(f"Re-review log written: {RE_REVIEW_PATH} ({len(re_review_entries)} issue(s))")
 
 
 if __name__ == "__main__":
