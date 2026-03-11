@@ -30,8 +30,8 @@
 #       nlm-ckn-etl pipeline.py --run-ontology --run-results
 #
 #   Run the fetch flow only (writes to data/external/):
-#   NOTE: fetcher.py imports scanpy and loads NSForest h5ad files to build
-#   gene ID lists.  The science stack alone needs ~4 GiB; use --memory 8g
+#   NOTE: fetcher.py fetches data from external APIs (CELLxGENE, Open Targets,
+#   NCBI Gene, UniProt, HuBMAP) via ExternalApiResultsFetcher.py.  Use --memory 8g
 #   (or raise Docker Desktop's memory limit) to avoid an OOM kill.
 #     docker run --rm \
 #       --memory 8g \

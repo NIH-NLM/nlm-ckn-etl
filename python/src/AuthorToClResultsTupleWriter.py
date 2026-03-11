@@ -17,9 +17,10 @@ from LoaderUtilities import (
 )
 
 TUPLES_DIRPATH = Path(__file__).parents[2] / "data" / "tuples"
+RE_REVIEW_PATH = Path(__file__).parents[2] / "data" / "re-review.json"
 
 
-def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results, pubmed_results):
+def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results, pubmed_results, re_review=None, source_file=None):
     """Creates tuples from manual author cell set to CL term mapping
     consistent with schema v0.7. Exclude clusters smaller than the
     minimum size. Create a cell set dataset for "--" separated lists
@@ -35,6 +36,12 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results, pub
     pubmed_results : dict
         Dictionaries containing PubMed citation data keyed by PMID string,
         as cached by fetcher.py
+    re_review : list, optional
+        If provided, dicts describing datasets that need re-review are
+        appended here (missing Citation, missing CellxGene entry).
+    source_file : str or Path, optional
+        Path to the author-to-CL CSV being processed; included in
+        re-review entries for traceability.
 
     Returns
     -------
@@ -58,6 +65,13 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results, pub
                 f"{author_to_cl_results['PMID'].iloc[0]}; "
                 f"skipping Citation annotation"
             )
+            if re_review is not None:
+                re_review.append({
+                    "source_file": str(source_file) if source_file else None,
+                    "dataset_version_id": dataset_version_id,
+                    "pmid": pmid,
+                    "reason": "PubMed Citation missing — re-fetch pubmed.json via fetcher.py",
+                })
         else:
             tuples.append(
                 (
@@ -272,6 +286,13 @@ def create_tuples_from_author_to_cl(author_to_cl_results, cellxgene_results, pub
                 f"Warning: No CellxGene data for dataset_version_id "
                 f"{dataset_version_id}; skipping CellxGene annotation tuples"
             )
+            if re_review is not None:
+                re_review.append({
+                    "source_file": str(source_file) if source_file else None,
+                    "dataset_version_id": dataset_version_id,
+                    "pmid": pmid,
+                    "reason": "No CellxGene data for dataset_version_id — re-fetch cellxgene.json via fetcher.py",
+                })
         else:
             for key in keys:
                 value = cellxgene_results[dataset_version_id][key]
@@ -431,6 +452,7 @@ def main(summarize=False):
         cellxgene_results = json.load(fp)
     with open(PUBMED_PATH, "r") as fp:
         pubmed_results = json.load(fp)
+    re_review_entries = []
     for author_to_cl_path, nsforest_path in zip(author_to_cl_paths, nsforest_paths):
         if author_to_cl_path == []:
             print(
@@ -472,7 +494,8 @@ def main(summarize=False):
 
         print(f"Creating tuples from {author_to_cl_path}")
         author_to_cl_tuples = create_tuples_from_author_to_cl(
-            author_to_cl_results, cellxgene_results, pubmed_results
+            author_to_cl_results, cellxgene_results, pubmed_results,
+            re_review=re_review_entries, source_file=author_to_cl_path,
         )
         if summarize:
             output_dirpath = TUPLES_DIRPATH / "summaries"
@@ -490,6 +513,12 @@ def main(summarize=False):
 
         if summarize:
             break
+
+    RE_REVIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(RE_REVIEW_PATH, "w") as f:
+        json.dump(re_review_entries, f, indent=4)
+    if re_review_entries:
+        print(f"Re-review log written: {RE_REVIEW_PATH} ({len(re_review_entries)} issue(s))")
 
 
 if __name__ == "__main__":

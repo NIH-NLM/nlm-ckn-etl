@@ -5,7 +5,7 @@ Downloads raw data from external APIs (CELLxGENE, Open Targets, NCBI Gene,
 UniProt, HuBMAP) via ``ExternalApiResultsFetcher.py`` and writes the results
 to local storage and/or S3.
 
-Designed to run independently on a schedule (hourly via EventBridge + ECS
+Designed to run independently on a schedule (via EventBridge + ECS
 Fargate) without requiring ArangoDB or the full ETL pipeline.
 
 Usage
