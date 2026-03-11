@@ -158,11 +158,23 @@ def _run_python_script(
         **_arango_env(arango_db_password),
         **(extra_env or {}),
     }
-    subprocess.run(
+    result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "python" / "src" / script), *(extra_args or [])],
-        check=True,
+        capture_output=True,
+        text=True,
         env=env,
     )
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            result.args,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
 
 
 def _s3_sync(src: str, dst: str) -> None:
