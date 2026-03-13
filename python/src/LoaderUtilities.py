@@ -27,19 +27,16 @@ OWL_NS = "{http://www.w3.org/2002/07/owl#}"
 OBO_IN_OWL_NS = "{http://www.geneontology.org/formats/oboInOwl#}"
 RDF_NS = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
 
-with open(
-    Path(__file__).parents[2] / "data" / "obo" / "deprecated_terms.txt", "r"
-) as fp:
+DATA_DIRPATH = Path(__file__).resolve().parents[3] / "data"
+RESULTS_SOURCES_PATH = DATA_DIRPATH / "results-sources-2026-01-06.json"
+EXTERNAL_DIRPATH = DATA_DIRPATH / "external"
+BIOMART_DIRPATH = EXTERNAL_DIRPATH / "biomart"
+GENE_MAPPING_PATH = BIOMART_DIRPATH / "gene_mapping.csv"
+
+with open(DATA_DIRPATH / "obo" / "deprecated_terms.txt", "r") as fp:
     DEPRECATED_TERMS = fp.read().splitlines()
 
 MIN_CLUSTER_SIZE = 10
-
-RESULTS_SOURCES_PATH = (
-    Path(__file__).parents[2] / "data" / "results-sources-2026-01-06.json"
-)
-EXTERNAL_DIRPATH = Path(__file__).parents[2] / "data" / "external"
-BIOMART_DIRPATH = EXTERNAL_DIRPATH / "biomart"
-GENE_MAPPING_PATH = BIOMART_DIRPATH / "gene_mapping.csv"
 
 
 def get_cl_terms(author_to_cl_results):
@@ -85,9 +82,12 @@ def collect_results_sources_data():
         List of paths to all silhouette scores files
     author_to_cl_paths: list(Path | None)
         List of paths to all author cell set to CL term mapping files
+    dataset_version_id_lists: list(list)
+        List of the dataset version identifier listss corresponding to the
+        datasets used to generate each NSForest results path
     dataset_version_ids: list(str)
         List of the dataset version identifiers corresponding to the
-        datasets used to generate each NSForest results path
+        datasets used to generate all NSForest results paths
     gene_names: list(str)
         List of gene names found in all NSForest results
     gene_ensembl_ids: list(str)
@@ -100,6 +100,7 @@ def collect_results_sources_data():
     nsforest_paths = []
     silhouette_paths = []
     author_to_cl_paths = []
+    dataset_version_id_lists = []
     dataset_version_ids = []
     cl_terms = set()
     gene_names = set()
@@ -111,8 +112,7 @@ def collect_results_sources_data():
         results_sources = json.load(fp)
 
     for results_source in results_sources:
-
-        print(f'Finding NSForest results in {results_source["nsforest_dirpath"]}')
+        print(f"Finding NSForest results in {results_source['nsforest_dirpath']}")
         _nsforest_paths = [
             Path(p).resolve()
             for p in glob(
@@ -188,7 +188,6 @@ def collect_results_sources_data():
                     cl_terms = cl_terms.union(get_cl_terms(author_to_cl_results))
 
                 else:
-
                     # Parse dataset identifier within NSForest results
                     # path, and assign
                     match = re.search(
@@ -199,6 +198,7 @@ def collect_results_sources_data():
 
             silhouette_paths.append(silhouette_path)
             author_to_cl_paths.append(author_to_cl_path)
+            dataset_version_id_lists.append(dataset_version_id_list)
             dataset_version_ids.extend(dataset_version_id_list)
 
             # Collect unique gene names
@@ -216,6 +216,7 @@ def collect_results_sources_data():
         nsforest_paths,
         silhouette_paths,
         author_to_cl_paths,
+        dataset_version_id_lists,
         dataset_version_ids,
         cl_terms,
         gene_names,
@@ -837,7 +838,6 @@ def get_mesh_to_mondo_map(obo_dir, obo_fnm):
     mesh2mondo = {}
     root = etree.parse(Path(obo_dir) / obo_fnm)
     for class_element in root.iter(f"{OWL_NS}Class"):
-
         # Look for an about attribute
         uriref = class_element.get(f"{RDF_NS}about")
         if uriref is None:
