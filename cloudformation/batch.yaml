@@ -4,8 +4,9 @@ Description: >
   One EC2 instance runs the ETL pipeline (Batch job) and ArangoDB (host
   container started by the launch template). MinvCpus=0 scales to zero between
   runs. EFS retains ArangoDB data across instance replacements.
-  ARANGO_DB_PASSWORD is injected from SSM SecureString at deploy time via
-  ArangoDbPasswordSsmPath. Deploy ecr.yaml and push the image before this stack.
+  The ArangoDB password is generated at stack deploy time via Secrets Manager
+  and injected into both the host user-data and the job container.
+  Deploy ecr.yaml and push the nlm-ckn-etl-pipeline image before this stack.
 
 # ── Parameters ──────────────────────────────────────────────────────────────
 Parameters:
@@ -21,14 +22,6 @@ Parameters:
       subnet with a NAT gateway (for outbound internet to S3, ECR, NCBI, etc.)
       or a public subnet with auto-assign public IP enabled.
 
-  ArangoDbPasswordSsmPath:
-    Type: String
-    Default: /nlm-ckn-etl/arangodb-password
-    Description: >
-      SSM Parameter Store path (SecureString) holding the ArangoDB root
-      password.  Create this parameter before deploying the stack (see the
-      template Description for the CLI command).
-
   ArangoDbPort:
     Type: Number
     Default: 8529
@@ -37,9 +30,10 @@ Parameters:
   EcrImageUri:
     Type: String
     Description: >
-      Full ECR URI for the nlm-ckn-etl image, e.g.:
-        123456789012.dkr.ecr.us-east-1.amazonaws.com/nlm-ckn-etl:latest
-      Get this from the ecr.yaml stack Outputs or the build-image.yml workflow log.
+      Full ECR URI for the nlm-ckn-etl-pipeline image, e.g.:
+        123456789012.dkr.ecr.us-east-1.amazonaws.com/nlm-ckn-etl-pipeline:latest
+      Get this from the ecr.yaml stack PipelineRepositoryUri output or the
+      build-image.yml workflow log.
 
   S3Bucket:
     Type: String
@@ -102,6 +96,20 @@ Conditions:
 
 # ── Resources ───────────────────────────────────────────────────────────────
 Resources:
+
+  # ── ArangoDB password (generated once at stack deploy, not at boot) ──────────
+
+  ArangoDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${AWS::StackName}/arangodb-password"
+      Description: ArangoDB root password for nlm-ckn-etl
+      GenerateSecretString:
+        ExcludePunctuation: true
+        PasswordLength: 32
+      Tags:
+        - Key: Project
+          Value: nlm-ckn-etl
 
   # ── Security Groups ────────────────────────────────────────────────────────
 
@@ -194,7 +202,6 @@ Resources:
   # Needs:
   #   AmazonEC2ContainerServiceforEC2Role — ECS registration, ECR image pull
   #   AmazonSSMManagedInstanceCore        — SSM Session Manager (SSH-less access)
-  #   SsmArangoPasswordRead               — fetch DB password for launch template
 
   EcsInstanceRole:
     Type: AWS::IAM::Role
@@ -209,19 +216,6 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-      Policies:
-        - PolicyName: SsmArangoPasswordRead
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ssm:GetParameter
-                  - ssm:GetParameters
-                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ArangoDbPasswordSsmPath}"
-              - Effect: Allow
-                Action: kms:Decrypt
-                Resource: !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ssm"
       Tags:
         - Key: Project
           Value: nlm-ckn-etl
@@ -233,8 +227,8 @@ Resources:
         - !Ref EcsInstanceRole
 
   # ── IAM: Batch Execution Role (ECS secrets injection for the job container) ─
-  # The ECS agent uses this role to pull the ArangoDB password from SSM and
-  # inject it as ARANGO_DB_PASSWORD into the job container.
+  # The ECS agent uses this role to pull the ArangoDB password from Secrets
+  # Manager and inject it as ARANGO_DB_PASSWORD into the job container.
 
   BatchExecutionRole:
     Type: AWS::IAM::Role
@@ -249,18 +243,13 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
       Policies:
-        - PolicyName: SsmArangoSecretRead
+        - PolicyName: SecretsManagerArangoRead
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
-                Action:
-                  - ssm:GetParameter
-                  - ssm:GetParameters
-                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ArangoDbPasswordSsmPath}"
-              - Effect: Allow
-                Action: kms:Decrypt
-                Resource: !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ssm"
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref ArangoDbSecret
       Tags:
         - Key: Project
           Value: nlm-ckn-etl
@@ -308,16 +297,10 @@ Resources:
       RetentionInDays: 30
 
   # ── EC2 Launch Template ────────────────────────────────────────────────────
-  # Runs at instance boot, before any Batch job is dispatched.
-  # 1. Installs amazon-efs-utils (already present on ECS-optimized AMI).
-  # 2. Mounts EFS at /mnt/arangodb-data (persisted via /etc/fstab).
-  # 3. Fetches the ArangoDB password from SSM.
-  # 4. Starts ArangoDB as a Docker container on the host.
-  # 5. Waits up to 150 seconds for ArangoDB to accept HTTP requests.
-  #
-  # The Batch job container uses bridge networking.  172.17.0.1 is the
-  # standard Docker bridge gateway on Linux (= the EC2 host), so the container
-  # connects to ArangoDB at 172.17.0.1:ArangoDbPort.
+  # Minimal boot script: mounts EFS and opens the Docker bridge port.
+  # ArangoDB is no longer started here — the pipeline container starts it via
+  # the Docker socket (MANAGE_ARANGODB=true), eliminating the race condition
+  # between user-data and ECS agent registration.
 
   EtlLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -331,7 +314,6 @@ Resources:
               VolumeSize: 60
               VolumeType: gp3
               DeleteOnTermination: true
-        # MIME multipart: Batch appends its own bootstrap part automatically.
         UserData:
           Fn::Base64: !Sub
             - |
@@ -345,52 +327,15 @@ Resources:
               set -euxo pipefail
               exec > >(tee /var/log/user-data.log | logger -t user-data) 2>&1
 
-              # ── Install EFS utils (already present on ECS-optimized AMI) ───
-              yum install -y amazon-efs-utils 2>/dev/null || \
-                apt-get install -y amazon-efs-utils 2>/dev/null || true
-
-              # ── Mount EFS at /mnt/arangodb-data ────────────────────────────
+              # Mount EFS for ArangoDB persistent data
               mkdir -p /mnt/arangodb-data
-              mount -t efs -o tls ${EfsId}:/ /mnt/arangodb-data
-              echo "${EfsId}:/ /mnt/arangodb-data efs defaults,_netdev,tls 0 0" >> /etc/fstab
+              mount -t nfs4 \
+                -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport \
+                ${EfsId}.efs.${AWS::Region}.amazonaws.com:/ /mnt/arangodb-data
 
-              # ── Fetch ArangoDB password from SSM ────────────────────────────
-              REGION=$(curl -sf \
-                http://169.254.169.254/latest/meta-data/placement/region)
-              ARANGO_PASSWORD=$(aws ssm get-parameter \
-                --name "${ArangoDbPasswordSsmPath}" \
-                --with-decryption \
-                --query Parameter.Value \
-                --output text \
-                --region "$REGION")
-
-              # ── Ensure Docker is running ────────────────────────────────────
+              # Allow Docker bridge containers to reach host ports
               until systemctl is-active --quiet docker; do sleep 2; done
-
-              # ── Start ArangoDB on the host ──────────────────────────────────
-              # Remove any stale container from a previous (unlikely) boot.
-              docker rm -f arangodb 2>/dev/null || true
-              docker pull arangodb:latest
-              docker run -d \
-                --name arangodb \
-                --restart unless-stopped \
-                -e ARANGO_ROOT_PASSWORD="$ARANGO_PASSWORD" \
-                -p ${ArangoDbPort}:8529 \
-                -v /mnt/arangodb-data:/var/lib/arangodb3 \
-                arangodb:latest
-
-              # ── Wait for ArangoDB to accept HTTP requests (up to 150 s) ────
-              # Batch jobs are dispatched only after this script finishes, so
-              # pipeline.py is guaranteed to find ArangoDB ready.
-              echo "Waiting for ArangoDB to become ready..."
-              for i in $(seq 1 30); do
-                if curl -sf "http://localhost:${ArangoDbPort}/_api/version" \
-                    >/dev/null 2>&1; then
-                  echo "ArangoDB ready after ~$((i * 5)) seconds"
-                  break
-                fi
-                sleep 5
-              done
+              iptables -I INPUT 1 -i docker0 -p tcp --dport ${ArangoDbPort} -j ACCEPT
 
               --==BOUNDARY==--
             - EfsId: !If [CreateEfs, !Ref ArangoDbFileSystem, !Ref ExistingEfsId]
@@ -405,9 +350,11 @@ Resources:
 
   EtlComputeEnvironment:
     Type: AWS::Batch::ComputeEnvironment
-    DependsOn: ArangoDbMountTarget
+    DependsOn:
+      - ArangoDbMountTarget
+      - ArangoDbSecret
     Properties:
-      ComputeEnvironmentName: !Sub "${AWS::StackName}-etl"
+      ComputeEnvironmentName: !Sub "${AWS::StackName}-etl-ce"
       Type: MANAGED
       State: ENABLED
       ServiceRole: !GetAtt BatchServiceRole.Arn
@@ -444,16 +391,10 @@ Resources:
           ComputeEnvironment: !Ref EtlComputeEnvironment
 
   # ── Batch Job Definition ───────────────────────────────────────────────────
-  # Runs the nlm-ckn-etl Docker image.  ArangoDB is accessed at
-  # 172.17.0.1:ArangoDbPort (the Docker bridge gateway = EC2 host).
-  # Because ARANGO_DB_HOST != "localhost", pipeline.py enters "remote ArangoDB
-  # mode": it connects to the database over the network without managing any
-  # local Docker container lifecycle.
-  #
-  # ARANGO_DB_PASSWORD is fetched from SSM by the ECS agent (BatchExecutionRole)
-  # and injected as an environment variable; it never appears in plaintext in
-  # the job definition or CloudFormation outputs.
-  #
+  # The pipeline container starts ArangoDB itself via the Docker socket
+  # (MANAGE_ARANGODB=true), then connects via the bridge gateway 172.17.0.1.
+  # ARANGO_DB_HOST_HOME points to the EFS mount on the host so the Docker
+  # daemon bind-mounts persistent storage into the ArangoDB container.
   # Default command: --run-results.  Override at submission time with
   # --container-overrides (see SubmitJobCommand output).
 
@@ -469,27 +410,33 @@ Resources:
         JobRoleArn: !GetAtt BatchJobRole.Arn
         ExecutionRoleArn: !GetAtt BatchExecutionRole.Arn
         Command:
-          - python
           - pipeline.py
           - --run-results
-          - --java-opts
-          - !Ref JavaOpts
+          - !Sub "--java-opts=${JavaOpts}"
         Environment:
-          # 172.17.0.1 = Docker bridge gateway = the EC2 host.
-          # This is the standard value on Linux Docker and is reliable on the
-          # ECS-optimized AMI.  pipeline.py treats any non-localhost host as
-          # remote ArangoDB (no container lifecycle management).
           - Name: ARANGO_DB_HOST
             Value: "172.17.0.1"
           - Name: ARANGO_DB_PORT
             Value: !Sub "${ArangoDbPort}"
+          - Name: ARANGO_DB_HOST_HOME
+            Value: /mnt/arangodb-data
+          - Name: MANAGE_ARANGODB
+            Value: "true"
           - Name: S3_BUCKET
             Value: !Ref S3Bucket
           - Name: PYTHONPATH
             Value: /app/python/src
+        MountPoints:
+          - ContainerPath: /var/run/docker.sock
+            ReadOnly: false
+            SourceVolume: docker-socket
+        Volumes:
+          - Name: docker-socket
+            Host:
+              SourcePath: /var/run/docker.sock
         Secrets:
           - Name: ARANGO_DB_PASSWORD
-            ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ArangoDbPasswordSsmPath}"
+            ValueFrom: !Ref ArangoDbSecret
         LogConfiguration:
           LogDriver: awslogs
           Options:
@@ -544,7 +491,7 @@ Outputs:
           --job-name nlm-ckn-etl-$(date +%Y%m%d-%H%M%S) \
           --job-queue ${Queue} \
           --job-definition ${JobDef} \
-          --container-overrides '{"command":["python","pipeline.py","--run-ontology","--run-results","--run-archive","--java-opts","-Xmx4g"]}' \
+          --container-overrides '{"command":["pipeline.py","--run-ontology","--run-results","--run-archive","--java-opts=-Xmx4g"]}' \
           --region ${AWS::Region}
       - Queue: !Ref EtlJobQueue
         JobDef: !Ref EtlJobDefinition

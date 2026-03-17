@@ -57,6 +57,7 @@ from _common import (
     ARANGO_DB_HOME,
     ARANGO_DB_HOST,
     ARANGO_DB_HOST_HOME,
+    MANAGE_ARANGODB,
     ARANGO_DB_PORT,
     ARANGO_DB_VOLUME_NAME,
     CLASSPATH,
@@ -70,6 +71,7 @@ from _common import (
     _s3_cp,
     _s3_sync,
     sync_external_from_s3,
+    sync_obo_from_s3,
     validate_external_files,
 )
 
@@ -161,26 +163,66 @@ def start_arangodb(
 
 
 @task(name="require-arangodb", log_prints=True)
-def require_arangodb() -> None:
+def require_arangodb(password: str = "") -> None:
     """Verify ArangoDB is reachable before starting expensive tasks.
 
-    Remote mode (``ARANGO_DB_HOST`` != ``"localhost"``): ArangoDB is
-    managed externally (e.g. a dedicated EC2 instance).  Logs the endpoint
-    and returns.
+    Probes ``/_api/version`` with HTTP Basic auth and retries, using different
+    timeouts for local vs. remote (Batch) mode:
 
-    Local mode: raises ``RuntimeError`` if no ArangoDB container is running.
+    - **Local** (``ARANGO_DB_HOST=localhost``): 10 attempts × 3 s = 30 s.
+      ArangoDB is managed by the pipeline itself so it should already be up.
+
+    - **Remote / managed** (any other host, e.g. ``172.17.0.1`` in Batch):
+      40 attempts × 15 s = 10 min.  Covers Docker image pull + DB initialisation
+      on a fresh instance.
+
+    Local mode additionally checks that the ArangoDB Docker container is present.
     """
+    import base64
+    import time
+    import urllib.request
+
     logger = get_run_logger()
-    if ARANGO_DB_HOST != "localhost":
-        logger.info(f"Remote ArangoDB mode: host={ARANGO_DB_HOST}, port={ARANGO_DB_PORT}")
-        return
-    cid = _get_arangodb_id()
-    if not cid:
-        raise RuntimeError(
-            "ArangoDB container is not running. "
-            "Start it first or run the ontology stage."
-        )
-    logger.info(f"Local ArangoDB container: {cid}")
+    host = ARANGO_DB_HOST
+    port = ARANGO_DB_PORT
+
+    if host == "localhost":
+        cid = _get_arangodb_id()
+        if not cid:
+            raise RuntimeError(
+                "ArangoDB container is not running. "
+                "Start it first or run the ontology stage."
+            )
+        logger.info(f"Local ArangoDB container: {cid}")
+        max_attempts, delay = 10, 3
+    else:
+        logger.info(f"Remote ArangoDB mode: host={host}, port={port}")
+        max_attempts, delay = 40, 15
+
+    url = f"http://{host}:{port}/_api/version"
+    auth = base64.b64encode(f"root:{password}".encode()).decode()
+    headers = {"Authorization": f"Basic {auth}"}
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                body = resp.read().decode()
+            logger.info(f"ArangoDB reachable at {host}:{port} — {body[:80]}")
+            return
+        except Exception as exc:
+            logger.info(
+                f"ArangoDB not yet reachable (attempt {attempt}/{max_attempts}): {exc}"
+            )
+            if attempt < max_attempts:
+                time.sleep(delay)
+
+    raise RuntimeError(
+        f"ArangoDB at {host}:{port} did not respond after "
+        f"{max_attempts * delay}s.  "
+        "Check that the ArangoDB process/container is running on the host and "
+        f"that port {port} is accessible from this container."
+    )
 
 
 @task(name="ensure-jar", log_prints=True)
@@ -656,11 +698,13 @@ def nlm_ckn_etl(
     built_results_file = REPO_ROOT / ".built-results"
     archived_file = REPO_ROOT / ".archived"
 
-    # ── Ensure ArangoDB is running in localhost mode ────────────────────────
-    # When running --run-results without --run-ontology (e.g. in AWS Batch
-    # with EFS-backed data from a previous run), ArangoDB isn't started by
-    # the ontology stage.  start_arangodb is a no-op if already running.
-    if ARANGO_DB_HOST == "localhost" and not (run_ontology or force_ontology):
+    # ── Ensure ArangoDB is running ──────────────────────────────────────────
+    # When running --run-results without --run-ontology, ArangoDB isn't
+    # started by the ontology stage.  start_arangodb is a no-op if already
+    # running.  MANAGE_ARANGODB=true enables this in AWS Batch, where the
+    # pipeline container has the Docker socket mounted and starts ArangoDB
+    # itself rather than relying on user-data timing.
+    if (ARANGO_DB_HOST == "localhost" or MANAGE_ARANGODB) and not (run_ontology or force_ontology):
         if run_results or force_results:
             start_arangodb(arango_db_home, ARANGO_DB_PORT, arango_db_password)
 
@@ -673,9 +717,12 @@ def nlm_ckn_etl(
             logger.info(f"  {built_ontology_file.read_text().strip()}")
         else:
             logger.info("=== Ontology Stage ===")
-            if ARANGO_DB_HOST == "localhost":
-                # Local mode: manage the ArangoDB container lifecycle and wipe
-                # the data directory so OntologyGraphBuilder starts from scratch.
+            if ARANGO_DB_HOST == "localhost" or MANAGE_ARANGODB:
+                # Managed mode: pipeline controls the ArangoDB container.
+                # Stop any existing container, wipe the local data dir, and
+                # start fresh.  Note: when MANAGE_ARANGODB=true the data dir
+                # wiped here is the container-internal path; the EFS bind-mount
+                # (ARANGO_DB_HOST_HOME) retains its data for the host daemon.
                 stop_arangodb()
                 arango_home = Path(arango_db_home)
                 if arango_home.exists():
@@ -688,7 +735,7 @@ def nlm_ckn_etl(
                     f"Remote ArangoDB at {ARANGO_DB_HOST}:{ARANGO_DB_PORT} — "
                     "skipping container start/stop and data-dir wipe"
                 )
-            require_arangodb()
+            require_arangodb(arango_db_password)
             ensure_jar()
             download_ontologies(arango_db_password, java_opts)
             build_ontology_graph(arango_db_password, java_opts)
@@ -711,11 +758,12 @@ def nlm_ckn_etl(
             # Pull inputs from S3 (no-op in local mode)
             sync_results_from_s3()     # NSForest CSVs
             sync_external_from_s3()    # external API cache from fetcher.py
+            sync_obo_from_s3()         # OWL files + generated obo text files
 
             validate_results_sources()
             validate_external_files()  # assert fetcher.py ran before this stage
 
-            require_arangodb()
+            require_arangodb(arango_db_password)
 
             tuples_dir = REPO_ROOT / "data" / "tuples"
             tuples_dir.mkdir(parents=True, exist_ok=True)

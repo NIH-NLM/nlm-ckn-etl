@@ -301,6 +301,11 @@ def get_gene_names_and_ensembl_and_entrez_ids():
         DataFrame with columns containing gene names, and Ensembl and
         Entrez ids
     """
+    if GENE_MAPPING_PATH.exists():
+        print(f"Loading gene mapping from cache: {GENE_MAPPING_PATH}")
+        gene_names_and_ids = pd.read_csv(GENE_MAPPING_PATH, index_col=0, dtype={"entrezgene_id": str})
+        return gene_names_and_ids
+
     print("Getting gene names, and Ensembl and Entrez ids from BioMart")
     gene_names_and_ids = (
         sc.queries.biomart_annotations(
@@ -314,9 +319,8 @@ def get_gene_names_and_ensembl_and_entrez_ids():
     gene_names_and_ids["entrezgene_id"] = (
         gene_names_and_ids["entrezgene_id"].astype(int).astype(str)
     )
-    if not GENE_MAPPING_PATH.exists():
-        BIOMART_DIRPATH.mkdir(parents=True, exist_ok=True)
-        gene_names_and_ids.to_csv(GENE_MAPPING_PATH)
+    BIOMART_DIRPATH.mkdir(parents=True, exist_ok=True)
+    gene_names_and_ids.to_csv(GENE_MAPPING_PATH)
     return gene_names_and_ids
 
 

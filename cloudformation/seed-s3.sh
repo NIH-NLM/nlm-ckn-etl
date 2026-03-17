@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
-# seed-s3.sh — Upload local data/external/ to the S3 bucket.
+# seed-s3.sh — Upload local data to the S3 bucket.
+#
+# Uploads:
+#   data/external/      → s3://bucket/external/     (external API cache)
+#   data/results-*/     → s3://bucket/results/<dir>/ (NSForest results)
+#   data/obo/           → s3://bucket/obo/           (OWL files + generated text files)
+#
+# data/obo/ contains OWL files downloaded by OntologyDownloader (cl.owl,
+# ro.owl, etc.) and text files written by OntologyGraphBuilder
+# (deprecated_terms.txt, edge_labels.txt).  The Batch container syncs them
+# via sync_obo_from_s3() before building the results and phenotype graphs.
 #
 # Usage:
 #   ./seed-s3.sh [--params <file>]
@@ -48,6 +58,7 @@ fi
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOCAL_EXTERNAL="$REPO_ROOT/data/external"
+LOCAL_DATA="$REPO_ROOT/data"
 
 if [[ ! -d "$LOCAL_EXTERNAL" ]]; then
   echo "Error: $LOCAL_EXTERNAL not found"
@@ -58,4 +69,37 @@ echo "==> Syncing $LOCAL_EXTERNAL → s3://$S3_BUCKET/external/"
 aws s3 sync "$LOCAL_EXTERNAL/" "s3://$S3_BUCKET/external/" \
   --region "$REGION" \
   --exclude "*.DS_Store"
+
+# Upload NSForest results directories (results-*) so the pipeline container
+# can sync them via sync_results_from_s3() (expects s3://bucket/results/<dir>/).
+results_dirs=("$LOCAL_DATA"/results-*)
+if [[ -d "${results_dirs[0]}" ]]; then
+  for results_dir in "${results_dirs[@]}"; do
+    if [[ -d $results_dir ]]; then
+      dir_name="$(basename "$results_dir")"
+      echo "==> Syncing $results_dir → s3://$S3_BUCKET/results/$dir_name/"
+      aws s3 sync "$results_dir/" "s3://$S3_BUCKET/results/$dir_name/" \
+        --region "$REGION" \
+        --exclude "*.DS_Store"
+    else
+      echo "Skipping $results_dir, not directory"
+    fi
+  done
+else
+  echo "WARNING: No data/results-* directories found; skipping results upload."
+fi
+
+# Upload all OBO files (OWL ontology files + generated text files) so the
+# Batch container can sync them via sync_obo_from_s3() before building the
+# results and phenotype graphs (ResultsGraphBuilder requires ro.owl etc.).
+LOCAL_OBO="$LOCAL_DATA/obo"
+if [[ -d "$LOCAL_OBO" ]]; then
+  echo "==> Syncing $LOCAL_OBO → s3://$S3_BUCKET/obo/"
+  aws s3 sync "$LOCAL_OBO/" "s3://$S3_BUCKET/obo/" \
+    --region "$REGION" \
+    --exclude "*.DS_Store"
+else
+  echo "WARNING: $LOCAL_OBO not found; skipping obo upload."
+fi
+
 echo "Done."

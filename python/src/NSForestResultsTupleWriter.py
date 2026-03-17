@@ -329,6 +329,7 @@ def main(summarize=False):
             output_dirpath = TUPLES_DIRPATH / "summaries"
         else:
             output_dirpath = TUPLES_DIRPATH
+        output_dirpath.mkdir(parents=True, exist_ok=True)
         with open(
             output_dirpath / nsforest_path.name.replace(".csv", ".json"), "w"
         ) as f:

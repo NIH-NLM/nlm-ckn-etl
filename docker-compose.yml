@@ -1,0 +1,52 @@
+services:
+
+  # ── ArangoDB ────────────────────────────────────────────────────────────────
+  # Start once and leave running: docker compose up -d arangodb
+  arangodb:
+    image: arangodb:latest
+    environment:
+      ARANGO_ROOT_PASSWORD: localtest
+    ports:
+      - "8529:8529"
+    volumes:
+      - arangodb-data:/var/lib/arangodb3
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8529/_api/version"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # ── ETL pipeline ────────────────────────────────────────────────────────────
+  # docker compose run --rm pipeline pipeline.py --run-results
+  # docker compose run --rm pipeline pipeline.py --run-ontology --run-results --run-archive
+  pipeline:
+    build:
+      context: .
+      target: pipeline
+    depends_on:
+      arangodb:
+        condition: service_healthy
+    environment:
+      ARANGO_DB_HOST: arangodb
+      ARANGO_DB_PASSWORD: localtest
+      S3_BUCKET: ""            # empty = local mode, no S3 sync
+    volumes:
+      - ./data:/app/data
+      - ./target:/app/target
+
+  # ── Fetch flow ──────────────────────────────────────────────────────────────
+  # NCBI_EMAIL=you@example.com NCBI_API_KEY=key \
+  #   docker compose run --rm fetcher fetcher.py --ncbi-email "$NCBI_EMAIL" --ncbi-api-key "$NCBI_API_KEY"
+  fetcher:
+    build:
+      context: .
+      target: fetcher
+    environment:
+      NCBI_EMAIL: ${NCBI_EMAIL:-}
+      NCBI_API_KEY: ${NCBI_API_KEY:-}
+      S3_BUCKET: ""
+    volumes:
+      - ./data:/app/data
+
+volumes:
+  arangodb-data:
