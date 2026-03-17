@@ -49,6 +49,7 @@ fi
 
 # ── Read config ───────────────────────────────────────────────────────────────
 REGION="$(jq -r '.region // "us-east-1"' "$PARAMS_FILE")"
+S3_BUCKET="$(jq -r '.s3_bucket // ""' "$PARAMS_FILE")"
 ECR_STACK="$(jq -r '.stacks.ecr // "nlm-ckn-ecr"' "$PARAMS_FILE")"
 BATCH_STACK="$(jq -r '.stacks.batch // "nlm-ckn-batch"' "$PARAMS_FILE")"
 FETCH_STACK="$(jq -r '.stacks.fetch // "nlm-ckn-fetch"' "$PARAMS_FILE")"
@@ -115,7 +116,7 @@ if ! $SKIP_FETCH; then
     --overwrite
   echo "    Done: SSM parameters written"
 
-  fetch_json="$(jq '.fetch + {"EcrStackName": "'"$ECR_STACK"'"}
+  fetch_json="$(jq '.fetch + {"EcrStackName": "'"$ECR_STACK"'", "S3Bucket": "'"$S3_BUCKET"'"}
     | del(.NcbiEmailSsmPath, .NcbiApiKeySsmPath)' "$PARAMS_FILE")"
   fetch_overrides=()
   while IFS= read -r line; do fetch_overrides+=("$line"); done \
@@ -126,8 +127,8 @@ fi
 
 # ── 3. Batch ──────────────────────────────────────────────────────────────────
 if ! $SKIP_BATCH; then
-  ECR_IMAGE_URI="$(get_stack_output "$ECR_STACK" "RepositoryUri"):latest"
-  batch_json="$(jq '.batch + {"EcrImageUri": "'"$ECR_IMAGE_URI"'"}' "$PARAMS_FILE")"
+  ECR_IMAGE_URI="$(get_stack_output "$ECR_STACK" "PipelineRepositoryUri"):latest"
+  batch_json="$(jq '.batch + {"EcrImageUri": "'"$ECR_IMAGE_URI"'", "S3Bucket": "'"$S3_BUCKET"'"}' "$PARAMS_FILE")"
   batch_overrides=()
   while IFS= read -r line; do batch_overrides+=("$line"); done \
     < <(json_to_overrides "$batch_json")

@@ -67,6 +67,13 @@ ARANGO_DB_HOST_HOME = os.getenv("ARANGO_DB_HOST_HOME", "")
 # use and persists across pipeline runs.
 ARANGO_DB_VOLUME_NAME = "nlm-ckn-arangodb-data"
 
+# When true, the pipeline manages the ArangoDB container lifecycle (start/stop)
+# even when ARANGO_DB_HOST != "localhost".  Used in AWS Batch where the pipeline
+# container has the Docker socket mounted but connects via the bridge gateway
+# (172.17.0.1).  Set ARANGO_DB_HOST_HOME to the EFS mount path so the Docker
+# daemon bind-mounts persistent storage into the ArangoDB container.
+MANAGE_ARANGODB = os.getenv("MANAGE_ARANGODB", "").lower() in ("1", "true", "yes")
+
 # S3 bucket for durable storage of external cache, tuples, JAR, and archives.
 # Empty string → local-only mode (no S3 operations performed).
 S3_BUCKET = os.getenv("S3_BUCKET", "")
@@ -80,7 +87,17 @@ PYTHON_SRC = str(REPO_ROOT / "python" / "src")
 
 
 def _get_or_create_arango_password() -> str:
-    """Read the ArangoDB root password from .arangodb-password, creating it on first run."""
+    """Return the ArangoDB root password.
+
+    Priority:
+    1. ``ARANGO_DB_PASSWORD`` env var — set by Secrets Manager in AWS Batch.
+       Using the injected value ensures the pipeline always starts ArangoDB
+       with the same stable password that was used to initialise the database.
+    2. ``.arangodb-password`` file — local development convenience.
+    3. Generate a new random password and write it to ``.arangodb-password``.
+    """
+    if password := os.getenv("ARANGO_DB_PASSWORD"):
+        return password
     password_file = REPO_ROOT / ".arangodb-password"
     if password_file.exists():
         return password_file.read_text().strip()
@@ -332,3 +349,26 @@ def sync_external_to_s3() -> None:
     logger.info(f"Syncing data/external/ → s3://{S3_BUCKET}/external/")
     _s3_sync(str(external_dir), f"s3://{S3_BUCKET}/external/")
     logger.info("External cache pushed to S3")
+
+
+@task(name="sync-obo-from-s3", log_prints=True)
+def sync_obo_from_s3() -> None:
+    """Restore the OBO ontology files from S3 to ``data/obo/``.
+
+    OWL files (cl.owl, ro.owl, etc.) and generated text files
+    (deprecated_terms.txt, edge_labels.txt) are synced down from
+    ``s3://{S3_BUCKET}/obo/``.  The results-graph and phenotype-graph
+    Java builders require these files to be present.
+
+    No-op when ``S3_BUCKET`` is empty (local-only mode).
+    """
+    logger = get_run_logger()
+    if not S3_BUCKET:
+        logger.info("S3_BUCKET not set — skipping S3 sync (local mode)")
+        return
+    obo_dir = REPO_ROOT / "data" / "obo"
+    obo_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Syncing s3://{S3_BUCKET}/obo/ → data/obo/")
+    _s3_sync(f"s3://{S3_BUCKET}/obo/", str(obo_dir))
+    owl_files = list(obo_dir.glob("*.owl"))
+    logger.info(f"OBO files restored from S3 ({len(owl_files)} OWL file(s))")

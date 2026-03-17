@@ -1,14 +1,14 @@
-# Dockerfile — single image for the NLM-CKN ETL
+# Dockerfile — multi-stage build for the NLM-CKN ETL
 #
-# Runs both the scheduled fetch flow (fetcher.py) and the full ETL pipeline
-# (pipeline.py).  The Java JAR is not baked in; pipeline.py's ensure_jar()
-# task downloads it from S3 on first use, or you can bind-mount a pre-built
-# JAR at /app/target/nlm-ckn-etl-1.0.jar.
+# Three stages:
+#   base     — shared Python stack (no Java, no entrypoint)
+#   fetcher  — ECS Fargate scheduled fetch task (fetch-entrypoint, no Java)
+#   pipeline — AWS Batch ETL job (adds JRE for Java graph builders)
 #
-# ── Local usage ──────────────────────────────────────────────────────────────
+# ── Local usage ───────────────────────────────────────────────────────────────
 #
-#   Build:
-#     docker build -t nlm-ckn-etl .
+#   Build pipeline image (for running pipeline.py):
+#     docker build --target pipeline -t nlm-ckn-etl-pipeline .
 #
 #   Run the full pipeline (starts ArangoDB as a sibling container via the socket):
 #
@@ -18,7 +18,7 @@
 #       -v "$(pwd)/target:/app/target" \
 #       -v /var/run/docker.sock:/var/run/docker.sock \
 #       -e ARANGO_DB_PASSWORD=<password> \
-#       nlm-ckn-etl pipeline.py --run-ontology --run-results
+#       nlm-ckn-etl-pipeline pipeline.py --run-ontology --run-results
 #
 #   Option B — bind-mount (data visible on the host at $(pwd)/data/arangodb):
 #     docker run --rm \
@@ -27,7 +27,10 @@
 #       -v /var/run/docker.sock:/var/run/docker.sock \
 #       -e ARANGO_DB_PASSWORD=<password> \
 #       -e ARANGO_DB_HOST_HOME="$(pwd)/data/arangodb" \
-#       nlm-ckn-etl pipeline.py --run-ontology --run-results
+#       nlm-ckn-etl-pipeline pipeline.py --run-ontology --run-results
+#
+#   Build fetcher image (for running fetcher.py):
+#     docker build --target fetcher -t nlm-ckn-etl-fetcher .
 #
 #   Run the fetch flow only (writes to data/external/):
 #   NOTE: fetcher.py fetches data from external APIs (CELLxGENE, Open Targets,
@@ -37,24 +40,26 @@
 #       --memory 8g \
 #       -v "$(pwd)/data:/app/data" \
 #       -e NCBI_EMAIL=<email> -e NCBI_API_KEY=<key> \
-#       nlm-ckn-etl python fetcher.py
+#       nlm-ckn-etl-fetcher
 #
 #   Run the scheduled fetch with S3 sync (mirrors ECS Fargate):
 #     docker run --rm \
 #       --memory 8g \
 #       -e S3_BUCKET=<bucket> \
 #       -e NCBI_EMAIL=<email> -e NCBI_API_KEY=<key> \
-#       --entrypoint fetch-entrypoint \
-#       nlm-ckn-etl
+#       nlm-ckn-etl-fetcher
 #
 # ── AWS usage ────────────────────────────────────────────────────────────────
-#   The image is pushed to ECR by .github/workflows/build-image.yml.
-#   The fetch-entrypoint is used by the ECS Fargate task (cloudformation/fetch.yaml).
-#   The ETL pipeline runs as an AWS Batch job (cloudformation/batch.yaml).
+#   Both images are pushed to ECR by .github/workflows/build-image.yml.
+#   nlm-ckn-etl-fetcher  → used by the ECS Fargate task (cloudformation/fetch.yaml)
+#   nlm-ckn-etl-pipeline → used by the AWS Batch job   (cloudformation/batch.yaml)
+#
+#   docker-compose.yml builds both targets locally for development.
 
+# ── Stage 1: base (shared Python stack) ─────────────────────────────────────
 # Pin to linux/amd64: scikit-misc has no linux/arm64 binary wheel on PyPI.
 # amd64 wheels run correctly under Rosetta on Apple Silicon.
-FROM --platform=linux/amd64 python:3.12-slim
+FROM --platform=linux/amd64 python:3.12-slim AS base
 
 # ── System build deps (needed by scikit-misc, scanpy, h5py, etc.) ──────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -103,17 +108,38 @@ COPY python/src /app/python/src
 
 # ── Static config data files ───────────────────────────────────────────────
 # Small repo-tracked files read at runtime (NSForest source lists, mappings).
-# Large data (obo/, external/, results/, tuples/) must be mounted or synced.
+# Large generated data (obo/, external/, results/, tuples/) must be mounted or
+# synced from S3 at runtime.
 COPY data/*.json data/*.csv /app/data/
+# data/obo/ files are generated at runtime:
+#   deprecated_terms.txt and edge_labels.txt are WRITTEN by OntologyGraphBuilder
+#   during --run-ontology; *.owl files are downloaded by OntologyDownloader.
+# Create an empty placeholder for deprecated_terms.txt so that LoaderUtilities.py
+# (which opens it at module import time) doesn't crash with FileNotFoundError
+# when the pipeline container starts before --run-ontology has run.
+RUN mkdir -p /app/data/obo && touch /app/data/obo/deprecated_terms.txt
 
-# ── Scheduled-fetch entrypoint ─────────────────────────────────────────────
-# Used by the ECS Fargate task: syncs S3 → runs fetcher.py → syncs back.
+
+# ── Stage 2: fetcher (ECS Fargate scheduled fetch task) ─────────────────────
+# No Java. Entrypoint syncs S3 → runs fetcher.py → syncs back.
+FROM base AS fetcher
+
 COPY src/main/shell/fetch-entrypoint.sh /usr/local/bin/fetch-entrypoint
 RUN chmod +x /usr/local/bin/fetch-entrypoint
 
-# ── Default entrypoint ─────────────────────────────────────────────────────
-# Runs pipeline.py; pass stage flags (e.g. --run-results) as docker run args.
-# Override with --entrypoint to run fetcher.py or fetch-entrypoint instead.
-ENTRYPOINT ["python"]
+ENTRYPOINT ["/usr/local/bin/fetch-entrypoint"]
+
+
+# ── Stage 3: pipeline (AWS Batch ETL job) ────────────────────────────────────
+# Adds JRE so pipeline.py can call Java graph builders via subprocess.
+# openjdk-21-jre-headless matches the JDK 21 used to compile the JAR
+# (see build-jar.yml).
+FROM base AS pipeline
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openjdk-21-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/python/src
-CMD [ "pipeline.py"]
+ENTRYPOINT ["python"]
+CMD ["pipeline.py"]

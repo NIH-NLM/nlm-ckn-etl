@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   NLM-CKN Scheduled Fetch — runs fetcher.py on a cron schedule via ECS
   Fargate, writing the external API cache to S3.
-  Deploy ecr.yaml and push the nlm-ckn-etl image before this stack.
+  Deploy ecr.yaml and push the nlm-ckn-etl-fetcher image before this stack.
 
 # ── Parameters ──────────────────────────────────────────────────────────────
 Parameters:
@@ -11,7 +11,7 @@ Parameters:
     Type: String
     Description: >
       Name of the ecr.yaml CloudFormation stack.  The task definition pulls
-      the nlm-ckn-etl image URI from its RepositoryUri export.
+      the nlm-ckn-etl-fetcher image URI from its FetcherRepositoryUri export.
 
   S3Bucket:
     Type: String
@@ -205,7 +205,7 @@ Resources:
           Image: !Sub
             - "${RepoUri}:latest"
             - RepoUri:
-                Fn::ImportValue: !Sub "${EcrStackName}-RepositoryUri"
+                Fn::ImportValue: !Sub "${EcrStackName}-FetcherRepositoryUri"
           EntryPoint:
             - /usr/local/bin/fetch-entrypoint
           Environment:
