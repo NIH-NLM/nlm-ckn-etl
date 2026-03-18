@@ -6,15 +6,15 @@ import com.arangodb.ArangoGraph;
 import com.arangodb.ArangoVertexCollection;
 import com.arangodb.entity.BaseDocument;
 import com.arangodb.entity.BaseEdgeDocument;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -64,260 +64,280 @@ public class ResultsGraphBuilder {
      */
     public static ArrayList<ArrayList<Node>> readJsonFile(String jsonFilePath) throws IOException {
         ArrayList<ArrayList<Node>> tuplesArrayList = new ArrayList<>();
-        String content;
-        try {
-            content = new String(Files.readAllBytes(Paths.get(jsonFilePath)));
-        } catch (IOException e) {
-            throw new IOException("Error reading file: " + jsonFilePath, e);
-        }
-        JSONObject jsonObject;
-        try {
-            jsonObject = new JSONObject(content);
-        } catch (org.json.JSONException e) {
-            throw new IOException("Error parsing JSON in file: " + jsonFilePath, e);
-        }
-        JSONArray tuplesJsonArray = (JSONArray) jsonObject.get("tuples");
-        for (int iTuple = 0; iTuple < tuplesJsonArray.length(); iTuple++) {
-            ArrayList<Node> tupleArrayList = new ArrayList<>();
-            JSONArray tupleJsonArray = (JSONArray) tuplesJsonArray.get(iTuple);
-            for (int iElement = 0; iElement < tupleJsonArray.length(); iElement++) {
-                String value = tupleJsonArray.get(iElement).toString();
-                Node node;
-                if (value.contains("http")) {
-                    node = NodeFactory.createURI(value);
-                } else {
-                    node = NodeFactory.createLiteral(value);
-                }
-                tupleArrayList.add(node);
+        try (JsonParser parser = new JsonFactory().createParser(new FileInputStream(jsonFilePath))) {
+            advanceToTuplesArray(parser, jsonFilePath);
+            while (parser.nextToken() == JsonToken.START_ARRAY) {
+                ArrayList<Node> tuple = parseTupleFromStream(parser);
+                validateTuple(tuple);
+                tuplesArrayList.add(tuple);
             }
-            if (tupleArrayList.size() == 3 && !(tupleArrayList.get(TRIPLE_SUBJECT_IDX).isURI() && tupleArrayList.get(
-                    TRIPLE_PREDICATE_IDX).isURI() && (tupleArrayList.get(TRIPLE_OBJECT_IDX).isURI() || tupleArrayList.get(
-                    TRIPLE_OBJECT_IDX).isLiteral()))) {
-                throw new IOException("Invalid triple " + tupleArrayList);
-            }
-            if (tupleArrayList.size() == 4 && !(tupleArrayList.get(QUADRUPLE_SUBJECT_IDX).isURI() && tupleArrayList.get(
-                    QUADRUPLE_OBJECT_IDX).isURI() && tupleArrayList.get(QUADRUPLE_PREDICATE_IDX).isURI() && tupleArrayList.get(
-                    QUADRUPLE_LITERAL_IDX).isLiteral())) {
-                throw new IOException("Invalid quadruple " + tupleArrayList);
-            }
-            tuplesArrayList.add(tupleArrayList);
         }
         return tuplesArrayList;
     }
 
     /**
-     * Construct vertices using tuples parsed from a results file that contain a filled subject and object which contain
-     * an ontology ID contained in the valid vertices' collection.
+     * Advance a JsonParser to the start of the "tuples" array in the JSON object.
      *
-     * @param tuplesArrayList   list of tuples parsed from a results file
-     * @param graph             ArangoDB graph in which to create vertex collections
+     * @param parser            JsonParser positioned at the start of the file
+     * @param sourceDescription Description of the source (file path) for error messages
+     * @throws IOException if the JSON is malformed or the "tuples" field is missing
+     */
+    private static void advanceToTuplesArray(JsonParser parser, String sourceDescription) throws IOException {
+        if (parser.nextToken() != JsonToken.START_OBJECT) {
+            throw new IOException("Error parsing JSON in file: " + sourceDescription);
+        }
+        while (parser.nextToken() != null) {
+            if (parser.currentToken() == JsonToken.FIELD_NAME && "tuples".equals(parser.getCurrentName())) {
+                if (parser.nextToken() != JsonToken.START_ARRAY) {
+                    throw new IOException("Error parsing JSON in file: " + sourceDescription);
+                }
+                return;
+            }
+        }
+        throw new IOException("Error parsing JSON in file: " + sourceDescription);
+    }
+
+    /**
+     * Parse one tuple (inner array) from a JsonParser positioned at START_ARRAY.
+     *
+     * @param parser JsonParser positioned at START_ARRAY of the tuple
+     * @return List of nodes parsed from the tuple elements
+     * @throws IOException if the JSON is malformed
+     */
+    private static ArrayList<Node> parseTupleFromStream(JsonParser parser) throws IOException {
+        ArrayList<Node> tuple = new ArrayList<>();
+        while (parser.nextToken() != JsonToken.END_ARRAY) {
+            String value = parser.getText();
+            tuple.add(value.contains("http") ? NodeFactory.createURI(value) : NodeFactory.createLiteral(value));
+        }
+        return tuple;
+    }
+
+    /**
+     * Validate a tuple, throwing if it is not a valid triple or quadruple.
+     *
+     * @param tuple List of nodes to validate
+     * @throws IOException if the tuple is an invalid triple or quadruple
+     */
+    private static void validateTuple(ArrayList<Node> tuple) throws IOException {
+        if (tuple.size() == 3 && !(tuple.get(TRIPLE_SUBJECT_IDX).isURI() && tuple.get(TRIPLE_PREDICATE_IDX).isURI() && (tuple.get(
+                TRIPLE_OBJECT_IDX).isURI() || tuple.get(TRIPLE_OBJECT_IDX).isLiteral()))) {
+            throw new IOException("Invalid triple " + tuple);
+        }
+        if (tuple.size() == 4 && !(tuple.get(QUADRUPLE_SUBJECT_IDX).isURI() && tuple.get(QUADRUPLE_OBJECT_IDX).isURI() && tuple.get(
+                QUADRUPLE_PREDICATE_IDX).isURI() && tuple.get(QUADRUPLE_LITERAL_IDX).isLiteral())) {
+            throw new IOException("Invalid quadruple " + tuple);
+        }
+    }
+
+    /**
+     * Create a vertex collection and document for the given VTuple if they do not already exist.
+     *
+     * @param vtuple            VTuple identifying the vertex
+     * @param graph             ArangoDB graph
+     * @param vertexKeys        Set of existing vertex keys per collection, for deduplication
      * @param vertexCollections ArangoDB vertex collections
      * @param vertexDocuments   ArangoDB vertex documents
+     * @return true if a new vertex was created, false if it already existed
      */
-    public static void constructVertices(ArrayList<ArrayList<Node>> tuplesArrayList,
-                                         ArangoGraph graph,
-                                         Map<String, Set<String>> vertexKeys,
-                                         Map<String, ArangoVertexCollection> vertexCollections,
-                                         Map<String, Map<String, BaseDocument>> vertexDocuments) {
+    private static boolean createVertexIfAbsent(OntologyGraphBuilder.VTuple vtuple,
+                                                ArangoGraph graph,
+                                                Map<String, Set<String>> vertexKeys,
+                                                Map<String, ArangoVertexCollection> vertexCollections,
+                                                Map<String, Map<String, BaseDocument>> vertexDocuments) {
+        if (!vertexCollections.containsKey(vtuple.id())) {
+            vertexCollections.put(vtuple.id(), arangoDbUtilities.createOrGetVertexCollection(graph, vtuple.id()));
+            vertexDocuments.put(vtuple.id(), new HashMap<>());
+            vertexKeys.put(vtuple.id(), new HashSet<>());
+        }
+        if (!vertexKeys.get(vtuple.id()).contains(vtuple.number())) {
+            vertexDocuments.get(vtuple.id()).put(vtuple.number(), new BaseDocument(vtuple.number()));
+            vertexKeys.get(vtuple.id()).add(vtuple.number());
+            return true;
+        }
+        return false;
+    }
 
-        int nVertices = 0;
-        System.out.println("Constructing vertices using " + tuplesArrayList.size() + " tuples");
+    /**
+     * Create an edge collection and document for the given subject and object VTuples if they do not already exist. The
+     * Label attribute is not set here; callers are responsible for setting it.
+     *
+     * @param subjectVTuple   VTuple identifying the edge source vertex
+     * @param objectVTuple    VTuple identifying the edge target vertex
+     * @param graph           ArangoDB graph
+     * @param edgeKeys        Set of existing edge keys per collection, for deduplication
+     * @param edgeCollections ArangoDB edge collections
+     * @param edgeDocuments   ArangoDB edge documents
+     * @return true if a new edge was created, false if it already existed
+     */
+    private static boolean createEdgeIfAbsent(OntologyGraphBuilder.VTuple subjectVTuple,
+                                              OntologyGraphBuilder.VTuple objectVTuple,
+                                              ArangoGraph graph,
+                                              Map<String, Set<String>> edgeKeys,
+                                              Map<String, ArangoEdgeCollection> edgeCollections,
+                                              Map<String, Map<String, BaseEdgeDocument>> edgeDocuments) {
+        String idPair = subjectVTuple.id() + "-" + objectVTuple.id();
+        if (!edgeCollections.containsKey(idPair)) {
+            edgeCollections.put(idPair,
+                    arangoDbUtilities.createOrGetEdgeCollection(graph, subjectVTuple.id(), objectVTuple.id()));
+            edgeDocuments.put(idPair, new HashMap<>());
+            edgeKeys.put(idPair, new HashSet<>());
+        }
+        String key = subjectVTuple.number() + "-" + objectVTuple.number();
+        if (!edgeKeys.get(idPair).contains(key)) {
+            BaseEdgeDocument doc = new BaseEdgeDocument(key,
+                    subjectVTuple.id() + "/" + subjectVTuple.number(),
+                    objectVTuple.id() + "/" + objectVTuple.number());
+            edgeDocuments.get(idPair).put(key, doc);
+            edgeKeys.get(idPair).add(key);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Process a single tuples file in a single streaming pass, constructing and updating vertices and edges as each
+     * tuple is parsed. For each tuple, the subject and object vertices are created before any updates are applied, and
+     * for quadruples the edge is created before its attributes are updated. This eliminates the need to accumulate all
+     * tuples in memory and makes the processing order within the file irrelevant.
+     *
+     * @param tuplesFile                Path to the JSON file containing tuples
+     * @param ontologyElementMaps       Maps terms and labels
+     * @param ontologyGraph             ArangoDB graph
+     * @param ontologyVertexKeys        ArangoDB vertex keys for deduplication
+     * @param ontologyVertexCollections ArangoDB vertex collections
+     * @param ontologyVertexDocuments   ArangoDB vertex documents
+     * @param ontologyEdgeKeys          ArangoDB edge keys for deduplication
+     * @param ontologyEdgeCollections   ArangoDB edge collections
+     * @param ontologyEdgeDocuments     ArangoDB edge documents
+     * @throws IOException if the file cannot be read or contains invalid JSON
+     */
+    private static void processFileStreaming(Path tuplesFile,
+                                             Map<String, OntologyElementMap> ontologyElementMaps,
+                                             ArangoGraph ontologyGraph,
+                                             Map<String, Set<String>> ontologyVertexKeys,
+                                             Map<String, ArangoVertexCollection> ontologyVertexCollections,
+                                             Map<String, Map<String, BaseDocument>> ontologyVertexDocuments,
+                                             Map<String, Set<String>> ontologyEdgeKeys,
+                                             Map<String, ArangoEdgeCollection> ontologyEdgeCollections,
+                                             Map<String, Map<String, BaseEdgeDocument>> ontologyEdgeDocuments) throws IOException {
+
+        int nVertices = 0, nEdges = 0;
+        Set<String> updatedVertices = new HashSet<>();
+        Set<String> updatedEdges = new HashSet<>();
+        System.out.println("Processing tuples file " + tuplesFile);
         long startTime = System.nanoTime();
-        for (ArrayList<Node> tupleArrayList : tuplesArrayList) {
 
-            // Only construct vertices using triples
-            if (tupleArrayList.size() != 3) continue;
+        try (JsonParser parser = new JsonFactory().createParser(new FileInputStream(tuplesFile.toFile()))) {
+            advanceToTuplesArray(parser, tuplesFile.toString());
 
-            for (Node n : tupleArrayList) {
+            while (parser.nextToken() == JsonToken.START_ARRAY) {
+                ArrayList<Node> tuple = parseTupleFromStream(parser);
 
-                // Only construct valid vertices
-                OntologyGraphBuilder.VTuple vtuple = createVTuple(n);
-                if (!vtuple.isValidVertex()) continue;
+                if (tuple.size() == 3) {
+                    OntologyGraphBuilder.VTuple subjectVTuple = createVTuple(tuple.get(TRIPLE_SUBJECT_IDX));
+                    OntologyGraphBuilder.VTuple objectVTuple = createVTuple(tuple.get(TRIPLE_OBJECT_IDX));
 
-                // Create a vertex collection, if needed
-                if (!vertexCollections.containsKey(vtuple.id())) {
-                    vertexCollections.put(vtuple.id(),
-                            arangoDbUtilities.createOrGetVertexCollection(graph, vtuple.id()));
-                    vertexDocuments.put(vtuple.id(), new HashMap<>());
-                    vertexKeys.put(vtuple.id(), new HashSet<>());
+                    // Create subject and object vertices before applying any updates
+                    if (subjectVTuple.isValidVertex() && createVertexIfAbsent(subjectVTuple,
+                            ontologyGraph,
+                            ontologyVertexKeys,
+                            ontologyVertexCollections,
+                            ontologyVertexDocuments)) {
+                        nVertices++;
+                    }
+                    if (objectVTuple.isValidVertex() && createVertexIfAbsent(objectVTuple,
+                            ontologyGraph,
+                            ontologyVertexKeys,
+                            ontologyVertexCollections,
+                            ontologyVertexDocuments)) {
+                        nVertices++;
+                    }
+
+                    Node o = tuple.get(TRIPLE_OBJECT_IDX);
+                    if (o.isLiteral() && subjectVTuple.isValidVertex()) {
+                        // Update subject vertex with the literal attribute
+                        String attribute = parsePredicate(ontologyElementMaps, tuple.get(TRIPLE_PREDICATE_IDX));
+                        String literal = o.getLiteralValue().toString();
+                        BaseDocument doc = ontologyVertexDocuments.get(subjectVTuple.id()).get(subjectVTuple.number());
+                        updatedVertices.add(subjectVTuple.id() + "-" + subjectVTuple.number());
+                        if (doc.getAttribute(attribute) == null) {
+                            doc.addAttribute(attribute, literal);
+                        } else {
+                            doc.updateAttribute(attribute, literal);
+                        }
+                    } else if (subjectVTuple.isValidVertex() && objectVTuple.isValidVertex()) {
+                        // Create edge if absent, then always set/update the Label from this triple's predicate
+                        String label = normalizeEdgeLabel(parsePredicate(ontologyElementMaps,
+                                tuple.get(TRIPLE_PREDICATE_IDX)));
+                        if (createEdgeIfAbsent(subjectVTuple,
+                                objectVTuple,
+                                ontologyGraph,
+                                ontologyEdgeKeys,
+                                ontologyEdgeCollections,
+                                ontologyEdgeDocuments)) {
+                            nEdges++;
+                        }
+                        String idPair = subjectVTuple.id() + "-" + objectVTuple.id();
+                        String key = subjectVTuple.number() + "-" + objectVTuple.number();
+                        BaseEdgeDocument doc = ontologyEdgeDocuments.get(idPair).get(key);
+                        if (doc.getAttribute("Label") == null) {
+                            doc.addAttribute("Label", label);
+                        } else {
+                            doc.updateAttribute("Label", label);
+                        }
+                    }
+
+                } else if (tuple.size() == 4) {
+                    OntologyGraphBuilder.VTuple subjectVTuple = createVTuple(tuple.get(QUADRUPLE_SUBJECT_IDX));
+                    OntologyGraphBuilder.VTuple objectVTuple = createVTuple(tuple.get(QUADRUPLE_OBJECT_IDX));
+
+                    if (!subjectVTuple.isValidVertex() || !objectVTuple.isValidVertex()) continue;
+
+                    // Create subject and object vertices before creating the edge
+                    if (createVertexIfAbsent(subjectVTuple,
+                            ontologyGraph,
+                            ontologyVertexKeys,
+                            ontologyVertexCollections,
+                            ontologyVertexDocuments)) {
+                        nVertices++;
+                    }
+                    if (createVertexIfAbsent(objectVTuple,
+                            ontologyGraph,
+                            ontologyVertexKeys,
+                            ontologyVertexCollections,
+                            ontologyVertexDocuments)) {
+                        nVertices++;
+                    }
+
+                    // Create edge before updating its attribute (Label will be set when the construct triple arrives)
+                    if (createEdgeIfAbsent(subjectVTuple,
+                            objectVTuple,
+                            ontologyGraph,
+                            ontologyEdgeKeys,
+                            ontologyEdgeCollections,
+                            ontologyEdgeDocuments)) {
+                        nEdges++;
+                    }
+
+                    // Update edge attribute
+                    String idPair = subjectVTuple.id() + "-" + objectVTuple.id();
+                    String key = subjectVTuple.number() + "-" + objectVTuple.number();
+                    String attribute = parsePredicate(ontologyElementMaps, tuple.get(QUADRUPLE_PREDICATE_IDX));
+                    String literal = tuple.get(QUADRUPLE_LITERAL_IDX).getLiteralValue().toString();
+                    BaseEdgeDocument doc = ontologyEdgeDocuments.get(idPair).get(key);
+                    updatedEdges.add(subjectVTuple.id() + "/" + subjectVTuple.number() + "-" + objectVTuple.id() + "/" + objectVTuple.number());
+                    if (doc.getAttribute(attribute) == null) {
+                        doc.addAttribute(attribute, literal);
+                    } else {
+                        doc.updateAttribute(attribute, literal);
+                    }
                 }
-
-                // Construct the vertex, if needed
-                if (!vertexKeys.get(vtuple.id()).contains(vtuple.number())) {
-                    nVertices++;
-                    BaseDocument doc = new BaseDocument(vtuple.number());
-                    vertexDocuments.get(vtuple.id()).put(vtuple.number(), doc);
-                    vertexKeys.get(vtuple.id()).add(vtuple.number());
-                }
             }
         }
+
         long stopTime = System.nanoTime();
-        System.out.println("Constructed " + nVertices + " vertices using " + tuplesArrayList.size() + " tuples in " + (stopTime - startTime) / 1e9 + " s");
-    }
-
-    /**
-     * Update vertices using tuples parsed from a results file that contain a filled subject which contains an ontology
-     * ID contained in the valid vertices collection, and a filled object literal.
-     *
-     * @param tuplesArrayList     list of tuples parsed from a results file
-     * @param ontologyElementMaps Maps terms and labels
-     * @param vertexDocuments     ArangoDB vertex documents
-     */
-    public static void updateVertices(ArrayList<ArrayList<Node>> tuplesArrayList,
-                                      Map<String, OntologyElementMap> ontologyElementMaps,
-                                      Map<String, Map<String, BaseDocument>> vertexDocuments) throws RuntimeException {
-
-        Set<String> updatedVertices = new HashSet<>(); // For counting only
-        System.out.println("Updating vertices using " + tuplesArrayList.size() + " tuples");
-        long startTime = System.nanoTime();
-        for (ArrayList<Node> tupleArrayList : tuplesArrayList) {
-
-            // Only update vertices using triples
-            if (tupleArrayList.size() != 3) continue;
-
-            // Ensure the object contains a literal
-            Node o = tupleArrayList.get(TRIPLE_OBJECT_IDX);
-            if (!o.isLiteral()) {
-                continue;
-            }
-
-            // Parse the object
-            String literal = o.getLiteralValue().toString();
-
-            // Ensure the subject contains a valid ontology ID
-            OntologyGraphBuilder.VTuple vtuple = createVTuple(tupleArrayList.get(TRIPLE_SUBJECT_IDX));
-            if (!vtuple.isValidVertex()) continue;
-
-            // Parse the predicate
-            String attribute = parsePredicate(ontologyElementMaps, tupleArrayList.get(TRIPLE_PREDICATE_IDX));
-
-            // Update the corresponding vertex
-            if (!vertexDocuments.get(vtuple.id()).containsKey(vtuple.number()))
-                throw new RuntimeException("No vertex for VTuple " + vtuple);
-            updatedVertices.add(vtuple.id() + "-" + vtuple.number());
-            BaseDocument doc = vertexDocuments.get(vtuple.id()).get(vtuple.number());
-            if (doc.getAttribute(attribute) == null) {
-                doc.addAttribute(attribute, literal);
-            } else {
-                doc.updateAttribute(attribute, literal);
-            }
-        }
-        long stopTime = System.nanoTime();
-        System.out.println("Updated " + updatedVertices.size() + " vertices using " + tuplesArrayList.size() + " tuples in " + (stopTime - startTime) / 1e9 + " s");
-    }
-
-    /**
-     * Construct edges using tuples parsed from a results file that contain a filled subject and object each which
-     * contains an ontology ID contained in the valid vertices' collection.
-     *
-     * @param tuplesArrayList     list of tuples parsed from a results file
-     * @param ontologyElementMaps Maps terms and labels
-     * @param graph               ArangoDB graph
-     * @param edgeKeys            ArangoDB edge keys for deduplication
-     * @param edgeCollections     ArangoDB edge collections
-     * @param edgeDocuments       ArangoDB edge documents
-     */
-    public static void constructEdges(ArrayList<ArrayList<Node>> tuplesArrayList,
-                                      Map<String, OntologyElementMap> ontologyElementMaps,
-                                      ArangoGraph graph,
-                                      Map<String, Set<String>> edgeKeys,
-                                      Map<String, ArangoEdgeCollection> edgeCollections,
-                                      Map<String, Map<String, BaseEdgeDocument>> edgeDocuments) throws RuntimeException {
-
-        int nEdges = 0;
-        System.out.println("Constructing edges using " + tuplesArrayList.size() + " tuples");
-        long startTime = System.nanoTime();
-        for (ArrayList<Node> tupleArrayList : tuplesArrayList) {
-
-            // Only construct edges using triples
-            if (tupleArrayList.size() != 3) continue;
-
-            // Ensure the subject contains a valid ontology ID
-            OntologyGraphBuilder.VTuple subjectVTuple = createVTuple(tupleArrayList.get(TRIPLE_SUBJECT_IDX));
-            if (!subjectVTuple.isValidVertex()) continue;
-
-            // Ensure the object contains a valid ontology ID
-            OntologyGraphBuilder.VTuple objectVTuple = createVTuple(tupleArrayList.get(TRIPLE_OBJECT_IDX));
-            if (!objectVTuple.isValidVertex()) continue;
-
-            // Parse the predicate
-            String label = normalizeEdgeLabel(parsePredicate(ontologyElementMaps,
-                    tupleArrayList.get(TRIPLE_PREDICATE_IDX)));
-
-            // Create an edge collection, if needed
-            String idPair = subjectVTuple.id() + "-" + objectVTuple.id();
-            if (!edgeCollections.containsKey(idPair)) {
-                edgeCollections.put(idPair,
-                        arangoDbUtilities.createOrGetEdgeCollection(graph, subjectVTuple.id(), objectVTuple.id()));
-                edgeDocuments.put(idPair, new HashMap<>());
-                edgeKeys.put(idPair, new HashSet<>());
-            }
-
-            // Construct the edge, if needed
-            String key = subjectVTuple.number() + "-" + objectVTuple.number();
-            if (!edgeKeys.get(idPair).contains(key)) {
-                nEdges++;
-                BaseEdgeDocument doc = new BaseEdgeDocument(key,
-                        subjectVTuple.id() + "/" + subjectVTuple.number(),
-                        objectVTuple.id() + "/" + objectVTuple.number());
-                doc.addAttribute("Label", label);
-                edgeDocuments.get(idPair).put(key, doc);
-                edgeKeys.get(idPair).add(key);
-            }
-        }
-        long stopTime = System.nanoTime();
-        System.out.println("Constructed " + nEdges + " edges using " + tuplesArrayList.size() + " tuples in " + (stopTime - startTime) / 1e9 + " s");
-    }
-
-    /**
-     * Update edges using tuples parsed from a results file that contain a filled subject and object each which contains
-     * an ontology ID contained in the valid vertices collection, and two filled predicate literals.
-     *
-     * @param tuplesArrayList     list of tuples parsed from a results file
-     * @param ontologyElementMaps Maps terms and labels
-     * @param edgeDocuments       ArangoDB edge documents
-     */
-    public static void updateEdges(ArrayList<ArrayList<Node>> tuplesArrayList,
-                                   Map<String, OntologyElementMap> ontologyElementMaps,
-                                   Map<String, Map<String, BaseEdgeDocument>> edgeDocuments) throws RuntimeException {
-
-        Set<String> updatedEdges = new HashSet<>(); // For counting only
-        System.out.println("Updating edges using " + tuplesArrayList.size() + " tuples");
-        long startTime = System.nanoTime();
-        for (ArrayList<Node> tupleArrayList : tuplesArrayList) {
-
-            // Only update edges using quadruples
-            if (tupleArrayList.size() != 4) continue;
-
-            // Ensure the subject contains a valid ontology ID
-            OntologyGraphBuilder.VTuple subjectVTuple = createVTuple(tupleArrayList.get(QUADRUPLE_SUBJECT_IDX));
-            if (!subjectVTuple.isValidVertex()) continue;
-
-            // Ensure the object contains a valid ontology ID
-            OntologyGraphBuilder.VTuple objectVTuple = createVTuple(tupleArrayList.get(QUADRUPLE_OBJECT_IDX));
-            if (!objectVTuple.isValidVertex()) continue;
-
-            // Parse the predicate
-            String attribute = parsePredicate(ontologyElementMaps, tupleArrayList.get(QUADRUPLE_PREDICATE_IDX));
-
-            // Parse the literal
-            String literal = tupleArrayList.get(QUADRUPLE_LITERAL_IDX).getLiteralValue().toString();
-
-            // Update the corresponding edge
-            String idPair = subjectVTuple.id() + "-" + objectVTuple.id();
-            String key = subjectVTuple.number() + "-" + objectVTuple.number();
-            if (!edgeDocuments.get(idPair).containsKey(key))
-                throw new RuntimeException("Invalid edge in collection " + idPair + " with key " + key);
-            updatedEdges.add(subjectVTuple.id() + "/" + subjectVTuple.number() + "-" + objectVTuple.id() + "/" + objectVTuple.number());
-            BaseEdgeDocument doc = edgeDocuments.get(idPair).get(key);
-            if (doc.getAttribute(attribute) == null) {
-                doc.addAttribute(attribute, literal);
-            } else {
-                doc.updateAttribute(attribute, literal);
-            }
-        }
-        long stopTime = System.nanoTime();
-        System.out.println("Updated " + updatedEdges.size() + " edges using " + tuplesArrayList.size() + " tuples in " + (stopTime - startTime) / 1e9 + " s");
+        System.out.println("Constructed " + nVertices + " vertices, updated " + updatedVertices.size() + " vertices, constructed " + nEdges + " edges, updated " + updatedEdges.size() + " edges from " + tuplesFile.getFileName() + " in " + (stopTime - startTime) / 1e9 + " s");
     }
 
     /**
@@ -378,33 +398,23 @@ public class ResultsGraphBuilder {
         Map<String, ArangoEdgeCollection> ontologyEdgeCollections = new HashMap<>();
         Map<String, Map<String, BaseEdgeDocument>> ontologyEdgeDocuments = new HashMap<>();
 
-        // Read the results tuples files
+        // Process each tuples file in a single streaming pass
         for (Path tuplesFile : tuplesFiles) {
-            System.out.println("Processing tuples file " + tuplesFile);
-            ArrayList<ArrayList<Node>> tuplesArrayList;
             try {
-                tuplesArrayList = readJsonFile(tuplesFile.toString());
+                processFileStreaming(tuplesFile,
+                        ontologyElementMaps,
+                        ontologyGraph,
+                        ontologyVertexKeys,
+                        ontologyVertexCollections,
+                        ontologyVertexDocuments,
+                        ontologyEdgeKeys,
+                        ontologyEdgeCollections,
+                        ontologyEdgeDocuments);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-
-            // Construct, and update vertices
-            constructVertices(tuplesArrayList,
-                    ontologyGraph,
-                    ontologyVertexKeys,
-                    ontologyVertexCollections,
-                    ontologyVertexDocuments);
-            updateVertices(tuplesArrayList, ontologyElementMaps, ontologyVertexDocuments);
-
-            // Construct, and update edges
-            constructEdges(tuplesArrayList,
-                    ontologyElementMaps,
-                    ontologyGraph,
-                    ontologyEdgeKeys,
-                    ontologyEdgeCollections,
-                    ontologyEdgeDocuments);
-            updateEdges(tuplesArrayList, ontologyElementMaps, ontologyEdgeDocuments);
         }
+
         // Insert vertices, and edges
         try {
             insertVertices(ontologyVertexCollections, ontologyVertexDocuments);
