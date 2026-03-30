@@ -8,7 +8,7 @@ import shutil
 
 import requests
 
-from E_Utilities import get_data_for_gene_id
+from E_Utilities import get_data_for_gene_id, get_data_for_pmid
 from OpenTargetsGGetQueries import gget_queries
 from LoaderUtilities import (
     EXTERNAL_DIRPATH,
@@ -43,6 +43,7 @@ HUBMAP_LATEST_URLS = [
 
 CELLXGENE_PATH = EXTERNAL_DIRPATH / "cellxgene.json"
 OPENTARGETS_PATH = EXTERNAL_DIRPATH / "opentargets.json"
+PUBMED_PATH = EXTERNAL_DIRPATH / "pubmed.json"
 EBI_PATH = EXTERNAL_DIRPATH / "ebi.json"
 RXNAV_PATH = EXTERNAL_DIRPATH / "rxnav.json"
 DRUGBANK_PATH = EXTERNAL_DIRPATH / "drugbank.json"
@@ -983,6 +984,54 @@ def get_uniprot_results(force=False):
                 json.dump(uniprot_results, fp, indent=4)
 
     return uniprot_results
+
+
+def get_pubmed_results(pmid_list, force=False):
+    """Use PubMed E-utilities to fetch citation metadata for a list of PMIDs.
+
+    Caches results to data/external/pubmed.json, keyed by PMID string.
+    Failed fetches are recorded as {} so --retry-empty can clean and retry
+    them on the next run.
+
+    Parameters
+    ----------
+    pmid_list : list(str)
+        List of PubMed identifiers to fetch
+    force : bool
+        Flag to force fetching, ignoring the on-disk cache
+
+    Returns
+    -------
+    pubmed_results : dict
+        Dictionaries containing PubMed citation data keyed by PMID string
+    """
+    if not PUBMED_PATH.exists() or force:
+        pubmed_results = {}
+    else:
+        print(f"Loading pubmed results from {PUBMED_PATH}")
+        with open(PUBMED_PATH, "r") as fp:
+            pubmed_results = json.load(fp)
+
+    # Always write the file before the loop so it exists even when pmid_list
+    # is empty (e.g. on first run before any author-to-CL paths are found).
+    print(f"Initialising pubmed cache at {PUBMED_PATH}")
+    with open(PUBMED_PATH, "w") as fp:
+        json.dump(pubmed_results, fp, indent=4)
+
+    for pmid in pmid_list:
+        pmid = str(pmid)
+        if pmid in pubmed_results and pubmed_results[pmid]:
+            print(f"Using cached pubmed data for PMID {pmid}")
+            continue
+
+        data = get_data_for_pmid(pmid)
+        pubmed_results[pmid] = data  # {} on failure; retried by --retry-empty
+
+        print(f"Dumping pubmed results to {PUBMED_PATH}")
+        with open(PUBMED_PATH, "w") as fp:
+            json.dump(pubmed_results, fp, indent=4)
+
+    return pubmed_results
 
 
 def get_hubmap_json_urls():
