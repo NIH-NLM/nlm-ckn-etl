@@ -719,7 +719,14 @@ def build_induced_subgraph(
         _java_cmd("gov.nih.nlm.InducedSubgraphBuilder", arango_db_password, java_opts),
         check=True,
         cwd=REPO_ROOT,
-        env={**os.environ, **_arango_env(arango_db_password)},
+        env={
+            **os.environ,
+            **_arango_env(arango_db_password),
+            "ARANGO_ONTOLOGY_DB_NAME": "Cell-KN-Ontologies",
+            "ARANGO_ONTOLOGY_GRAPH_NAME": "KN-Ontologies-v2.0",
+            "ARANGO_PHENOTYPE_DB_NAME": "Cell-KN-Phenotypes",
+            "ARANGO_PHENOTYPE_GRAPH_NAME": "KN-Phenotypes-v2.0",
+        },
     )
     logger.info("Induced subgraph built")
 
@@ -898,7 +905,6 @@ def nlm_ckn_etl(
 
     **Phase 2 — Iterative Refinement** (``run_results``):
       ``arangorestore`` from baseline → write tuples → build results /
-<<<<<<< HEAD
       induced-subgraph graphs.  Can be re-run cheaply without
       repeating Phase 1.  Requires the baseline dump to exist.
 
@@ -1018,6 +1024,21 @@ def nlm_ckn_etl(
     # baseline already existed and Phase 1 was a no-op.
     if ARANGO_DB_HOST == "localhost" and not phase1_started_arangodb:
         if run_results or force_results or run_archive or force_archive:
+            # When running Phase 2 (results), wipe the data dir before starting
+            # so ArangoDB initialises fresh with the current password.  The
+            # restore_arangodb call below overwrites the database anyway, so
+            # any existing data in arango_db_home is discarded.  Without this
+            # wipe, ArangoDB ignores ARANGO_ROOT_PASSWORD on restart and keeps
+            # the password baked into the data dir, causing a "forbidden" error
+            # if the password file was regenerated (e.g. in a new batch container).
+            if run_results or force_results:
+                arango_home = Path(arango_db_home)
+                if arango_home.exists():
+                    logger.info(
+                        f"Wiping ArangoDB data dir before Phase 2 start "
+                        f"to force password re-initialisation: {arango_home}"
+                    )
+                    shutil.rmtree(arango_home)
             actual_port = start_arangodb(arango_db_home, arango_db_password)
             _set_arango_port(actual_port)
 
