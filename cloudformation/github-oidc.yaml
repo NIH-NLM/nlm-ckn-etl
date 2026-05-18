@@ -34,6 +34,13 @@ Parameters:
       Name of the ECR CloudFormation stack. The role is granted push access
       to all repositories in that stack.
 
+  S3BucketName:
+    Type: String
+    Description: >
+      S3 bucket used to stage release tarballs and release.json (the S3_BUCKET
+      secret). The release role is granted s3:PutObject and s3:GetObject on
+      the uploads/ prefix of this bucket.
+
 # ── Conditions ──────────────────────────────────────────────────────────────
 Conditions:
   ShouldCreateOidcProvider: !Equals [!Ref CreateOidcProvider, "true"]
@@ -110,6 +117,52 @@ Resources:
             Action: cloudformation:DescribeStacks
             Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${EcrStackName}/*"
 
+  ReleaseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: nlm-ckn-etl-github-release
+      Description: Assumed by GitHub Actions to submit Batch release jobs and stage artifacts to S3
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - ShouldCreateOidcProvider
+                - !Ref GitHubOidcProvider
+                - !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Ref GitHubRepos
+
+  ReleasePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: nlm-ckn-etl-github-release
+      Roles:
+        - !Ref ReleaseRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # Submit release job to the nlm-ckn-release queue
+          - Sid: BatchSubmitJob
+            Effect: Allow
+            Action: batch:SubmitJob
+            Resource:
+              - !Sub "arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-queue/nlm-ckn-release"
+              - !Sub "arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/nlm-ckn-release*"
+
+          # Stage release tarball and release.json to S3
+          - Sid: S3StageArtifacts
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+            Resource: !Sub "arn:aws:s3:::${S3BucketName}/uploads/*"
+
 # ── Outputs ──────────────────────────────────────────────────────────────────
 Outputs:
 
@@ -118,3 +171,9 @@ Outputs:
     Value: !GetAtt BuildRole.Arn
     Export:
       Name: !Sub "${AWS::StackName}-BuildRoleArn"
+
+  ReleaseRoleArn:
+    Description: ARN of the GitHub Actions release role (use in AWS_RELEASE_ROLE_ARN)
+    Value: !GetAtt ReleaseRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ReleaseRoleArn"

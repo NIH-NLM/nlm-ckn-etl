@@ -86,7 +86,17 @@ PYTHON_SRC = str(REPO_ROOT / "python" / "src")
 
 
 def _get_or_create_arango_password() -> str:
-    """Read the ArangoDB root password from .arangodb-password, creating it on first run."""
+    """Return the ArangoDB root password.
+
+    Priority:
+    1. ``ARANGO_DB_PASSWORD`` env var — used on AWS where the password is
+       injected via the task definition or Secrets Manager.
+    2. ``.arangodb-password`` file in the repo root — used locally.
+    3. Generate a new random password and write it to the file.
+    """
+    env_password = os.getenv("ARANGO_DB_PASSWORD")
+    if env_password:
+        return env_password
     password_file = REPO_ROOT / ".arangodb-password"
     if password_file.exists():
         return password_file.read_text().strip()
