@@ -152,15 +152,15 @@ echo "[trigger-release] Uploaded: ${RELEASE_CONFIG_S3}"
 # tag and post an in_progress status.  The Batch container uses GITHUB_DEPLOYMENT_ID
 # to post the final success/failure status when the pipeline completes.
 GITHUB_DEPLOYMENT_ID=""
-if [[ -n "${GITHUB_TOKEN:-}" && -n "${GITHUB_REPOSITORY:-}" ]]; then
-  echo "[trigger-release] Creating GitHub deployment for ${TAG} ..."
-  DEPLOY_RESPONSE=$(curl -sf -X POST \
+if [[ -n "${GITHUB_TOKEN:-}" && -n "${GITHUB_REPOSITORY:-}" && -n "${GITHUB_REF_NAME:-}" ]]; then
+  echo "[trigger-release] Creating GitHub deployment for ${GITHUB_REF_NAME} (nlm-ckn tag: ${TAG}) ..."
+  DEPLOY_RESPONSE=$(curl -s -X POST \
     -H "Authorization: Bearer ${GITHUB_TOKEN}" \
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments" \
-    -d "{\"ref\":\"${TAG}\",\"environment\":\"production\",\"auto_merge\":false,\"required_contexts\":[]}" \
-    2>/dev/null) || true
+    -d "{\"ref\":\"${GITHUB_REF_NAME}\",\"environment\":\"production\",\"description\":\"nlm-ckn ${TAG}\",\"auto_merge\":false,\"required_contexts\":[]}")
+  echo "[trigger-release] Deployment API response: ${DEPLOY_RESPONSE}" >&2
   GITHUB_DEPLOYMENT_ID=$(python3 -c \
     "import sys,json; print(json.load(sys.stdin).get('id',''))" \
     <<< "${DEPLOY_RESPONSE}" 2>/dev/null) || true

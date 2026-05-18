@@ -41,10 +41,9 @@ jobs:
 
       - name: Submit release job
         env:
-          ETL_RELEASE_TAG:    ${{ github.event.release.tag_name }}
-          GITHUB_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY:  ${{ github.repository }}
-          S3_BUCKET:          ${{ secrets.S3_BUCKET }}
+          ETL_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_TOKEN:    ${{ secrets.GITHUB_TOKEN }}
+          S3_BUCKET:       ${{ secrets.S3_BUCKET }}
         run: |
           bash src/main/shell/trigger-release.sh \
             --run-name "${ETL_RELEASE_TAG}"
