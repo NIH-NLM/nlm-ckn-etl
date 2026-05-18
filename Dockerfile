@@ -119,6 +119,9 @@ ENV PREFECT_SERVER_EPHEMERAL_STARTUP_TIMEOUT_SECONDS=120
 # Disable Prefect's background telemetry heartbeat — it races the ephemeral
 # SQLite server at startup and causes "database is locked" errors.
 ENV PREFECT_TELEMETRY_ENABLED=false
+# Prefect's block auto-registration writes memo_store.toml to ~/.prefect
+# regardless of PREFECT_HOME; create the directory so it doesn't warn.
+RUN mkdir -p /root/.prefect
 
 # ── Python dependencies ────────────────────────────────────────────────────
 # poetry is used only to export the pinned requirements from poetry.lock;
@@ -147,6 +150,7 @@ COPY python/src /app/python/src
 # Large generated data (obo/, external/, results/, tuples/) must be mounted or
 # synced from S3 at runtime.
 COPY data/*.json data/*.csv /app/data/
+COPY data/schema/ /app/data/schema/
 # data/obo/ files are generated at runtime:
 #   deprecated_terms.txt and edge_labels.txt are WRITTEN by OntologyGraphBuilder
 #   during --run-ontology; *.owl files are downloaded by OntologyDownloader.

@@ -5,7 +5,9 @@ import random
 
 from arango import ArangoClient
 
-ARANGO_URL = "http://localhost:8529"
+_ARANGO_HOST = os.getenv("ARANGO_DB_HOST", "localhost")
+_ARANGO_PORT = os.getenv("ARANGO_DB_PORT", "8529")
+ARANGO_URL = f"http://{_ARANGO_HOST}:{_ARANGO_PORT}"
 ARANGO_CLIENT = ArangoClient(hosts=ARANGO_URL)
 ARANGO_ROOT_PASSWORD = os.getenv("ARANGO_DB_PASSWORD", "")
 SYS_DB = ARANGO_CLIENT.db("_system", username="root", password=ARANGO_ROOT_PASSWORD)
