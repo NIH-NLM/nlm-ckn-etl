@@ -218,11 +218,13 @@ Resources:
                   - s3:PutObject
                   - s3:CopyObject
                 Resource:
-                  - !Sub 'arn:aws:s3:::${S3Bucket}/external-staging/*'
+                  - !Sub 'arn:aws:s3:::${S3Bucket}/runs/*/external-staging/*'
                   - !Sub 'arn:aws:s3:::${S3Bucket}/external/*'
-              - Sid: ReadRunResults
+              - Sid: ReadAndWriteRuns
                 Effect: Allow
-                Action: s3:GetObject
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
                 Resource: !Sub 'arn:aws:s3:::${S3Bucket}/runs/*'
       Tags:
         - Key: Project

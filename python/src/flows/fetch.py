@@ -430,7 +430,7 @@ def nlm_ckn_fetch(
     validate_external_files(run=run)
     record_fetch_artifact(run=run)
     sync_external_to_s3_staging(run=run)  # write to staging; pipeline.py is unaffected
-    promote_external_staging()  # server-side copy staging → live external/
+    promote_external_staging(run=run)  # server-side copy runs/{run}/external-staging/ → external/
 
 
 # ── CLI entry point ────────────────────────────────────────────────────────

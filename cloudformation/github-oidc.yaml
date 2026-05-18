@@ -39,7 +39,7 @@ Parameters:
     Description: >
       S3 bucket used to stage release tarballs and release.json (the S3_BUCKET
       secret). The release role is granted s3:PutObject and s3:GetObject on
-      the uploads/ prefix of this bucket.
+      the runs/ prefix of this bucket.
 
 # ── Conditions ──────────────────────────────────────────────────────────────
 Conditions:
@@ -161,7 +161,7 @@ Resources:
             Action:
               - s3:PutObject
               - s3:GetObject
-            Resource: !Sub "arn:aws:s3:::${S3BucketName}/uploads/*"
+            Resource: !Sub "arn:aws:s3:::${S3BucketName}/runs/*"
 
 # ── Outputs ──────────────────────────────────────────────────────────────────
 Outputs:

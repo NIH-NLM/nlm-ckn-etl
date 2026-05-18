@@ -4,8 +4,8 @@
 # Runs flows/fetch.py, which internally handles:
 #   1. Restoring the external API cache from s3://S3_BUCKET/external/
 #   2. Fetching from external APIs (CELLxGENE, Open Targets, NCBI, UniProt, HuBMAP)
-#   3. Pushing the validated cache to s3://S3_BUCKET/external-staging/
-#   4. Promoting staging → s3://S3_BUCKET/external/ atomically
+#   3. Pushing the validated cache to s3://S3_BUCKET/runs/{run}/external-staging/
+#   4. Promoting runs/{run}/external-staging/ → s3://S3_BUCKET/external/ atomically
 #
 # The staging → promotion split ensures a concurrent pipeline.py reading from
 # external/ always sees a complete, validated snapshot.

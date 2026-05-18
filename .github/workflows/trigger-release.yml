@@ -10,7 +10,7 @@ name: Trigger NLM-CKN Release
 #
 #   gh workflow run trigger-release.yml \
 #     --field tag=v2026-04 \
-#     --field tar_source=s3://my-bucket/uploads/prod-data-v2026-04.tar.gz \
+#     --field tar_source=s3://my-bucket/runs/2026-04/prod-data-v2026-04.tar.gz \
 #     --field skip_ontology=true
 #
 # Required GitHub secrets:

@@ -106,14 +106,19 @@ done
 
 [[ -z "${TAG}" ]] && { echo "ERROR: --tag is required (or set cell_kn_tag in release.json)" >&2; usage; }
 
+# Derive the run name the same way release.py does: strip a leading 'v' from
+# the tag, unless --run-name was given explicitly.
+RUN="${RUN_NAME:-${TAG#v}}"
+
 # ── Stage tarball to S3 if needed ────────────────────────────────────────────
 # HTTPS URLs are downloaded here (where GITHUB_TOKEN is available) and uploaded
 # to S3 so the Batch container never needs to reach GitHub directly.
 # Local paths are uploaded directly.
 # Existing s3:// URLs are passed through unchanged.
+# Files go under runs/{run}/ so concurrent releases don't share a staging area.
 if [[ -n "${TAR_SOURCE}" && "${TAR_SOURCE}" != s3://* ]]; then
   : "${S3_BUCKET:?S3_BUCKET must be set to stage the release tarball}"
-  S3_KEY="uploads/$(basename "${TAR_SOURCE%%\?*}")"  # strip any query string for the key
+  S3_KEY="runs/${RUN}/$(basename "${TAR_SOURCE%%\?*}")"  # strip any query string for the key
 
   if [[ "${TAR_SOURCE}" == http://* || "${TAR_SOURCE}" == https://* ]]; then
     echo "[trigger-release] Downloading tarball from ${TAR_SOURCE} ..."
@@ -135,8 +140,9 @@ fi
 
 # ── Upload release.json to S3 ─────────────────────────────────────────────────
 # The Batch container reads hubmap_urls and release config from this file.
+# Scoped to runs/{run}/ so concurrent releases don't overwrite each other's config.
 : "${S3_BUCKET:?S3_BUCKET must be set}"
-RELEASE_CONFIG_S3="s3://${S3_BUCKET}/uploads/release.json"
+RELEASE_CONFIG_S3="s3://${S3_BUCKET}/runs/${RUN}/release.json"
 echo "[trigger-release] Uploading release.json → ${RELEASE_CONFIG_S3} ..."
 aws s3 cp "${RELEASE_JSON}" "${RELEASE_CONFIG_S3}"
 echo "[trigger-release] Uploaded: ${RELEASE_CONFIG_S3}"
@@ -156,7 +162,8 @@ env_json+="]"
 overrides="{\"environment\":${env_json}}"
 
 # Sanitise the tag for use as a job name (Batch allows [a-zA-Z0-9_-]).
-JOB_NAME="nlm-ckn-release-${TAG//[^a-zA-Z0-9_-]/-}"
+LABEL="${RUN_NAME:-${TAG}}"
+JOB_NAME="nlm-ckn-release-${LABEL//[^a-zA-Z0-9_-]/-}"
 
 # ── Submit ────────────────────────────────────────────────────────────────────
 echo "[trigger-release] Submitting: job=${JOB_NAME}  queue=${JOB_QUEUE}  definition=${JOB_DEFINITION}"

@@ -73,7 +73,7 @@ import re
 import shutil
 import subprocess
 import tarfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
@@ -824,13 +824,25 @@ def promote_to_production(
     except Exception:
         commit = "unknown"
 
-    date_stamp = datetime.now().strftime("%Y-%m-%d")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     build_info_lines = [
-        f"Date:    {date_stamp}",
-        f"Commit:  {commit}",
-        f"Run:     {run_name}",
-        f"JAR key: {jar_key or 'unknown'}",
+        f"Built at: {timestamp}",
+        f"Commit:   {commit}",
+        f"Run:      {run_name}",
+        f"JAR key:  {jar_key or 'unknown'}",
     ]
+
+    gh_server   = os.getenv("GITHUB_SERVER_URL")
+    gh_repo     = os.getenv("GITHUB_REPOSITORY")
+    gh_run_id   = os.getenv("GITHUB_RUN_ID")
+    gh_workflow = os.getenv("GITHUB_WORKFLOW")
+    gh_actor    = os.getenv("GITHUB_ACTOR")
+    if gh_server and gh_repo and gh_run_id:
+        build_info_lines += [
+            f"GHA workflow: {gh_workflow or 'unknown'}",
+            f"GHA actor:    {gh_actor or 'unknown'}",
+            f"GHA run:      {gh_server}/{gh_repo}/actions/runs/{gh_run_id}",
+        ]
 
     fetch_info_path = ext_dir / "fetch-info.json"
     if fetch_info_path.exists():

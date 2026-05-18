@@ -18,8 +18,8 @@ Reads the NSForest results directory to determine which genes to fetch. The
 scheduled task always reads from `runs/latest/01-results/` (see
 [Lifecycle](#lifecycle) below).
 
-To protect concurrent pipeline runs, new data is written to the
-`external-staging/` S3 prefix first and only promoted to the live `external/`
+To protect concurrent pipeline runs, new data is written to
+`runs/{run}/external-staging/` first and only promoted to the live `external/`
 prefix after the full fetch passes validation.
 
 **Key parameters**
@@ -84,8 +84,8 @@ fails, `latest` is never updated.
                         fetch.py (ECS Fargate)
                         reads  → runs/latest/01-results/  (last good release gene set)
                         reads  → external/                (resume from last complete cache)
-                        writes → external-staging/        (new data, after validation)
-                        copies → external-staging/ → external/  (atomic promotion)
+                        writes → runs/{run}/external-staging/   (new data, after validation)
+                        copies → runs/{run}/external-staging/ → external/  (atomic promotion)
 
              ┌─────────────────────────────────────────────┐
              │  release.py (manual / CI trigger)           │
@@ -99,7 +99,7 @@ fails, `latest` is never updated.
                         reads  → external/fetch-info.json  (check cache age)
                         if fresh: retry_empty=True          (fast — bulk served from cache)
                         if stale: force=True                (full re-fetch)
-                        writes → external-staging/ → external/
+                        writes → runs/{run}/external-staging/ → external/
 
              Step 3:    pipeline.py (inline)
                         (see S3 layout below for per-phase reads/writes)
@@ -132,25 +132,26 @@ s3://{S3_BUCKET}/
 │   ├── pubmed.json
 │   └── fetch-info.json              # Timestamp + file sizes for the last fetch
 │
-├── external-staging/                # In-flight fetch output (mirrors external/)
-│   └── ...                          # Promoted to external/ after validation
+├── baselines/
+│   └── {jar_key}/                   # 16-char JAR content hash
+│       └── baseline-dump.tar.gz     # ArangoDB dump after Phase 1 (ontology)
 │
-├── runs/
-│   ├── latest/
-│   │   └── 01-results/              # Stable pointer → last successful release
-│   │       └── *_results.csv
-│   │
-│   └── {run}/                       # One directory per release (e.g. 2026-04)
-│       ├── 01-results/              # Flat NSForest result CSVs + hubmap_urls.txt
-│       ├── 02-external.tar.gz       # Snapshot of external/ used for this run
-│       ├── 03-obo.tar.gz            # OWL ontology files
-│       ├── 04-baseline-dump.tar.gz  # ArangoDB baseline dump (post-ontology)
-│       ├── 05-tuples.tar.gz         # Tuple JSON files
-│       ├── 06-golden-dump.tar.gz    # Final ArangoDB dump (production artifact)
-│       └── build-info.txt           # Version metadata (date, commit, fetch info)
-│
-└── artifacts/
-    └── nlm-ckn-etl-1.0.jar         # Compiled Java JAR (written by CI/CD)
+└── runs/
+    ├── latest/
+    │   └── 01-results/              # Stable pointer → last successful release
+    │       └── *_results.csv
+    │
+    └── {run}/                       # One directory per release tag (e.g. 0.0.0-alpha)
+        ├── 01-results/              # Flat NSForest result CSVs + hubmap_urls.txt
+        ├── 02-external.tar.gz       # Snapshot of external/ used for this run
+        ├── 03-obo.tar.gz            # OWL ontology files
+        ├── 05-tuples.tar.gz         # Tuple JSON files
+        ├── 06-golden-dump.tar.gz    # Final ArangoDB dump (production artifact)
+        ├── build-info.txt           # Version metadata (date, commit, fetch info)
+        ├── {tarball}                # Release tarball staged by trigger-release.sh
+        ├── release.json             # Release config staged by trigger-release.sh
+        └── external-staging/        # In-flight fetch output (mirrors external/)
+            └── ...                  # Promoted to external/ after validation
 ```
 
 ### Read/write by flow and phase
@@ -158,17 +159,18 @@ s3://{S3_BUCKET}/
 | S3 path | Written by | Read by |
 |---------|------------|---------|
 | `external/` | `fetch.py` (via staging promotion) | `fetch.py` (resume), `pipeline.py` Phase 2 |
-| `external-staging/` | `fetch.py` | `fetch.py` (promotion source) |
 | `external/fetch-info.json` | `fetch.py` | `release.py` (`resolve_fetch_force`) |
+| `baselines/{jar_key}/baseline-dump.tar.gz` | `pipeline.py` Phase 1 | `pipeline.py` Phase 2 |
 | `runs/latest/01-results/` | `release.py` (on full success) | `fetch.py` (scheduled task) |
+| `runs/{run}/release.json` | `trigger-release.sh` | `release.py` (via `RELEASE_CONFIG` env var) |
+| `runs/{run}/{tarball}` | `trigger-release.sh` | `release.py` Step 1 |
 | `runs/{run}/01-results/` | `release.py` Step 1 | `pipeline.py` Phase 2, `fetch.py` (non-scheduled) |
+| `runs/{run}/external-staging/` | `fetch.py` | `fetch.py` (promotion source) |
 | `runs/{run}/02-external.tar.gz` | `pipeline.py` Phase 3 | audit / manual restore |
 | `runs/{run}/03-obo.tar.gz` | `pipeline.py` Phase 3 | audit / manual restore |
-| `runs/{run}/04-baseline-dump.tar.gz` | `pipeline.py` Phase 1 | `pipeline.py` Phase 2 |
 | `runs/{run}/05-tuples.tar.gz` | `pipeline.py` Phase 2 | audit / manual restore |
 | `runs/{run}/06-golden-dump.tar.gz` | `pipeline.py` Phase 3 | production ArangoDB restore |
 | `runs/{run}/build-info.txt` | `pipeline.py` Phase 3 | audit |
-| `artifacts/nlm-ckn-etl-1.0.jar` | CI/CD (`build-jar.yml`) | `pipeline.py` (`ensure_jar`) |
 
 ---
 

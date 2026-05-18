@@ -545,36 +545,41 @@ def sync_external_to_s3(run: str = "") -> None:
 
 @task(name="sync-external-to-s3-staging", log_prints=True)
 def sync_external_to_s3_staging(run: str = "") -> None:
-    """Push the external API cache to the staging prefix ``external-staging/``.
+    """Push the external API cache to the run-scoped staging prefix.
 
-    Writes to ``s3://{S3_BUCKET}/external-staging/`` rather than the live
-    ``external/`` prefix so that a concurrent ``pipeline.py`` reading from
-    ``external/`` sees only complete, validated snapshots.  Call
+    Writes to ``s3://{S3_BUCKET}/runs/{run}/external-staging/`` rather than
+    the live ``external/`` prefix so that a concurrent ``pipeline.py`` reading
+    from ``external/`` sees only complete, validated snapshots.  Call
     ``promote_external_staging`` after validation to atomically swap the
     staging data into the live prefix.
+
+    Scoping staging to the run directory means two concurrent releases never
+    overwrite each other's in-flight data.
 
     No-op when ``S3_BUCKET`` is empty (local-only mode).
 
     Parameters
     ----------
     run:
-        Run name (selects ``data/external-<run>/``).  Defaults to
+        Run name (selects ``data/external-<run>/`` locally and
+        ``runs/<run>/external-staging/`` in S3).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping S3 sync (local mode)")
         return
+    run_name = run or os.getenv("CKN_RUN", "full")
     external_dir = _external_dir(run)
-    s3_staging = f"s3://{S3_BUCKET}/external-staging/"
+    s3_staging = f"s3://{S3_BUCKET}/runs/{run_name}/external-staging/"
     logger.info(f"Syncing {external_dir.name}/ → {s3_staging} (staging)")
     _s3_sync(str(external_dir), s3_staging)
     logger.info("External cache pushed to staging")
 
 
 @task(name="promote-external-staging", log_prints=True)
-def promote_external_staging() -> None:
-    """Server-side copy ``external-staging/`` → ``external/`` in S3.
+def promote_external_staging(run: str = "") -> None:
+    """Server-side copy ``runs/{run}/external-staging/`` → ``external/`` in S3.
 
     Called after the fetch flow has validated its output.  Uses S3
     ``CopyObject`` so no data travels through the client and the promotion
@@ -583,13 +588,21 @@ def promote_external_staging() -> None:
     that syncs from ``external/`` will see consistent data.
 
     No-op when ``S3_BUCKET`` is empty (local-only mode).
+
+    Parameters
+    ----------
+    run:
+        Run name (must match the value passed to ``sync_external_to_s3_staging``).
+        Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping staging promotion (local mode)")
         return
+    run_name = run or os.getenv("CKN_RUN", "full")
+    src_prefix = f"runs/{run_name}/external-staging/"
     logger.info(
-        f"Promoting s3://{S3_BUCKET}/external-staging/ → s3://{S3_BUCKET}/external/"
+        f"Promoting s3://{S3_BUCKET}/{src_prefix} → s3://{S3_BUCKET}/external/"
     )
-    count = _s3_copy_prefix(S3_BUCKET, "external-staging/", "external/")
+    count = _s3_copy_prefix(S3_BUCKET, src_prefix, "external/")
     logger.info(f"Promoted {count} object(s) from staging to live external cache")
