@@ -44,9 +44,5 @@ jobs:
           GITHUB_TOKEN:    ${{ secrets.GITHUB_TOKEN }}
           S3_BUCKET:       ${{ secrets.S3_BUCKET }}
         run: |
-          CELL_KN_TAG=$(python3 -c "import json; d=json.load(open('release.json')); print(d['cell_kn_tag'])")
-          : "${CELL_KN_TAG:?cell_kn_tag must be set in release.json}"
-          echo "ETL release : ${ETL_RELEASE_TAG}"
-          echo "nlm-ckn tag : ${CELL_KN_TAG}"
-
-          bash src/main/shell/trigger-release.sh
+          bash src/main/shell/trigger-release.sh \
+            --run-name "${ETL_RELEASE_TAG}"
