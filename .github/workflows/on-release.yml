@@ -26,8 +26,9 @@ jobs:
     name: Submit Batch release job
     runs-on: ubuntu-latest
     permissions:
-      id-token: write   # required for OIDC role assumption
+      id-token: write    # required for OIDC role assumption
       contents: read
+      deployments: write # required to create and update GitHub deployments
 
     steps:
       - uses: actions/checkout@v4
@@ -40,9 +41,10 @@ jobs:
 
       - name: Submit release job
         env:
-          ETL_RELEASE_TAG: ${{ github.event.release.tag_name }}
-          GITHUB_TOKEN:    ${{ secrets.GITHUB_TOKEN }}
-          S3_BUCKET:       ${{ secrets.S3_BUCKET }}
+          ETL_RELEASE_TAG:    ${{ github.event.release.tag_name }}
+          GITHUB_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY:  ${{ github.repository }}
+          S3_BUCKET:          ${{ secrets.S3_BUCKET }}
         run: |
           bash src/main/shell/trigger-release.sh \
             --run-name "${ETL_RELEASE_TAG}"
