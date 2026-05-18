@@ -18,8 +18,10 @@
 #   RUN_NAME            — ETL run name (default: tag with leading 'v' stripped)
 #   SKIP_ONTOLOGY       — set to 'true' to reuse an existing baseline dump
 #   MAX_FETCH_AGE_HOURS — max external cache age before forcing a re-fetch (default: 48)
-#   JAVA_OPTS           — JVM flags (default: -Xmx32g)
-#   GITHUB_TOKEN        — GitHub token for private repos or to avoid rate limits
+#   JAVA_OPTS              — JVM flags (default: -Xmx32g)
+#   GITHUB_TOKEN           — GitHub token; used for private tarball downloads and posting deployment statuses
+#   GITHUB_REPOSITORY      — owner/repo (e.g. NIH-NLM/nlm-ckn-etl); required for deployment status updates
+#   GITHUB_DEPLOYMENT_ID   — deployment ID created by trigger-release.sh; if set, posts success/failure status
 set -euo pipefail
 
 : "${CELL_KN_TAG:?CELL_KN_TAG must be set}"

@@ -147,15 +147,49 @@ echo "[trigger-release] Uploading release.json → ${RELEASE_CONFIG_S3} ..."
 aws s3 cp "${RELEASE_JSON}" "${RELEASE_CONFIG_S3}"
 echo "[trigger-release] Uploaded: ${RELEASE_CONFIG_S3}"
 
+# ── Create GitHub deployment ──────────────────────────────────────────────────
+# If GITHUB_TOKEN and GITHUB_REPOSITORY are set, create a deployment for the
+# tag and post an in_progress status.  The Batch container uses GITHUB_DEPLOYMENT_ID
+# to post the final success/failure status when the pipeline completes.
+GITHUB_DEPLOYMENT_ID=""
+if [[ -n "${GITHUB_TOKEN:-}" && -n "${GITHUB_REPOSITORY:-}" ]]; then
+  echo "[trigger-release] Creating GitHub deployment for ${TAG} ..."
+  DEPLOY_RESPONSE=$(curl -sf -X POST \
+    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments" \
+    -d "{\"ref\":\"${TAG}\",\"environment\":\"production\",\"auto_merge\":false,\"required_contexts\":[]}" \
+    2>/dev/null) || true
+  GITHUB_DEPLOYMENT_ID=$(python3 -c \
+    "import sys,json; print(json.load(sys.stdin).get('id',''))" \
+    <<< "${DEPLOY_RESPONSE}" 2>/dev/null) || true
+  if [[ -n "${GITHUB_DEPLOYMENT_ID}" ]]; then
+    echo "[trigger-release] Deployment ID: ${GITHUB_DEPLOYMENT_ID}"
+    curl -sf -X POST \
+      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments/${GITHUB_DEPLOYMENT_ID}/statuses" \
+      -d '{"state":"in_progress","description":"Batch job submitted"}' \
+      > /dev/null 2>&1 || true
+  else
+    echo "[trigger-release] Warning: could not create GitHub deployment (check GITHUB_TOKEN scope)" >&2
+  fi
+fi
+
 # ── Build container environment overrides ────────────────────────────────────
 # CELL_KN_TAG and RELEASE_CONFIG are always set. The rest are only included
 # when non-empty so the job definition defaults remain in effect otherwise.
 env_json="[{\"name\":\"CELL_KN_TAG\",\"value\":\"${TAG}\"}"
 env_json+=",{\"name\":\"RELEASE_CONFIG\",\"value\":\"${RELEASE_CONFIG_S3}\"}"
-[[ -n "${TAR_SOURCE}"          ]] && env_json+=",{\"name\":\"TAR_SOURCE\",\"value\":\"${TAR_SOURCE}\"}"
-[[ -n "${RUN_NAME}"            ]] && env_json+=",{\"name\":\"RUN_NAME\",\"value\":\"${RUN_NAME}\"}"
-[[ -n "${MAX_FETCH_AGE_HOURS}" ]] && env_json+=",{\"name\":\"MAX_FETCH_AGE_HOURS\",\"value\":\"${MAX_FETCH_AGE_HOURS}\"}"
-[[ -n "${JAVA_OPTS}"           ]] && env_json+=",{\"name\":\"JAVA_OPTS\",\"value\":\"${JAVA_OPTS}\"}"
+[[ -n "${TAR_SOURCE}"              ]] && env_json+=",{\"name\":\"TAR_SOURCE\",\"value\":\"${TAR_SOURCE}\"}"
+[[ -n "${RUN_NAME}"                ]] && env_json+=",{\"name\":\"RUN_NAME\",\"value\":\"${RUN_NAME}\"}"
+[[ -n "${MAX_FETCH_AGE_HOURS}"     ]] && env_json+=",{\"name\":\"MAX_FETCH_AGE_HOURS\",\"value\":\"${MAX_FETCH_AGE_HOURS}\"}"
+[[ -n "${JAVA_OPTS}"               ]] && env_json+=",{\"name\":\"JAVA_OPTS\",\"value\":\"${JAVA_OPTS}\"}"
+[[ -n "${GITHUB_TOKEN:-}"          ]] && env_json+=",{\"name\":\"GITHUB_TOKEN\",\"value\":\"${GITHUB_TOKEN}\"}"
+[[ -n "${GITHUB_REPOSITORY:-}"     ]] && env_json+=",{\"name\":\"GITHUB_REPOSITORY\",\"value\":\"${GITHUB_REPOSITORY}\"}"
+[[ -n "${GITHUB_DEPLOYMENT_ID}"    ]] && env_json+=",{\"name\":\"GITHUB_DEPLOYMENT_ID\",\"value\":\"${GITHUB_DEPLOYMENT_ID}\"}"
 env_json+=",{\"name\":\"SKIP_ONTOLOGY\",\"value\":\"${SKIP_ONTOLOGY}\"}"
 env_json+="]"
 

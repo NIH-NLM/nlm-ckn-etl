@@ -286,6 +286,72 @@ def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> boo
 # ── Flow ───────────────────────────────────────────────────────────────────
 
 
+def _cloudwatch_log_url() -> str:
+    """Return a CloudWatch console URL for the current Batch job, or empty string."""
+    job_id = os.getenv("AWS_BATCH_JOB_ID", "")
+    if not job_id:
+        return ""
+    region    = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+    log_group = "/batch/nlm-ckn-release"
+    encoded   = log_group.replace("/", "$252F")
+    return (
+        f"https://console.aws.amazon.com/cloudwatch/home?region={region}"
+        f"#logsV2:log-groups/log-group/{encoded}"
+    )
+
+
+def _post_github_deployment_status(
+    *,
+    state: str,
+    description: str,
+) -> None:
+    """POST a deployment status to the GitHub Deployments API.
+
+    Reads GITHUB_TOKEN, GITHUB_REPOSITORY, and GITHUB_DEPLOYMENT_ID from the
+    environment.  Silently no-ops if any are absent or the request fails, so a
+    notification error never masks the real pipeline outcome.
+
+    Parameters
+    ----------
+    state:
+        One of ``"in_progress"``, ``"success"``, ``"failure"``, ``"error"``.
+    description:
+        Short human-readable summary shown on the deployments page (max 140 chars).
+    """
+    token         = os.getenv("GITHUB_TOKEN", "")
+    repo          = os.getenv("GITHUB_REPOSITORY", "")
+    deployment_id = os.getenv("GITHUB_DEPLOYMENT_ID", "")
+    if not (token and repo and deployment_id):
+        return
+
+    payload: dict = {
+        "state": state,
+        "description": description[:140],
+        "environment": "production",
+    }
+    log_url = _cloudwatch_log_url()
+    if log_url:
+        payload["log_url"] = log_url
+
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/deployments/{deployment_id}/statuses",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(f"GitHub deployment status update failed: {exc}")
+
+
 @flow(name="nlm-ckn-release", log_prints=True)
 def nlm_ckn_release(
     cell_kn_tag: str,
@@ -349,6 +415,8 @@ def nlm_ckn_release(
     run_name = run_name or cell_kn_tag.lstrip("v")
     logger.info(f"Release: tag={cell_kn_tag}  run={run_name}")
 
+    start = datetime.now(timezone.utc)
+
     cfg = _read_release_json(release_config)
     hubmap_urls = cfg.get("hubmap_urls", [])
     if not hubmap_urls:
@@ -366,11 +434,15 @@ def nlm_ckn_release(
     try:
         extract_release_tarball(tar_source, run_name, hubmap_urls)
         sync_release_dir_to_s3(run=run_name)
-    except Exception:
+    except Exception as exc:
         logger.error(
             "Step 1 (extract release tarball) failed.\n"
             "To retry from this step:\n"
             f"  poetry run src/flows/release.py --tag {cell_kn_tag}"
+        )
+        _post_github_deployment_status(
+            state="failure",
+            description=f"Step 1 failed (extract tarball): {exc}"[:140],
         )
         raise
 
@@ -386,7 +458,7 @@ def nlm_ckn_release(
             retry_empty=not force_fetch,
             run=run_name,
         )
-    except Exception:
+    except Exception as exc:
         logger.error(
             "Step 2 (fetch external APIs) failed.\n"
             "Already-fetched files in data/external-%s/ are intact.\n"
@@ -397,6 +469,10 @@ def nlm_ckn_release(
             run_name,
             run_name,
             cell_kn_tag,
+        )
+        _post_github_deployment_status(
+            state="failure",
+            description=f"Step 2 failed (fetch external APIs): {exc}"[:140],
         )
         raise
 
@@ -412,7 +488,7 @@ def nlm_ckn_release(
             java_opts=java_opts,
             run=run_name,
         )
-    except Exception:
+    except Exception as exc:
         logger.error(
             "Step 3 (ETL pipeline) failed.\n"
             "External data in data/external-%s/ is complete.\n"
@@ -424,12 +500,22 @@ def nlm_ckn_release(
             run_name,
             cell_kn_tag,
         )
+        _post_github_deployment_status(
+            state="failure",
+            description=f"Step 3 failed (ETL pipeline): {exc}"[:140],
+        )
         raise
 
     # Promote this release's results to the stable latest/ pointer so the
     # scheduled fetch targets the new gene set going forward.
     promote_results_to_latest(run=run_name)
     logger.info(f"Release {cell_kn_tag} complete (run={run_name})")
+    elapsed   = datetime.now(timezone.utc) - start
+    minutes, seconds = divmod(int(elapsed.total_seconds()), 60)
+    _post_github_deployment_status(
+        state="success",
+        description=f"Released {cell_kn_tag} in {minutes}m {seconds}s",
+    )
 
 
 # ── CLI entry point ────────────────────────────────────────────────────────
