@@ -152,22 +152,21 @@ echo "[trigger-release] Uploaded: ${RELEASE_CONFIG_S3}"
 # tag and post an in_progress status.  The Batch container uses GITHUB_DEPLOYMENT_ID
 # to post the final success/failure status when the pipeline completes.
 GITHUB_DEPLOYMENT_ID=""
-if [[ -n "${GITHUB_TOKEN:-}" && -n "${GITHUB_REPOSITORY:-}" && -n "${GITHUB_REF_NAME:-}" ]]; then
+if [[ -n "${GITHUB_DEPLOY_TOKEN:-}" && -n "${GITHUB_REPOSITORY:-}" && -n "${GITHUB_REF_NAME:-}" ]]; then
   echo "[trigger-release] Creating GitHub deployment for ${GITHUB_REF_NAME} (nlm-ckn tag: ${TAG}) ..."
   DEPLOY_RESPONSE=$(curl -s -X POST \
-    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    -H "Authorization: Bearer ${GITHUB_DEPLOY_TOKEN}" \
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
     "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments" \
     -d "{\"ref\":\"${GITHUB_REF_NAME}\",\"environment\":\"production\",\"description\":\"nlm-ckn ${TAG}\",\"auto_merge\":false,\"required_contexts\":[]}")
-  echo "[trigger-release] Deployment API response: ${DEPLOY_RESPONSE}" >&2
   GITHUB_DEPLOYMENT_ID=$(python3 -c \
     "import sys,json; print(json.load(sys.stdin).get('id',''))" \
     <<< "${DEPLOY_RESPONSE}" 2>/dev/null) || true
   if [[ -n "${GITHUB_DEPLOYMENT_ID}" ]]; then
     echo "[trigger-release] Deployment ID: ${GITHUB_DEPLOYMENT_ID}"
     curl -sf -X POST \
-      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      -H "Authorization: Bearer ${GITHUB_DEPLOY_TOKEN}" \
       -H "Accept: application/vnd.github+json" \
       -H "X-GitHub-Api-Version: 2022-11-28" \
       "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments/${GITHUB_DEPLOYMENT_ID}/statuses" \
@@ -187,7 +186,8 @@ env_json+=",{\"name\":\"RELEASE_CONFIG\",\"value\":\"${RELEASE_CONFIG_S3}\"}"
 [[ -n "${RUN_NAME}"                ]] && env_json+=",{\"name\":\"RUN_NAME\",\"value\":\"${RUN_NAME}\"}"
 [[ -n "${MAX_FETCH_AGE_HOURS}"     ]] && env_json+=",{\"name\":\"MAX_FETCH_AGE_HOURS\",\"value\":\"${MAX_FETCH_AGE_HOURS}\"}"
 [[ -n "${JAVA_OPTS}"               ]] && env_json+=",{\"name\":\"JAVA_OPTS\",\"value\":\"${JAVA_OPTS}\"}"
-[[ -n "${GITHUB_TOKEN:-}"          ]] && env_json+=",{\"name\":\"GITHUB_TOKEN\",\"value\":\"${GITHUB_TOKEN}\"}"
+CONTAINER_GH_TOKEN="${GITHUB_DEPLOY_TOKEN:-${GITHUB_TOKEN:-}}"
+[[ -n "${CONTAINER_GH_TOKEN}"      ]] && env_json+=",{\"name\":\"GITHUB_TOKEN\",\"value\":\"${CONTAINER_GH_TOKEN}\"}"
 [[ -n "${GITHUB_REPOSITORY:-}"     ]] && env_json+=",{\"name\":\"GITHUB_REPOSITORY\",\"value\":\"${GITHUB_REPOSITORY}\"}"
 [[ -n "${GITHUB_DEPLOYMENT_ID}"    ]] && env_json+=",{\"name\":\"GITHUB_DEPLOYMENT_ID\",\"value\":\"${GITHUB_DEPLOYMENT_ID}\"}"
 env_json+=",{\"name\":\"SKIP_ONTOLOGY\",\"value\":\"${SKIP_ONTOLOGY}\"}"
