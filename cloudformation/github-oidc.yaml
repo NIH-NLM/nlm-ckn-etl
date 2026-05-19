@@ -168,6 +168,18 @@ Resources:
             Action: batch:DescribeJobDefinitions
             Resource: "*"
 
+          # RegisterJobDefinition re-passes the job/execution roles embedded in
+          # containerProperties, which requires iam:PassRole on those roles
+          - Sid: PassBatchJobRoles
+            Effect: Allow
+            Action: iam:PassRole
+            Resource:
+              - !Sub "arn:aws:iam::${AWS::AccountId}:role/nlm-ckn-release-job-role"
+              - !Sub "arn:aws:iam::${AWS::AccountId}:role/nlm-ckn-release-job-execution-role"
+            Condition:
+              StringEquals:
+                iam:PassedToService: batch.amazonaws.com
+
           # Stage release tarball and release.json to S3
           - Sid: S3StageArtifacts
             Effect: Allow
