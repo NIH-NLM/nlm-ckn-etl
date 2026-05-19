@@ -21,12 +21,12 @@ name: Build and Push Docker Images
 #   ECR_STACK_NAME      — CloudFormation stack name for ECR (default: nlm-ckn-etl-ecr)
 
 on:
-  workflow_call:   # allows on-release.yml to call this as a prerequisite job
+  workflow_call:
+    outputs:
+      pipeline_image:
+        description: "Full ECR URI of the built pipeline image"
+        value: ${{ jobs.build-and-push.outputs.pipeline_image }}
   workflow_dispatch:
-
-
-outputs:
-  pipeline_image: ${{ jobs.build-and-push.outputs.pipeline_image }}
 
 jobs:
   build-and-push:
