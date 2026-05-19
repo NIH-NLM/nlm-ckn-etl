@@ -60,6 +60,5 @@ jobs:
       - name: Smoke test
         run: |
           docker run --rm --entrypoint python \
-            -e PYTHONPATH=/app/python/src \
             pipeline-test \
             -c "from flows import release, pipeline, fetch; print('OK')"

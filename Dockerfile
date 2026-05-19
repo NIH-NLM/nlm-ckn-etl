@@ -111,6 +111,8 @@ ENV UV_SYSTEM_PYTHON=1
 # memory-backed storage, which is faster than disk — important when running
 # under Rosetta emulation (amd64 image on Apple Silicon) where disk I/O is
 # slow enough to trigger the default 20-second startup timeout.
+ENV PYTHONPATH=/app/python/src:/app/python/src/flows
+
 ENV PREFECT_HOME=/tmp/prefect
 # Raise the ephemeral API server startup timeout to 120 seconds.
 # The default (20 s) is tight for Rosetta-emulated containers; this is a
