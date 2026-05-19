@@ -32,6 +32,9 @@ jobs:
     needs: test
     uses: ./.github/workflows/build-image.yml
     secrets: inherit
+    permissions:
+      id-token: write
+      contents: read
 
   submit:
     name: Submit Batch release job
