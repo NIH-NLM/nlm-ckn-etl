@@ -250,18 +250,16 @@ if [[ -n "${PIPELINE_IMAGE:-}" ]]; then
     --query 'jobDefinitions[0]' \
     --output json)
 
-  CONTAINER_PROPS=$(python3 - <<'PYEOF'
-import sys, json
-jd = json.loads(sys.stdin.read())
+  CONTAINER_PROPS=$(EXISTING="${EXISTING}" python3 - <<'PYEOF'
+import json, os
+jd = json.loads(os.environ["EXISTING"])
 cp = jd["containerProperties"]
-import os
 cp["image"] = os.environ["PIPELINE_IMAGE"]
-# Drop read-only fields that RegisterJobDefinition rejects
 for key in ("taskArn",):
     cp.pop(key, None)
 print(json.dumps(cp))
 PYEOF
-  <<< "${EXISTING}")
+  )
 
   NEW_DEF=$(aws batch register-job-definition \
     --job-definition-name "${JOB_DEFINITION}" \
