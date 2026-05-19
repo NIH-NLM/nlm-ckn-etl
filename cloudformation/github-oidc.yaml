@@ -178,7 +178,7 @@ Resources:
               - !Sub "arn:aws:iam::${AWS::AccountId}:role/nlm-ckn-release-job-execution-role"
             Condition:
               StringEquals:
-                iam:PassedToService: batch.amazonaws.com
+                iam:PassedToService: ecs-tasks.amazonaws.com
 
           # Stage release tarball and release.json to S3
           - Sid: S3StageArtifacts
