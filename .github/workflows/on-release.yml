@@ -22,8 +22,20 @@ on:
     types: [published]
 
 jobs:
+  test:
+    name: Run tests
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  build:
+    name: Build and push pipeline image
+    needs: test
+    uses: ./.github/workflows/build-image.yml
+    secrets: inherit
+
   submit:
     name: Submit Batch release job
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       id-token: write    # required for OIDC role assumption
@@ -44,6 +56,7 @@ jobs:
           ETL_RELEASE_TAG:     ${{ github.event.release.tag_name }}
           GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
           GITHUB_DEPLOY_TOKEN: ${{ secrets.DEPLOYMENTS_TOKEN }}
+          PIPELINE_IMAGE:      ${{ needs.build.outputs.pipeline_image }}
           S3_BUCKET:           ${{ secrets.S3_BUCKET }}
         run: |
           bash src/main/shell/trigger-release.sh \

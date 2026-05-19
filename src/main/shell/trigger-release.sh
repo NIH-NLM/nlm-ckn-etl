@@ -28,6 +28,10 @@
 #       Override the external cache age threshold (default: 48).
 #   --java-opts OPTS
 #       Override JVM flags (default: -Xmx32g).
+#   PIPELINE_IMAGE (env)
+#       Full ECR image URI to use for the Batch container (e.g. 123.dkr.ecr…/pipeline:v1.0).
+#       Set automatically by on-release.yml from the build job output.
+#       When unset the Batch job definition's default image (:latest) is used.
 #   --queue NAME
 #       Batch job queue name (default: nlm-ckn-release).
 #   --job-definition NAME
@@ -153,6 +157,38 @@ echo "[trigger-release] Uploaded: ${RELEASE_CONFIG_S3}"
 # to post the final success/failure status when the pipeline completes.
 GITHUB_DEPLOYMENT_ID=""
 if [[ -n "${GITHUB_DEPLOY_TOKEN:-}" && -n "${GITHUB_REPOSITORY:-}" && -n "${GITHUB_REF_NAME:-}" ]]; then
+  # Mark any previous in_progress deployments for this environment as inactive
+  # so the deployments page doesn't accumulate stale "Deploying" entries.
+  STALE_IDS=$(curl -s \
+    -H "Authorization: Bearer ${GITHUB_DEPLOY_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments?environment=production&per_page=20" \
+    | python3 - "${GITHUB_DEPLOY_TOKEN}" <<'PYEOF' 2>/dev/null) || true
+import sys, json, urllib.request
+token = sys.argv[1]
+deploys = json.load(sys.stdin)
+for d in deploys:
+    req = urllib.request.Request(d['statuses_url'],
+        headers={'Authorization': f'Bearer {token}',
+                 'Accept': 'application/vnd.github+json'})
+    try:
+        statuses = json.loads(urllib.request.urlopen(req, timeout=5).read())
+        latest = statuses[0]['state'] if statuses else 'pending'
+    except Exception:
+        latest = 'unknown'
+    if latest in ('in_progress', 'pending'):
+        print(d['id'])
+PYEOF
+  for stale_id in ${STALE_IDS}; do
+    curl -sf -X POST \
+      -H "Authorization: Bearer ${GITHUB_DEPLOY_TOKEN}" \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments/${stale_id}/statuses" \
+      -d '{"state":"inactive"}' > /dev/null 2>&1 || true
+  done
+
   echo "[trigger-release] Creating GitHub deployment for ${GITHUB_REF_NAME} (nlm-ckn tag: ${TAG}) ..."
   DEPLOY_RESPONSE=$(curl -s -X POST \
     -H "Authorization: Bearer ${GITHUB_DEPLOY_TOKEN}" \
@@ -193,7 +229,15 @@ CONTAINER_GH_TOKEN="${GITHUB_DEPLOY_TOKEN:-${GITHUB_TOKEN:-}}"
 env_json+=",{\"name\":\"SKIP_ONTOLOGY\",\"value\":\"${SKIP_ONTOLOGY}\"}"
 env_json+="]"
 
-overrides="{\"environment\":${env_json}}"
+# If a specific pipeline image was supplied (set by the build job in CI),
+# override the container image so the Batch job uses exactly the image that
+# was just built rather than whatever :latest resolves to.
+if [[ -n "${PIPELINE_IMAGE:-}" ]]; then
+  echo "[trigger-release] Using pipeline image: ${PIPELINE_IMAGE}"
+  overrides="{\"image\":\"${PIPELINE_IMAGE}\",\"environment\":${env_json}}"
+else
+  overrides="{\"environment\":${env_json}}"
+fi
 
 # Sanitise the tag for use as a job name (Batch allows [a-zA-Z0-9_-]).
 LABEL="${RUN_NAME:-${TAG}}"

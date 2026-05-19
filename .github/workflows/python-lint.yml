@@ -1,12 +1,7 @@
 name: Python Lint and Test
 
 on:
-  push:
-    paths:
-      - 'python/**'
-  pull_request:
-    paths:
-      - 'python/**'
+  workflow_call:
 
 jobs:
   lint:

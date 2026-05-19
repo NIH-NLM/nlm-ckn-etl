@@ -212,6 +212,66 @@ $ cd python/tests
 $ python -m pytest *.py
 ```
 
+## CI/CD Workflows
+
+The `.github/workflows/` directory contains the following GitHub Actions workflows:
+
+### `ci.yml` — CI (tests)
+
+Triggered on `push` and `pull_request` for source and build file changes. Runs three jobs in parallel:
+
+- **Java tests** — Maven test suite
+- **Python lint and tests** — ruff + pytest (with ArangoDB started via Docker)
+- **Pipeline image smoke test** — builds the pipeline Docker image locally (no ECR push) and verifies that the production Python modules import successfully, catching missing dependencies or Dockerfile regressions
+
+Also callable as a reusable workflow (`workflow_call`) by `on-release.yml`.
+
+### `build-image.yml` — Build and Push Docker Images
+
+Triggered via `workflow_call` (used by `on-release.yml`) or `workflow_dispatch` for manual builds. Not triggered on push — images are only built as part of a release or on demand.
+
+Builds two images and pushes them to ECR:
+- **pipeline** (`nlm-ckn-etl-pipeline`) — JRE + compiled JAR + Python source; used by the release Batch job
+- **fetcher** (`nlm-ckn-etl-fetcher`) — Python only; used by the fetch Batch job
+
+Images are tagged `:{branch-name}` on every branch and `:latest` on `main`.
+
+### `on-release.yml` — On Release: Trigger ETL
+
+Triggered when a GitHub Release is published. Enforces the full gate before submitting a job:
+
+```
+test (ci.yml) → build (build-image.yml) → submit Batch job
+```
+
+The Batch job runs `release.py` end-to-end (fetch + full ETL) on EC2 and returns immediately. Progress is tracked via a [GitHub Deployment](https://docs.github.com/en/rest/deployments) — the Batch container posts `success` or `failure` to the deployment status when the pipeline finishes, which triggers a notification in any Slack channel subscribed to the GitHub app's deployment events.
+
+Release settings (`cell_kn_tag`, `tar_source`, `skip_ontology`, etc.) come from `release.json` at the repo root, not from this repo's release tag.
+
+Required secrets: `AWS_RELEASE_ROLE_ARN`, `AWS_REGION`, `S3_BUCKET`, `DEPLOYMENTS_TOKEN` (classic PAT with `repo:deployments` scope).
+
+### `trigger-release.yml` — Manual Release Trigger
+
+Allows manually submitting a Batch release job via `workflow_dispatch` without publishing a full GitHub Release. Accepts the same parameters as `on-release.yml`.
+
+### `promote-to-upstream.yml` — Promote to Upstream
+
+Promotes a completed ETL run to the upstream `nlm-ckn` repository.
+
+### Workflow dependency graph
+
+```
+push/PR
+  └── ci.yml (Java tests + Python lint/tests)
+
+GitHub Release published
+  └── on-release.yml
+        ├── ci.yml          (tests)
+        ├── build-image.yml (image build, needs: test)
+        └── submit Batch job (needs: build)
+              └── Batch container → posts deployment status to GitHub
+```
+
 ## Usage
 
 ### ETL Pipeline Execution Order

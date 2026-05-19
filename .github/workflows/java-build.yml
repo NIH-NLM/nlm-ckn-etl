@@ -7,14 +7,7 @@ name: Java Build
 # image build and ECR push.
 
 on:
-  push:
-    paths:
-      - 'src/**'
-      - 'pom.xml'
-  pull_request:
-    paths:
-      - 'src/**'
-      - 'pom.xml'
+  workflow_call:
 
 jobs:
   test:
