@@ -229,27 +229,58 @@ CONTAINER_GH_TOKEN="${GITHUB_DEPLOY_TOKEN:-${GITHUB_TOKEN:-}}"
 env_json+=",{\"name\":\"SKIP_ONTOLOGY\",\"value\":\"${SKIP_ONTOLOGY}\"}"
 env_json+="]"
 
-# If a specific pipeline image was supplied (set by the build job in CI),
-# override the container image so the Batch job uses exactly the image that
-# was just built rather than whatever :latest resolves to.
-if [[ -n "${PIPELINE_IMAGE:-}" ]]; then
-  echo "[trigger-release] Using pipeline image: ${PIPELINE_IMAGE}"
-  overrides="{\"image\":\"${PIPELINE_IMAGE}\",\"environment\":${env_json}}"
-else
-  overrides="{\"environment\":${env_json}}"
-fi
-
 # Sanitise the tag for use as a job name (Batch allows [a-zA-Z0-9_-]).
 LABEL="${RUN_NAME:-${TAG}}"
 JOB_NAME="nlm-ckn-release-${LABEL//[^a-zA-Z0-9_-]/-}"
 
+overrides="{\"environment\":${env_json}}"
+
+# If a specific pipeline image was supplied (set by the build job in CI),
+# register a new job-definition revision that pins that image, then submit
+# against that revision.  AWS Batch containerOverrides does not accept
+# "image" as a field — the image can only be changed via a new revision.
+SUBMIT_JOB_DEFINITION="${JOB_DEFINITION}"
+if [[ -n "${PIPELINE_IMAGE:-}" ]]; then
+  echo "[trigger-release] Using pipeline image: ${PIPELINE_IMAGE}"
+
+  # Fetch the existing job definition's container properties and swap the image.
+  EXISTING=$(aws batch describe-job-definitions \
+    --job-definition-name "${JOB_DEFINITION}" \
+    --status ACTIVE \
+    --query 'jobDefinitions[0]' \
+    --output json)
+
+  CONTAINER_PROPS=$(python3 - <<'PYEOF'
+import sys, json
+jd = json.loads(sys.stdin.read())
+cp = jd["containerProperties"]
+import os
+cp["image"] = os.environ["PIPELINE_IMAGE"]
+# Drop read-only fields that RegisterJobDefinition rejects
+for key in ("taskArn",):
+    cp.pop(key, None)
+print(json.dumps(cp))
+PYEOF
+  <<< "${EXISTING}")
+
+  NEW_DEF=$(aws batch register-job-definition \
+    --job-definition-name "${JOB_DEFINITION}" \
+    --type container \
+    --container-properties "${CONTAINER_PROPS}" \
+    --query 'jobDefinitionArn' \
+    --output text)
+
+  echo "[trigger-release] Registered new job definition revision: ${NEW_DEF}"
+  SUBMIT_JOB_DEFINITION="${NEW_DEF}"
+fi
+
 # ── Submit ────────────────────────────────────────────────────────────────────
-echo "[trigger-release] Submitting: job=${JOB_NAME}  queue=${JOB_QUEUE}  definition=${JOB_DEFINITION}"
+echo "[trigger-release] Submitting: job=${JOB_NAME}  queue=${JOB_QUEUE}  definition=${SUBMIT_JOB_DEFINITION}"
 
 RESULT=$(aws batch submit-job \
   --job-name        "${JOB_NAME}" \
   --job-queue       "${JOB_QUEUE}" \
-  --job-definition  "${JOB_DEFINITION}" \
+  --job-definition  "${SUBMIT_JOB_DEFINITION}" \
   --container-overrides "${overrides}" \
   --output json)
 

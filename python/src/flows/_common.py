@@ -19,6 +19,7 @@ ECS Fargate task).  There are no Docker-in-Docker calls here.
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 import socket
@@ -26,6 +27,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import boto3
@@ -332,6 +335,86 @@ def _s3_cp(src: str, dst: str) -> None:
         return
     bucket, key = _parse_s3_url(dst)
     boto3.client("s3").upload_file(src, bucket, key)
+
+
+# ── GitHub deployment status ───────────────────────────────────────────────
+
+_log = logging.getLogger(__name__)
+
+
+def _cloudwatch_log_url() -> str:
+    """Return a CloudWatch console URL for the current Batch job, or empty string."""
+    job_id = os.getenv("AWS_BATCH_JOB_ID", "")
+    if not job_id:
+        return ""
+    region    = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+    log_group = "/batch/nlm-ckn-release"
+    encoded   = log_group.replace("/", "$252F")
+    return (
+        f"https://console.aws.amazon.com/cloudwatch/home?region={region}"
+        f"#logsV2:log-groups/log-group/{encoded}"
+    )
+
+
+def post_github_deployment_status(*, state: str, description: str) -> None:
+    """POST a deployment status to the GitHub Deployments API.
+
+    Reads ``GITHUB_TOKEN``, ``GITHUB_REPOSITORY``, and ``GITHUB_DEPLOYMENT_ID``
+    from the environment.  Silently no-ops if any are absent or the request
+    fails, so a notification error never masks the real pipeline outcome.
+
+    Parameters
+    ----------
+    state:
+        One of ``"in_progress"``, ``"success"``, ``"failure"``, ``"error"``.
+    description:
+        Short human-readable summary shown on the deployments page (≤ 140 chars).
+    """
+    token         = os.getenv("GITHUB_TOKEN", "")
+    repo          = os.getenv("GITHUB_REPOSITORY", "")
+    deployment_id = os.getenv("GITHUB_DEPLOYMENT_ID", "")
+    _log.info(
+        "GitHub deployment status: state=%s  repo=%s  deployment_id=%s  token=%s",
+        state,
+        "set" if repo else "MISSING",
+        deployment_id or "MISSING",
+        "set" if token else "MISSING",
+    )
+    if not (token and repo and deployment_id):
+        _log.warning("Skipping deployment status update — one or more env vars missing")
+        return
+
+    payload: dict = {
+        "state": state,
+        "description": description[:140],
+        "environment": "production",
+    }
+    log_url = _cloudwatch_log_url()
+    if log_url:
+        payload["log_url"] = log_url
+
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/deployments/{deployment_id}/statuses",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        resp = urllib.request.urlopen(req, timeout=10)
+        _log.info("GitHub deployment status posted: HTTP %s", resp.status)
+    except urllib.error.HTTPError as exc:
+        _log.warning(
+            "GitHub deployment status update failed: HTTP %s — %s",
+            exc.code, exc.read().decode(),
+        )
+    except Exception as exc:
+        _log.warning("GitHub deployment status update failed: %s", exc)
 
 
 # ── Shared tasks ───────────────────────────────────────────────────────────

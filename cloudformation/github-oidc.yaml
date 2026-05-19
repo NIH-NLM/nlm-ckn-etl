@@ -155,6 +155,19 @@ Resources:
               - !Sub "arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-queue/nlm-ckn-release"
               - !Sub "arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/nlm-ckn-release*"
 
+          # Register a new job-definition revision to pin the pipeline image
+          # (containerOverrides does not accept "image"; a new revision is required)
+          - Sid: BatchRegisterJobDefinition
+            Effect: Allow
+            Action: batch:RegisterJobDefinition
+            Resource: !Sub "arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/nlm-ckn-release*"
+
+          # Read the current job definition to copy its containerProperties
+          - Sid: BatchDescribeJobDefinitions
+            Effect: Allow
+            Action: batch:DescribeJobDefinitions
+            Resource: "*"
+
           # Stage release tarball and release.json to S3
           - Sid: S3StageArtifacts
             Effect: Allow

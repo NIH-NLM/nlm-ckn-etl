@@ -103,6 +103,7 @@ from _common import (
     _s3_download_tar,
     _s3_sync,
     _s3_upload_tar,
+    post_github_deployment_status,
     sync_external_from_s3,
     validate_external_files,
 )
@@ -1026,6 +1027,10 @@ def nlm_ckn_etl(
             )
         else:
             logger.info("=== Phase 1: Upstream Build (Ontology) ===")
+            post_github_deployment_status(
+                state="in_progress",
+                description="[3/3] ETL Phase 1: building ontology graph",
+            )
             if ARANGO_DB_HOST == "localhost":
                 # Wipe ArangoDB and start fresh so OntologyGraphBuilder has a
                 # clean slate.  The stopped container's data dir is removed so
@@ -1075,6 +1080,10 @@ def nlm_ckn_etl(
     # ── Phase 2: Iterative Refinement ─────────────────────────────────────
     if run_results or force_results:
         logger.info("=== Phase 2: Iterative Refinement (Results) ===")
+        post_github_deployment_status(
+            state="in_progress",
+            description="[3/3] ETL Phase 2: writing tuples and building graphs",
+        )
 
         # Guard: require baseline dump before restoring — pull from S3 if missing locally.
         # Uses jar_key so we always restore the dump produced by this exact JAR.
@@ -1119,6 +1128,10 @@ def nlm_ckn_etl(
     # ── Phase 3: Production Handoff ────────────────────────────────────────
     if run_archive or force_archive:
         logger.info("=== Phase 3: Production Handoff ===")
+        post_github_deployment_status(
+            state="in_progress",
+            description="[3/3] ETL Phase 3: dumping and promoting to production",
+        )
         require_arangodb()
 
         # Dump the final, fully-built database as the golden artifact.
