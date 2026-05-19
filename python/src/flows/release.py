@@ -318,10 +318,20 @@ def _post_github_deployment_status(
     description:
         Short human-readable summary shown on the deployments page (max 140 chars).
     """
+    import logging
+    log = logging.getLogger(__name__)
+
     token         = os.getenv("GITHUB_TOKEN", "")
     repo          = os.getenv("GITHUB_REPOSITORY", "")
     deployment_id = os.getenv("GITHUB_DEPLOYMENT_ID", "")
+    log.info(
+        f"GitHub deployment status: state={state}"
+        f"  repo={'set' if repo else 'MISSING'}"
+        f"  deployment_id={deployment_id or 'MISSING'}"
+        f"  token={'set' if token else 'MISSING'}"
+    )
     if not (token and repo and deployment_id):
+        log.warning("Skipping deployment status update — one or more env vars missing")
         return
 
     payload: dict = {
@@ -346,10 +356,12 @@ def _post_github_deployment_status(
         method="POST",
     )
     try:
-        urllib.request.urlopen(req, timeout=10)
+        resp = urllib.request.urlopen(req, timeout=10)
+        log.info(f"GitHub deployment status update posted: HTTP {resp.status}")
+    except urllib.error.HTTPError as exc:
+        log.warning(f"GitHub deployment status update failed: HTTP {exc.code} — {exc.read().decode()}")
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning(f"GitHub deployment status update failed: {exc}")
+        log.warning(f"GitHub deployment status update failed: {exc}")
 
 
 @flow(name="nlm-ckn-release", log_prints=True)

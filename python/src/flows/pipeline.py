@@ -132,6 +132,34 @@ def stop_arangodb() -> None:
         container.remove()
 
 
+def _wipe_arangodb_data(arango_db_home: str, logger) -> None:
+    """Remove all persisted ArangoDB data so the next start initialises fresh.
+
+    For bind-mount volumes, removes the local directory.
+    For named Docker volumes (used when running inside a container without
+    ARANGO_DB_HOST_HOME set), removes the volume so ArangoDB re-initialises
+    with the current ARANGO_ROOT_PASSWORD instead of the one baked into
+    the old volume.
+    """
+    volume_source, is_named_volume = _arangodb_volume_source(arango_db_home)
+    if is_named_volume:
+        try:
+            client = docker_sdk.from_env()
+            try:
+                vol = client.volumes.get(volume_source)
+                vol.remove(force=True)
+                logger.info(f"Removed named ArangoDB volume: {volume_source}")
+            except docker_sdk.errors.NotFound:
+                logger.info(f"Named ArangoDB volume not found, nothing to remove: {volume_source}")
+        except docker_sdk.errors.DockerException as e:
+            logger.warning(f"Could not remove named volume {volume_source}: {e}")
+    else:
+        arango_home = Path(volume_source)
+        if arango_home.exists():
+            logger.info(f"Wiping ArangoDB data dir: {arango_home}")
+            shutil.rmtree(arango_home)
+
+
 def _arangodb_volume_source(arango_db_home: str) -> tuple[str, bool]:
     """Return the Docker volume source for ArangoDB data and whether it is a named volume.
 
@@ -1003,9 +1031,7 @@ def nlm_ckn_etl(
                 # clean slate.  The stopped container's data dir is removed so
                 # no stale collections carry over.
                 stop_arangodb()
-                arango_home = Path(arango_db_home)
-                if arango_home.exists():
-                    shutil.rmtree(arango_home)
+                _wipe_arangodb_data(arango_db_home, logger)
                 actual_port = start_arangodb(arango_db_home, arango_db_password)
                 _set_arango_port(actual_port)
                 phase1_started_arangodb = True
@@ -1036,21 +1062,13 @@ def nlm_ckn_etl(
     # baseline already existed and Phase 1 was a no-op.
     if ARANGO_DB_HOST == "localhost" and not phase1_started_arangodb:
         if run_results or force_results or run_archive or force_archive:
-            # When running Phase 2 (results), wipe the data dir before starting
-            # so ArangoDB initialises fresh with the current password.  The
-            # restore_arangodb call below overwrites the database anyway, so
-            # any existing data in arango_db_home is discarded.  Without this
-            # wipe, ArangoDB ignores ARANGO_ROOT_PASSWORD on restart and keeps
-            # the password baked into the data dir, causing a "forbidden" error
-            # if the password file was regenerated (e.g. in a new batch container).
+            # Wipe ArangoDB data (bind-mount dir or named Docker volume) before
+            # starting so ArangoDB initialises fresh with the current password.
+            # Without this, ArangoDB ignores ARANGO_ROOT_PASSWORD on restart and
+            # keeps the password baked into the existing data, causing a 401 if
+            # the password was regenerated (e.g. in a new Batch container).
             if run_results or force_results:
-                arango_home = Path(arango_db_home)
-                if arango_home.exists():
-                    logger.info(
-                        f"Wiping ArangoDB data dir before Phase 2 start "
-                        f"to force password re-initialisation: {arango_home}"
-                    )
-                    shutil.rmtree(arango_home)
+                _wipe_arangodb_data(arango_db_home, logger)
             actual_port = start_arangodb(arango_db_home, arango_db_password)
             _set_arango_port(actual_port)
 
