@@ -53,8 +53,8 @@ class OntologyDownloaderTest {
     @Test
     void oboPurls_containsExpectedUrls() {
         assertEquals(10, OntologyDownloader.OBO_PURLS.size());
-        assertTrue(OntologyDownloader.OBO_PURLS.contains("http://purl.obolibrary.org/obo/cl.owl"));
-        assertTrue(OntologyDownloader.OBO_PURLS.contains("http://purl.obolibrary.org/obo/ro.owl"));
+        assertTrue(OntologyDownloader.OBO_PURLS.contains("https://purl.obolibrary.org/obo/cl.owl"));
+        assertTrue(OntologyDownloader.OBO_PURLS.contains("https://purl.obolibrary.org/obo/ro.owl"));
     }
 
     // --- updateDownloads integration test ---
@@ -65,7 +65,7 @@ class OntologyDownloaderTest {
         Path tempDir = Files.createTempDirectory("obo-download-test");
         try {
             // Download a small OBO file (ro.owl)
-            List<String> urls = List.of("http://purl.obolibrary.org/obo/ro.owl");
+            List<String> urls = List.of("https://purl.obolibrary.org/obo/ro.owl");
             OntologyDownloader.updateDownloads(urls, tempDir);
 
             // Verify the file was downloaded and renamed from ro-new.owl to ro.owl

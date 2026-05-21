@@ -39,10 +39,20 @@ import static gov.nih.nlm.PathUtilities.listFilesMatchingPattern;
 public class ResultsGraphBuilder {
 
     // Assign location of tuples and schema files
-    public static final Path TUPLES_DIR = USR_DIR.resolve("data/tuples-full");
+    private static final String RUN_NAME =
+            System.getenv("CKN_RUN") != null ? System.getenv("CKN_RUN") : "full";
+    public static final Path TUPLES_DIR = USR_DIR.resolve("data/tuples-" + RUN_NAME);
 
-    // Connect to a local ArangoDB server instance
-    private static final ArangoDbUtilities arangoDbUtilities = new ArangoDbUtilities();
+    // Lazily initialised so classes that only call pure static methods (e.g. readJsonFile)
+    // can be loaded in tests without ArangoDB env vars being present.
+    private static ArangoDbUtilities arangoDbUtilities;
+
+    private static ArangoDbUtilities db() {
+        if (arangoDbUtilities == null) {
+            arangoDbUtilities = new ArangoDbUtilities();
+        }
+        return arangoDbUtilities;
+    }
 
     // Assign triple indices
     private static final int TRIPLE_SUBJECT_IDX = 0;
@@ -140,7 +150,7 @@ public class ResultsGraphBuilder {
                 // Create a vertex collection, if needed
                 if (!vertexCollections.containsKey(vtuple.id())) {
                     vertexCollections.put(vtuple.id(),
-                            arangoDbUtilities.createOrGetVertexCollection(graph, vtuple.id()));
+                            db().createOrGetVertexCollection(graph, vtuple.id()));
                     vertexDocuments.put(vtuple.id(), new HashMap<>());
                     vertexKeys.put(vtuple.id(), new HashSet<>());
                 }
@@ -253,7 +263,7 @@ public class ResultsGraphBuilder {
             String idPair = subjectVTuple.id() + "-" + objectVTuple.id();
             if (!edgeCollections.containsKey(idPair)) {
                 edgeCollections.put(idPair,
-                        arangoDbUtilities.createOrGetEdgeCollection(graph, subjectVTuple.id(), objectVTuple.id()));
+                        db().createOrGetEdgeCollection(graph, subjectVTuple.id(), objectVTuple.id()));
                 edgeDocuments.put(idPair, new HashMap<>());
                 edgeKeys.put(idPair, new HashSet<>());
             }
@@ -370,9 +380,9 @@ public class ResultsGraphBuilder {
 
         // Create the database and graph
         String ontologyDatabaseName = "Cell-KN-Ontologies";
-        ArangoDatabase ontologyDb = arangoDbUtilities.createOrGetDatabase(ontologyDatabaseName);
+        ArangoDatabase ontologyDb = db().createOrGetDatabase(ontologyDatabaseName);
         String ontologyGraphName = "KN-Ontologies-v2.0";
-        ArangoGraph ontologyGraph = arangoDbUtilities.createOrGetGraph(ontologyDb, ontologyGraphName);
+        ArangoGraph ontologyGraph = db().createOrGetGraph(ontologyDb, ontologyGraphName);
 
         // Collect vertex keys for each vertex collection to prevent constructing
         // duplicate vertices in the vertex collection
@@ -424,6 +434,6 @@ public class ResultsGraphBuilder {
         insertEdges(ontologyVertexCollections, ontologyEdgeCollections, ontologyEdgeDocuments);
 
         // Disconnect from a local ArangoDB server instance
-        arangoDbUtilities.arangoDB.shutdown();
+        db().arangoDB.shutdown();
     }
 }

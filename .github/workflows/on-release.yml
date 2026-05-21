@@ -1,0 +1,73 @@
+name: On Release — Trigger ETL
+
+# Fires when a GitHub Release is published on this (ETL) repo.
+# Submits an AWS Batch job running release.py end-to-end (fetch + full ETL).
+# Returns immediately — monitor via CloudWatch (/batch/nlm-ckn-release) or the Batch console.
+#
+# The upstream nlm-ckn tag and all release settings come from the checked-in
+# release.json at the repo root, NOT from this repo's release tag.
+# A developer preparing a release should update release.json (cell_kn_tag, etc.)
+# and commit it before publishing the ETL release.
+#
+# Config (checked in, repo root):
+#   release.json  — cell_kn_tag, tar_source, skip_ontology, max_fetch_age_hours, hubmap_urls
+#
+# Required GitHub secrets:
+#   AWS_RELEASE_ROLE_ARN  — IAM role ARN to assume (batch:SubmitJob + s3:PutObject)
+#   AWS_REGION            — AWS region (e.g. us-east-1)
+#   S3_BUCKET             — S3 bucket for release artifacts
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  test:
+    name: Run tests
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+
+  build:
+    name: Build and push pipeline image
+    needs: test
+    uses: ./.github/workflows/build-image.yml
+    secrets:
+      AWS_BUILD_ROLE_ARN: ${{ secrets.AWS_BUILD_ROLE_ARN }}
+      ECR_STACK_NAME: ${{ secrets.ECR_STACK_NAME }}
+    permissions:
+      id-token: write
+      contents: read
+
+  submit:
+    name: Submit Batch release job
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write    # required for OIDC role assumption
+      contents: read
+      deployments: write # required to create and update GitHub deployments
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4
+        with:
+          role-to-assume: ${{ secrets.AWS_RELEASE_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Submit release job
+        env:
+          ETL_RELEASE_TAG:     ${{ github.event.release.tag_name }}
+          GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_DEPLOY_TOKEN: ${{ secrets.DEPLOYMENTS_TOKEN }}
+          PIPELINE_IMAGE:      ${{ needs.build.outputs.pipeline_image }}
+          S3_BUCKET:           ${{ secrets.S3_BUCKET }}
+        run: |
+          bash src/main/shell/trigger-release.sh \
+            --run-name "${ETL_RELEASE_TAG}"

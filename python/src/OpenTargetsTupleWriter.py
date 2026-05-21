@@ -22,12 +22,10 @@ from LoaderUtilities import (
     DEPRECATED_TERMS,
     PURLBASE,
     RDFSBASE,
-    get_chembl_to_pubchem_map,
     get_current_run,
     get_efo_to_mondo_map,
     get_gene_ensembl_id_to_names_map,
     get_gene_name_to_entrez_ids_map,
-    map_chembl_to_pubchem,
     map_efo_to_mondo,
     map_gene_ensembl_id_to_names,
     map_gene_name_to_entrez_ids,
@@ -37,7 +35,6 @@ from TupleWriterUtilities import (
     ASSOCIATION_CLASSES,
     association_to_tuples,
     get_tuples_dir,
-    remove_protocols,
     write_tuples,
 )
 
@@ -101,7 +98,6 @@ def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
     gene_ensembl_id_to_names = get_gene_ensembl_id_to_names_map()
     gene_name_to_entrez_ids = get_gene_name_to_entrez_ids_map()
     efo2mondo = get_efo_to_mondo_map()
-    chembl2pubchem = get_chembl_to_pubchem_map()
 
     gene_ensembl_ids = opentargets_results.get("gene_ensembl_ids", [])
     annotated = set()
@@ -180,7 +176,6 @@ def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
                 continue
 
             chembl_id = drug["drug"]["id"].replace("CHEMBL", "")
-            chembl_term = f"CHEMBL_{chembl_id}"
 
             # Collect drug fields
             drug_name = drug["drug"].get("name")
@@ -194,15 +189,6 @@ def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
                 if gene_ensembl_id in [t["id"] for t in moa.get("targets", [])]:
                     mechanism = moa.get("mechanismOfAction")
                     break
-
-            pubchem_id = map_chembl_to_pubchem(
-                chembl_term.replace("_", ""), chembl2pubchem
-            )
-            link_to_uniprot = None
-            if gene_entrez_id in gene_results:
-                link_to_uniprot = remove_protocols(
-                    gene_results[gene_entrez_id].get("Link_to_UniProt_ID")
-                )
 
             drug_entity = Drug(
                 label=drug_name,

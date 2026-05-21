@@ -70,3 +70,5 @@ src/main/shell/arangodb-download/
 *.csv
 *.tar.gz
 *.xlsx
+/data/arangodump-*
+build-info.txt

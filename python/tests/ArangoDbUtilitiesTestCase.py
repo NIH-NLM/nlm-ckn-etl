@@ -151,5 +151,15 @@ class ArangoDbUtilitiesTestCase(unittest.TestCase):
         # Stop the ArangoDB instance using the test data directory
         subprocess.run(["./stop-arangodb.sh"], cwd=self.sh_dir)
 
-        # Remove ArangoDB test data directory
-        shutil.rmtree(self.arangodb_dir)
+        # Remove ArangoDB test data directory; files may be owned by the Docker
+        # container's arangodb user, so sudo is required to delete them in CI.
+        try:
+            result = subprocess.run(
+                ["sudo", "-n", "rm", "-rf", str(self.arangodb_dir)],
+                check=False,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                shutil.rmtree(self.arangodb_dir, ignore_errors=True)
+        except subprocess.TimeoutExpired:
+            shutil.rmtree(self.arangodb_dir, ignore_errors=True)

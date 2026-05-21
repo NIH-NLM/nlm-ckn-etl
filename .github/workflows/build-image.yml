@@ -1,0 +1,137 @@
+name: Build and Push Docker Images
+
+# Builds the pipeline and fetcher images and pushes them to ECR whenever
+# any file that affects either image changes.
+#
+# Tags:
+#   <branch-name>   — pushed on every branch (slashes replaced with dashes)
+#   latest          — pushed only on main / master
+#
+# pipeline image (nlm-ckn-etl-pipeline):
+#   Includes JRE + the compiled JAR (via the java-build Docker stage).
+#   Rebuilt on: Java source, pom.xml, Python source, Dockerfile, release-entrypoint.
+#
+# fetcher image (nlm-ckn-etl-fetcher):
+#   Python only, no Java.
+#   Rebuilt on: Python source, Dockerfile, fetch-entrypoint.
+#
+# Required GitHub secrets:
+#   AWS_BUILD_ROLE_ARN  — IAM role to assume (needs ecr:GetAuthorizationToken,
+#                         ecr:BatchCheckLayerAvailability, ecr:PutImage, etc.)
+#   ECR_STACK_NAME      — CloudFormation stack name for ECR (default: nlm-ckn-etl-ecr)
+
+on:
+  workflow_call:
+    outputs:
+      pipeline_image:
+        description: "Full ECR URI of the built pipeline image"
+        value: ${{ jobs.build-and-push.outputs.pipeline_image }}
+    secrets:
+      AWS_BUILD_ROLE_ARN:
+        required: true
+      ECR_STACK_NAME:
+        required: true
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    name: Build and push to ECR
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for OIDC role assumption
+      contents: read
+    outputs:
+      pipeline_image: ${{ steps.tags.outputs.pipeline_image }}
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4
+        with:
+          role-to-assume: ${{ secrets.AWS_BUILD_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Resolve ECR repository URIs from CloudFormation
+        id: ecr
+        env:
+          ECR_STACK: ${{ secrets.ECR_STACK_NAME }}
+        run: |
+          STACK="${ECR_STACK:-nlm-ckn-etl-ecr}"
+
+          PIPELINE_URI=$(aws cloudformation describe-stacks \
+            --stack-name "${STACK}" \
+            --query "Stacks[0].Outputs[?OutputKey=='PipelineRepositoryUri'].OutputValue" \
+            --output text)
+
+          FETCHER_URI=$(aws cloudformation describe-stacks \
+            --stack-name "${STACK}" \
+            --query "Stacks[0].Outputs[?OutputKey=='FetcherRepositoryUri'].OutputValue" \
+            --output text)
+
+          if [ -z "$PIPELINE_URI" ] || [ -z "$FETCHER_URI" ]; then
+            [ -z "$PIPELINE_URI" ] && echo "ERROR: CloudFormation stack '${STACK}' missing output: PipelineRepositoryUri" >&2
+            [ -z "$FETCHER_URI"  ] && echo "ERROR: CloudFormation stack '${STACK}' missing output: FetcherRepositoryUri" >&2
+            exit 1
+          fi
+
+          echo "pipeline_uri=${PIPELINE_URI}" >> "$GITHUB_OUTPUT"
+          echo "fetcher_uri=${FETCHER_URI}"   >> "$GITHUB_OUTPUT"
+          echo "registry=${PIPELINE_URI%%/*}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute image tags
+        id: tags
+        env:
+          PIPELINE_URI: ${{ steps.ecr.outputs.pipeline_uri }}
+          FETCHER_URI: ${{ steps.ecr.outputs.fetcher_uri }}
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          SAFE=$(echo "$BRANCH" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+
+          PIPELINE_IMAGE="${PIPELINE_URI}:${SAFE}"
+          FETCHER_IMAGE="${FETCHER_URI}:${SAFE}"
+
+          PIPELINE_TAGS="${PIPELINE_IMAGE}"
+          FETCHER_TAGS="${FETCHER_IMAGE}"
+
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
+            PIPELINE_TAGS="${PIPELINE_TAGS},${PIPELINE_URI}:latest"
+            FETCHER_TAGS="${FETCHER_TAGS},${FETCHER_URI}:latest"
+          fi
+
+          echo "pipeline=${PIPELINE_TAGS}"       >> "$GITHUB_OUTPUT"
+          echo "fetcher=${FETCHER_TAGS}"          >> "$GITHUB_OUTPUT"
+          echo "pipeline_image=${PIPELINE_IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to ECR
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          AWS_REGION: us-east-1
+        run: |
+          aws ecr get-login-password --region "${AWS_REGION}" \
+            | docker login --username AWS --password-stdin "${REGISTRY}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+
+      - name: Build and push pipeline image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
+        with:
+          context: .
+          target: pipeline
+          push: true
+          tags: ${{ steps.tags.outputs.pipeline }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push fetcher image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
+        with:
+          context: .
+          target: fetcher
+          push: true
+          tags: ${{ steps.tags.outputs.fetcher }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
