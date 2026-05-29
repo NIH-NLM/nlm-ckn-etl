@@ -502,16 +502,18 @@ def get_gene_names_and_ensembl_and_entrez_ids():
         DataFrame with columns containing gene names, and Ensembl and
         Entrez ids
     """
-    max_fetch_age_hours = float(os.getenv("MAX_FETCH_AGE_HOURS", "48"))
+    # Half the typical Ensembl release interval (about six months). Note that
+    # the GENCODE release interval is years.
+    max_fetch_age_hours = 2160.0
     if GENE_MAPPING_PATH.exists():
         age_hours = (
             datetime.now(timezone.utc)
-            - datetime.fromtimestamp(
-                GENE_MAPPING_PATH.stat().st_mtime, tz=timezone.utc
-            )
+            - datetime.fromtimestamp(GENE_MAPPING_PATH.stat().st_mtime, tz=timezone.utc)
         ).total_seconds() / 3600
         if age_hours <= max_fetch_age_hours:
-            print(f"Loading gene mapping from {GENE_MAPPING_PATH} ({age_hours:.1f}h old)")
+            print(
+                f"Loading gene mapping from {GENE_MAPPING_PATH} ({age_hours:.1f}h old)"
+            )
             gene_names_and_ids = pd.read_csv(GENE_MAPPING_PATH, index_col=0)
             gene_names_and_ids["entrezgene_id"] = gene_names_and_ids[
                 "entrezgene_id"
@@ -598,9 +600,7 @@ def get_gene_names_and_ensembl_and_entrez_ids():
             boto3.client("s3").upload_file(
                 str(GENE_MAPPING_PATH), _S3_BUCKET, _S3_GENE_MAPPING_KEY
             )
-            print(
-                f"Cached gene mapping to s3://{_S3_BUCKET}/{_S3_GENE_MAPPING_KEY}"
-            )
+            print(f"Cached gene mapping to s3://{_S3_BUCKET}/{_S3_GENE_MAPPING_KEY}")
         except Exception as exc:
             print(
                 f"WARNING: Failed to cache gene mapping to"
