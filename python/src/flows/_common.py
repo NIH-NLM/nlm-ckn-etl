@@ -94,12 +94,32 @@ def _get_or_create_arango_password() -> str:
     Priority:
     1. ``ARANGO_DB_PASSWORD`` env var — used on AWS where the password is
        injected via the task definition or Secrets Manager.
-    2. ``.arangodb-password`` file in the repo root — used locally.
-    3. Generate a new random password and write it to the file.
+    2. AWS Secrets Manager — fetched when ``PROJECT_NAME`` and
+       ``ENVIRONMENT`` env vars are set, using the secret ID
+       ``/<PROJECT_NAME>/<ENVIRONMENT>/secrets/arangodb-password``.
+       This ensures the ETL starts ArangoDB with the same password that
+       the UI's deploy pipeline expects, so the ``_users`` system
+       collection in the dump is consistent on restore.
+    3. ``.arangodb-password`` file in the repo root — used locally.
+    4. Generate a new random password and write it to the file.
     """
     env_password = os.getenv("ARANGO_DB_PASSWORD")
     if env_password:
         return env_password
+
+    project_name = os.getenv("PROJECT_NAME")
+    environment = os.getenv("ENVIRONMENT")
+    if project_name and environment:
+        secret_id = f"/{project_name}/{environment}/secrets/arangodb-password"
+        try:
+            import boto3
+
+            client = boto3.client("secretsmanager")
+            response = client.get_secret_value(SecretId=secret_id)
+            return response["SecretString"]
+        except Exception:
+            pass  # Fall through to local file / generated password
+
     password_file = REPO_ROOT / ".arangodb-password"
     if password_file.exists():
         return password_file.read_text().strip()

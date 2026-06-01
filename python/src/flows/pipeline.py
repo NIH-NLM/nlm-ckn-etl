@@ -447,6 +447,7 @@ def dump_arangodb(
             f"--output-directory={container_out}",
             "--overwrite=true",
             "--all-databases=true",
+            "--include-system-collections=true",
         ]
     )
     if result.exit_code != 0:
