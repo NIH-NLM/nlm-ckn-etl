@@ -13,7 +13,7 @@ The pipeline is split into three phases that share a common ArangoDB
 **Phase 1 — Upstream Build** (``--run-ontology``):
   Download OWL ontologies → slim → load into ArangoDB → ``arangodump``
   the resulting database to ``data/arangodump-baseline-<run>/``.  This phase
-  is expensive (hours) but only needs to rerun when ontologies change.  Once
+  is expensive but only needs to rerun when ontologies change.  Once
   the baseline dump exists, Phase 1 is skipped automatically on subsequent
   invocations unless ``--force-ontology`` is passed.
 
@@ -93,14 +93,15 @@ from _common import (
     DEFAULT_JAVA_OPTS,
     REPO_ROOT,
     S3_BUCKET,
+    S3_KMS_KEY_ID,
     _arango_env,
     _external_dir,
     _find_free_port,
     _get_arangodb_id,
     _get_or_create_arango_password,
     _jar_key,
+    _parse_s3_url,
     _run_python_script,
-    _s3_cp,
     _s3_download_tar,
     _s3_sync,
     _s3_upload_tar,
@@ -469,6 +470,77 @@ def dump_arangodb(
 
     dump_files = list(dump_dir.glob("*"))
     logger.info(f"Dump complete{tag}: {len(dump_files)} file(s) in {dump_dir.name}/")
+
+
+@task(name="export-graphs-and-analyzers", log_prints=True)
+def export_graphs_and_analyzers(
+    dump_dir: Path,
+    arango_db_password: str,
+) -> None:
+    """Export named graph definitions and custom analyzers as sidecar files.
+
+    Writes two files per database into ``dump_dir/<db>/``:
+
+    - ``ckn-graphs.ndjson``    — graph objects from ``GET /_db/<db>/_api/gharial``
+    - ``ckn-analyzers.ndjson`` — user-defined analyzers from ``GET /_db/<db>/_api/analyzer``
+      (only those whose name contains ``::``).
+
+    The ``.ndjson`` extension is intentionally non-standard so that
+    ``arangorestore`` ignores these files during restore.  The UI deploy
+    pipeline (``deploy-dataset.sh``) reads them after ``arangorestore``
+    completes and recreates the graphs and analyzers via the REST API,
+    avoiding any dependency on ``--include-system-collections``.
+
+    Parameters
+    ----------
+    dump_dir:
+        Dump directory produced by ``dump_arangodb``.
+    arango_db_password:
+        ArangoDB root password.
+    """
+    import base64
+    import urllib.request
+
+    logger = get_run_logger()
+    dump_dir = Path(dump_dir)
+
+    auth = base64.b64encode(f"root:{arango_db_password}".encode()).decode()
+    headers = {"Authorization": f"Basic {auth}"}
+    base_url = f"http://{ARANGO_DB_HOST}:{ARANGO_DB_PORT}"
+
+    _ARANGO_TIMEOUT = 30  # seconds; guards against a hung ArangoDB during export
+
+    def _get(path: str) -> dict:
+        req = urllib.request.Request(f"{base_url}{path}", headers=headers)
+        with urllib.request.urlopen(req, timeout=_ARANGO_TIMEOUT) as resp:
+            return json.loads(resp.read())
+
+    databases = [
+        d.name for d in dump_dir.iterdir()
+        if d.is_dir() and not d.name.startswith("_")
+    ]
+
+    for db in sorted(databases):
+        db_dir = dump_dir / db
+
+        try:
+            data = _get(f"/_db/{db}/_api/gharial")
+            graphs = data.get("graphs", [])
+            (db_dir / "ckn-graphs.ndjson").write_text(json.dumps(graphs, indent=2))
+            logger.info(f"Exported {len(graphs)} graph(s) → {db}/ckn-graphs.ndjson")
+        except Exception as exc:
+            logger.warning(f"Could not export graphs for {db}: {exc}")
+
+        try:
+            data = _get(f"/_db/{db}/_api/analyzer")
+            analyzers = [
+                a for a in data.get("result", [])
+                if "::" in a.get("name", "")
+            ]
+            (db_dir / "ckn-analyzers.ndjson").write_text(json.dumps(analyzers, indent=2))
+            logger.info(f"Exported {len(analyzers)} analyzer(s) → {db}/ckn-analyzers.ndjson")
+        except Exception as exc:
+            logger.warning(f"Could not export analyzers for {db}: {exc}")
 
 
 @task(name="restore-arangodb", log_prints=True)
@@ -911,7 +983,17 @@ def promote_to_production(
 
     build_info_path = REPO_ROOT / "build-info.txt"
     build_info_path.write_text("\n".join(build_info_lines) + "\n")
-    _s3_cp(str(build_info_path), f"{run_prefix}/build-info.txt")
+    if S3_BUCKET:
+        bucket, key = _parse_s3_url(f"{run_prefix}/build-info.txt")
+        sse_args = (
+            {"ServerSideEncryption": "aws:kms", "SSEKMSKeyId": S3_KMS_KEY_ID}
+            if S3_KMS_KEY_ID
+            else {"ServerSideEncryption": "AES256"}
+        )
+        boto3.client("s3").upload_file(
+            str(build_info_path), bucket, key,
+            ExtraArgs={"ACL": "private", **sse_args},
+        )
 
     logger.info(f"All artifacts promoted to {run_prefix}/")
 
@@ -1145,6 +1227,7 @@ def nlm_ckn_etl(
         if golden_dump_dir.is_dir():
             shutil.rmtree(golden_dump_dir)
         dump_arangodb(golden_dump_dir, arango_db_password, label="golden")
+        export_graphs_and_analyzers(golden_dump_dir, arango_db_password)
 
         # Promote all production artifacts to a versioned S3 path.
         # The baseline dump is NOT re-uploaded here — it lives permanently at
