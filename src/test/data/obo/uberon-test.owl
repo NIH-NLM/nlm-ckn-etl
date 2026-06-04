@@ -52,6 +52,12 @@
         </rdfs:subClassOf>
     </owl:Class>
 
+    <!-- only_in_taxon Insecta (annotation form); human is not an insect: EXCLUDE -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000006">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">insect cuticle</rdfs:label>
+        <obo:RO_0002160 rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_7147"/>
+    </owl:Class>
+
     <!-- never_in_taxon Mammalia (logical restriction form); human is a mammal: EXCLUDE -->
     <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000005">
         <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">swim bladder</rdfs:label>

@@ -65,6 +65,19 @@ public class OntologySlimmer {
     }
 
     /**
+     * Create an {@link XMLInputFactory} hardened against XXE by disabling DTDs and external entities. The ontology
+     * inputs do not use DTDs or entity references, so disabling them is safe and prevents external-entity attacks.
+     *
+     * @return A hardened input factory
+     */
+    private static XMLInputFactory hardenedInputFactory() {
+        XMLInputFactory factory = XMLInputFactory.newInstance();
+        factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+        factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+        return factory;
+    }
+
+    /**
      * Filter an OWL file to retain only classes with a taxon restriction for the given NCBI taxon ID. Copies the
      * ontology header, all annotation and object property declarations, and only those {@code owl:Class} elements that
      * contain an {@code owl:someValuesFrom} restriction referencing the specified taxon. Drops all {@code owl:Axiom}
@@ -120,7 +133,7 @@ public class OntologySlimmer {
      * @throws XMLStreamException if an XML parsing error occurs
      */
     private static int filterClasses(Path inputFile, Path outputFile, ClassFilter filter) throws IOException, XMLStreamException {
-        XMLInputFactory inputFactory = XMLInputFactory.newInstance();
+        XMLInputFactory inputFactory = hardenedInputFactory();
         XMLOutputFactory outputFactory = XMLOutputFactory.newInstance();
         int classesWritten = 0;
         int classesSkipped = 0;
@@ -146,10 +159,12 @@ public class OntologySlimmer {
                     String localName = event.asStartElement().getName().getLocalPart();
                     String nsURI = event.asStartElement().getName().getNamespaceURI();
 
-                    // Start buffering a top-level owl:Class; we decide keep/discard at its end tag
+                    // Start buffering a top-level owl:Class; we decide keep/discard at its end tag. A named class may be
+                    // serialized with either rdf:about or rdf:ID; accept both so neither bypasses the filter.
                     if (nsURI.equals(OWL_NS) && localName.equals("Class") && !inClass && !inAxiom) {
                         var aboutAttr = event.asStartElement().getAttributeByName(new QName(RDF_NS, "about"));
-                        if (aboutAttr != null) {
+                        var idAttr = event.asStartElement().getAttributeByName(new QName(RDF_NS, "ID"));
+                        if (aboutAttr != null || idAttr != null) {
                             inClass = true;
                             elementStartDepth = depth;
                             buffer.clear();
@@ -324,7 +339,7 @@ public class OntologySlimmer {
      */
     public static Set<String> buildTaxonLineage(Path taxslimFile, String taxonId) throws IOException, XMLStreamException {
         Map<String, Set<String>> childToParents = new HashMap<>();
-        XMLInputFactory inputFactory = XMLInputFactory.newInstance();
+        XMLInputFactory inputFactory = hardenedInputFactory();
 
         try (var fis = new BufferedInputStream(new FileInputStream(taxslimFile.toFile()))) {
             XMLEventReader reader = inputFactory.createXMLEventReader(fis);

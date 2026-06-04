@@ -155,6 +155,7 @@ class OntologySlimmerTest {
         String content = Files.readString(output);
         assertFalse(content.contains("UBERON_0000001"), "Should drop feather (never_in_taxon Mammalia, annotation form)");
         assertFalse(content.contains("UBERON_0000003"), "Should drop insect wing (only_in_taxon Insecta, restriction form)");
+        assertFalse(content.contains("UBERON_0000006"), "Should drop insect cuticle (only_in_taxon Insecta, annotation form)");
         assertFalse(content.contains("UBERON_0000005"), "Should drop swim bladder (never_in_taxon Mammalia, restriction form)");
     }
 
