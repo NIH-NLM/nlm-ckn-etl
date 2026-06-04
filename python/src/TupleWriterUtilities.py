@@ -314,11 +314,13 @@ def entity_to_term(entity: Any, context: dict[str, Any] | None = None) -> str | 
         return f"PR_{uid}" if uid else None
 
     if isinstance(entity, CellSet):
-        name = getattr(entity, "author_cell_term", None)
+        # Key CellSets by uuid only, like BiomarkerCombination/BinaryGeneSet.
+        # The author cell term is retained on the vertex as an attribute, but
+        # is kept out of the key because free-text cluster names can contain
+        # characters ArangoDB disallows in document keys (e.g. & ï φ), which
+        # would otherwise cause the vertex insert to be silently dropped.
         uuid = ctx.get("uuid")
-        if name and uuid:
-            return f"CS_{name}-{uuid}"
-        return None
+        return f"CS_{uuid}" if uuid else None
 
     if isinstance(entity, CellSetDataset):
         did = getattr(entity, "dataset_identifier", None)

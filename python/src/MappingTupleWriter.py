@@ -166,7 +166,7 @@ def create_tuples(
         )
 
         # Edge annotations on CS→CellType: Match and Mapping_method
-        cs_uri = URIRef(f"{PURLBASE}/CS_{author_cell_set}-{uuid}")
+        cs_uri = URIRef(f"{PURLBASE}/CS_{uuid}")
         ct_uri = URIRef(f"{PURLBASE}/{cl_term}")
         pred_uri = URIRef(f"{PURLBASE}/RO_0002473")
         match_val = row.get("match")

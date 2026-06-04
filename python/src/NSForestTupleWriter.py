@@ -233,7 +233,7 @@ def create_tuples(
         )
 
         # Extra edge annotations from raw data columns on CS→BMC edge
-        cs_uri = URIRef(f"{PURLBASE}/CS_{cluster_name}-{uuid}")
+        cs_uri = URIRef(f"{PURLBASE}/CS_{uuid}")
         bmc_uri = URIRef(f"{PURLBASE}/BMC_{uuid}")
         pred_uri = URIRef(f"{PURLBASE}/RO_0015004")
         tuples.append(
