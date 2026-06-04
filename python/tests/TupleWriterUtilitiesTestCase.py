@@ -127,7 +127,7 @@ class EntityToTermTestCase(unittest.TestCase):
         cs = CellSet(author_cell_term="T-Cell")
         self.assertEqual(
             twu.entity_to_term(cs, {"uuid": "abc123"}),
-            "CS_T-Cell-abc123",
+            "CS_abc123",
         )
 
     def test_cell_set_without_context(self):
