@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -99,5 +100,74 @@ class OntologySlimmerTest {
         String content = Files.readString(output);
         assertTrue(content.contains("PR_000000002"), "Should contain mouse class");
         assertFalse(content.contains("PR_000000001"), "Should not contain human class");
+    }
+
+    @Test
+    void buildTaxonLineage_includesAncestorsOfHuman() throws IOException, XMLStreamException {
+        Path taxslim = testOboDir.resolve("taxslim-test.owl");
+
+        Set<String> lineage = OntologySlimmer.buildTaxonLineage(taxslim, "9606");
+
+        assertTrue(lineage.contains("http://purl.obolibrary.org/obo/NCBITaxon_9606"), "Should contain the taxon itself");
+        assertTrue(lineage.contains("http://purl.obolibrary.org/obo/NCBITaxon_40674"), "Should contain Mammalia");
+        assertTrue(lineage.contains("http://purl.obolibrary.org/obo/NCBITaxon_7711"), "Should contain Chordata");
+        assertTrue(lineage.contains("http://purl.obolibrary.org/obo/NCBITaxon_33208"), "Should contain Metazoa");
+        assertTrue(lineage.contains("http://purl.obolibrary.org/obo/NCBITaxon_1"), "Should contain root");
+    }
+
+    @Test
+    void buildTaxonLineage_excludesOffLineageTaxa() throws IOException, XMLStreamException {
+        Path taxslim = testOboDir.resolve("taxslim-test.owl");
+
+        Set<String> lineage = OntologySlimmer.buildTaxonLineage(taxslim, "9606");
+
+        assertFalse(lineage.contains("http://purl.obolibrary.org/obo/NCBITaxon_8782"), "Should not contain Aves");
+        assertFalse(lineage.contains("http://purl.obolibrary.org/obo/NCBITaxon_7147"), "Should not contain Insecta");
+    }
+
+    @Test
+    void slimByTaxonExclusion_keepsUnconstrainedAndNonHumanExcludingClasses(@TempDir Path tempDir)
+            throws IOException, XMLStreamException {
+        Path taxslim = testOboDir.resolve("taxslim-test.owl");
+        Path input = testOboDir.resolve("uberon-test.owl");
+        Path output = tempDir.resolve("uberon-human.owl");
+        Set<String> lineage = OntologySlimmer.buildTaxonLineage(taxslim, "9606");
+
+        int count = OntologySlimmer.slimByTaxonExclusion(input, output, lineage);
+
+        // heart (no constraint) and mammary gland (never_in_taxon Aves) are kept
+        assertEquals(2, count);
+        String content = Files.readString(output);
+        assertTrue(content.contains("UBERON_0000004"), "Should keep pan-taxonomic heart");
+        assertTrue(content.contains("UBERON_0000002"), "Should keep mammary gland (never_in_taxon Aves)");
+    }
+
+    @Test
+    void slimByTaxonExclusion_dropsHumanExcludingClasses(@TempDir Path tempDir)
+            throws IOException, XMLStreamException {
+        Path taxslim = testOboDir.resolve("taxslim-test.owl");
+        Path input = testOboDir.resolve("uberon-test.owl");
+        Path output = tempDir.resolve("uberon-human.owl");
+        Set<String> lineage = OntologySlimmer.buildTaxonLineage(taxslim, "9606");
+
+        OntologySlimmer.slimByTaxonExclusion(input, output, lineage);
+
+        String content = Files.readString(output);
+        assertFalse(content.contains("UBERON_0000001"), "Should drop feather (never_in_taxon Mammalia, annotation form)");
+        assertFalse(content.contains("UBERON_0000003"), "Should drop insect wing (only_in_taxon Insecta, restriction form)");
+        assertFalse(content.contains("UBERON_0000005"), "Should drop swim bladder (never_in_taxon Mammalia, restriction form)");
+    }
+
+    @Test
+    void slimByTaxonExclusion_dropsAxioms(@TempDir Path tempDir) throws IOException, XMLStreamException {
+        Path taxslim = testOboDir.resolve("taxslim-test.owl");
+        Path input = testOboDir.resolve("uberon-test.owl");
+        Path output = tempDir.resolve("uberon-human.owl");
+        Set<String> lineage = OntologySlimmer.buildTaxonLineage(taxslim, "9606");
+
+        OntologySlimmer.slimByTaxonExclusion(input, output, lineage);
+
+        String content = Files.readString(output);
+        assertFalse(content.contains("owl:Axiom"), "Should not contain any owl:Axiom elements");
     }
 }

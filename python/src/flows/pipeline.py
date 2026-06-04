@@ -372,10 +372,14 @@ def slim_ontologies(
 ) -> None:
     """Run OntologySlimmer to filter downloaded OWL files before graph loading.
 
-    OntologySlimmer reduces ``pr.owl`` to human-only (NCBITaxon:9606) protein
-    classes.  Without this step OntologyGraphBuilder processes the full
-    unfiltered PR ontology, which is extremely large and degrades performance.
-    Must run after ``download_ontologies`` and before ``build_ontology_graph``.
+    OntologySlimmer reduces two ontologies to human-only (NCBITaxon:9606):
+    ``pr.owl`` -> ``pr-slim.owl`` keeps only protein classes asserted to be in
+    human (inclusion), and ``uberon-base.owl`` -> ``uberon-human.owl`` keeps all
+    anatomy except classes a taxon constraint excludes from human (exclusion,
+    using the NCBITaxon hierarchy in ``taxslim.owl``).  Without this step
+    OntologyGraphBuilder processes the full unfiltered ontologies, which are
+    extremely large and degrade performance.  Must run after
+    ``download_ontologies`` and before ``build_ontology_graph``.
     """
     logger = get_run_logger()
     logger.info(f"Slimming ontologies (gov.nih.nlm.OntologySlimmer, {java_opts})")
