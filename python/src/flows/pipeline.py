@@ -526,7 +526,12 @@ def export_graphs_and_analyzers(
         try:
             data = _get(f"/_db/{db}/_api/gharial")
             graphs = data.get("graphs", [])
-            (db_dir / "ckn-graphs.ndjson").write_text(json.dumps(graphs, indent=2))
+            # True NDJSON: one compact object per line (empty list → empty file).
+            # The deploy consumer iterates a stream of JSON objects; a single
+            # pretty-printed array would be read as one value and break on `.name`.
+            (db_dir / "ckn-graphs.ndjson").write_text(
+                "".join(json.dumps(g) + "\n" for g in graphs)
+            )
             logger.info(f"Exported {len(graphs)} graph(s) → {db}/ckn-graphs.ndjson")
         except Exception as exc:
             logger.warning(f"Could not export graphs for {db}: {exc}")
@@ -537,7 +542,10 @@ def export_graphs_and_analyzers(
                 a for a in data.get("result", [])
                 if "::" in a.get("name", "")
             ]
-            (db_dir / "ckn-analyzers.ndjson").write_text(json.dumps(analyzers, indent=2))
+            # True NDJSON: one compact object per line (empty list → empty file).
+            (db_dir / "ckn-analyzers.ndjson").write_text(
+                "".join(json.dumps(a) + "\n" for a in analyzers)
+            )
             logger.info(f"Exported {len(analyzers)} analyzer(s) → {db}/ckn-analyzers.ndjson")
         except Exception as exc:
             logger.warning(f"Could not export analyzers for {db}: {exc}")
