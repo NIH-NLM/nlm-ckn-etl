@@ -129,7 +129,6 @@ s3://{S3_BUCKET}/
 │   ├── gene_transformed.json
 │   ├── uniprot.json
 │   ├── uniprot_transformed.json
-│   ├── pubmed.json
 │   └── fetch-info.json              # Timestamp + file sizes for the last fetch
 │
 ├── baselines/
