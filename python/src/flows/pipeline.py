@@ -73,6 +73,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -91,6 +92,7 @@ from _common import (
     ARANGO_DB_VOLUME_NAME,
     CLASSPATH,
     DEFAULT_JAVA_OPTS,
+    PYTHON_SRC,
     REPO_ROOT,
     S3_BUCKET,
     S3_KMS_KEY_ID,
@@ -109,6 +111,10 @@ from _common import (
     sync_external_from_s3,
     validate_external_files,
 )
+
+# Put python/src on the path so in-process tasks can import sibling modules
+# (e.g. ArangoDbUtilities) the same way _run_python_script subprocesses do.
+sys.path.insert(0, PYTHON_SRC)
 
 # ── Tasks ──────────────────────────────────────────────────────────────────
 
@@ -848,10 +854,35 @@ def build_induced_subgraph(
 
 @task(name="create-analyzers-and-views", log_prints=True)
 def create_analyzers_and_views(arango_db_password: str) -> None:
-    """Run CellKnSchemaUtilities.py to create ArangoDB analyzers and search views."""
+    """Create ArangoDB analyzers and search views in each populated database.
+
+    Runs in-process via ``ArangoDbUtilities`` (which connects lazily from the
+    environment) rather than shelling out.  Analyzers and views are recreated
+    in both the ontology and phenotype databases; deletion of any pre-existing
+    view/analyzers is best-effort so a freshly restored database is handled
+    cleanly.
+    """
     logger = get_run_logger()
-    logger.info("Creating ArangoDB analyzers and views (CellKnSchemaUtilities)")
-    _run_python_script("CellKnSchemaUtilities.py", arango_db_password)
+
+    # ArangoDbUtilities reads connection settings from the environment at call
+    # time; export the live host/port (the port is assigned dynamically at
+    # container start) and password so it connects to this run's instance.
+    os.environ["ARANGO_DB_HOST"] = ARANGO_DB_HOST
+    os.environ["ARANGO_DB_PORT"] = str(ARANGO_DB_PORT)
+    os.environ["ARANGO_DB_PASSWORD"] = arango_db_password
+
+    import ArangoDbUtilities as adb
+
+    collection_maps = REPO_ROOT / "data" / "nlm-ckn-collection-maps.json"
+    for database in ("Cell-KN-Ontologies", "Cell-KN-Phenotypes"):
+        logger.info(f"Creating analyzers and views in {database}")
+        for delete_fn in (adb.delete_view, adb.delete_analyzers):
+            try:
+                delete_fn(database)
+            except Exception:
+                logger.info(f"Nothing to delete in {database}")
+        adb.create_analyzers(database)
+        adb.create_view(database, collection_maps_name=collection_maps)
     logger.info("Analyzers and views created")
 
 
