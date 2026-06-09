@@ -576,7 +576,6 @@ def validate_external_files(run: str = "") -> None:
         "opentargets.json",
         "gene.json",
         "uniprot.json",
-        "pubmed.json",
     ]
     transformed_required = [
         "cellxgene_transformed.json",
@@ -584,9 +583,6 @@ def validate_external_files(run: str = "") -> None:
         "gene_transformed.json",
         "uniprot_transformed.json",
     ]
-
-    # pubmed.json is legitimately empty when no author-to-CL mapping files exist
-    may_be_empty = {"pubmed.json"}
 
     errors = []
     for filename in raw_required + transformed_required:
@@ -598,7 +594,7 @@ def validate_external_files(run: str = "") -> None:
         else:
             try:
                 data = json.loads(path.read_text())
-                if not data and filename not in may_be_empty:
+                if not data:
                     logger.warning(
                         f"{external_dir.name}/{filename} is valid JSON but contains no entries "
                         f"— annotations from this source will be skipped. "
