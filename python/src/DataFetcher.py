@@ -726,7 +726,7 @@ def main():
     parser.add_argument(
         "--run",
         default=None,
-        help="run name (selects data/run-<name>.json; defaults to $CKN_RUN or 'full')",
+        help="run name (selects data/results-<name>/; defaults to $CKN_RUN or 'full')",
     )
     parser.add_argument(
         "--source-max-age",

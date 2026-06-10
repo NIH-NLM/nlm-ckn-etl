@@ -353,7 +353,8 @@ def nlm_ckn_release(
         previous failures).  If the cache is older or absent a full re-fetch is
         forced.  Defaults to 48 hours.
     java_opts:
-        JVM flags passed to every Java invocation (default: ``-Xmx4g``).
+        JVM flags passed to every Java invocation (default: ``DEFAULT_JAVA_OPTS``,
+        currently ``-Xmx32g``).
     """
     logger = get_run_logger()
 
