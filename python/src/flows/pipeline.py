@@ -614,6 +614,82 @@ def export_graphs_and_analyzers(
             logger.warning(f"Could not export analyzers for {db}: {exc}")
 
 
+@task(name="import-graphs-from-sidecar", log_prints=True)
+def import_graphs_from_sidecar(dump_dir: Path, arango_db_password: str) -> None:
+    """Recreate named graphs from ``ckn-graphs.ndjson`` sidecars after a restore.
+
+    ``arangodump`` excludes the ``_graphs`` system collection, so named graph
+    definitions do not survive dump/restore.  ``export_graphs_and_analyzers``
+    writes them next to the dump; this task reads them back and recreates any
+    graph missing on the target (via the gharial REST API) so downstream steps
+    such as ``InducedSubgraphBuilder`` can load the graph by name.  The edge
+    collections the definitions reference are ordinary collections and are
+    already present from the restore.
+
+    Parameters
+    ----------
+    dump_dir:
+        Dump directory whose ``<db>/ckn-graphs.ndjson`` sidecars were written
+        by ``export_graphs_and_analyzers``.
+    arango_db_password:
+        ArangoDB root password.
+    """
+    import base64
+    import urllib.error
+    import urllib.request
+
+    logger = get_run_logger()
+    dump_dir = Path(dump_dir)
+
+    auth = base64.b64encode(f"root:{arango_db_password}".encode()).decode()
+    base_url = f"http://{ARANGO_DB_HOST}:{ARANGO_DB_PORT}"
+    _ARANGO_TIMEOUT = 30  # seconds
+
+    db_dirs = sorted(
+        p for p in dump_dir.iterdir() if p.is_dir() and not p.name.startswith("_")
+    )
+    for db_dir in db_dirs:
+        db = db_dir.name
+        sidecar = db_dir / "ckn-graphs.ndjson"
+        if not sidecar.exists():
+            continue
+        for line in sidecar.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            graph = json.loads(line)
+            name = graph.get("name")
+            if not name:
+                continue
+            body = json.dumps(
+                {
+                    "name": name,
+                    "edgeDefinitions": graph.get("edgeDefinitions", []),
+                    "orphanCollections": graph.get("orphanCollections", []),
+                }
+            ).encode()
+            req = urllib.request.Request(
+                f"{base_url}/_db/{db}/_api/gharial",
+                data=body,
+                method="POST",
+                headers={
+                    "Authorization": f"Basic {auth}",
+                    "Content-Type": "application/json",
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=_ARANGO_TIMEOUT) as resp:
+                    resp.read()
+                logger.info(f"Recreated graph {db}/{name}")
+            except urllib.error.HTTPError as exc:
+                if exc.code == 409:
+                    logger.info(f"Graph {db}/{name} already exists — skipping")
+                else:
+                    detail = exc.read().decode(errors="ignore")
+                    logger.warning(f"Could not recreate graph {db}/{name}: {exc} {detail}")
+    logger.info("Graph sidecar import complete")
+
+
 @task(name="restore-arangodb", log_prints=True)
 def restore_arangodb(
     dump_dir: Path,
@@ -1412,6 +1488,9 @@ def nlm_ckn_etl(
         if results_dump_dir.is_dir():
             shutil.rmtree(results_dump_dir)
         dump_arangodb(results_dump_dir, arango_db_password, label="results")
+        # Capture named-graph definitions next to the dump (arangodump excludes
+        # the _graphs system collection); Phase 3 recreates them after restoring.
+        export_graphs_and_analyzers(results_dump_dir, arango_db_password)
         sync_results_dump_to_s3(results_dump_dir, jar_key, run_name)
         phase2_db_is_current = True
 
@@ -1444,6 +1523,10 @@ def nlm_ckn_etl(
                     "the results graph, then re-run with --run-archive."
                 )
             restore_arangodb(results_dump_dir, arango_db_password)
+            # Recreate named graphs the restore dropped (the _graphs system
+            # collection is excluded from the dump) so InducedSubgraphBuilder
+            # can load KN-Ontologies-v2.0 by name.
+            import_graphs_from_sidecar(results_dump_dir, arango_db_password)
             create_analyzers_and_views(arango_db_password, "Cell-KN-Ontologies")
 
         # Induce the phenotype subgraph from the ontology + results graph, then
