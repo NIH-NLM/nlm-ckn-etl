@@ -201,6 +201,50 @@ def _arangodb_volume_source(arango_db_home: str) -> tuple[str, bool]:
     return arango_db_home, False
 
 
+def _wait_for_arangodb_ready(
+    port: int, arango_db_password: str, timeout: float = 120.0
+) -> None:
+    """Block until ArangoDB accepts authenticated connections on the host port.
+
+    ``start_arangodb`` launches the container detached; ArangoDB then needs
+    several seconds to initialise a freshly-wiped data dir (create ``_system``,
+    apply the root password) before it accepts connections.  ``arangorestore``/
+    ``arangodump`` connect immediately afterwards, so without this wait they hit
+    "cannot create server connection" against a still-initialising server (its
+    own ~3s retry is not enough for a cold start on a fresh data dir).
+
+    Polls ``GET /_api/version`` with root credentials until it returns 200 or
+    ``timeout`` seconds elapse (then raises).
+    """
+    import base64
+    import time
+    import urllib.error
+    import urllib.request
+
+    auth = base64.b64encode(f"root:{arango_db_password}".encode()).decode()
+    req = urllib.request.Request(
+        f"http://{ARANGO_DB_HOST}:{port}/_api/version",
+        headers={"Authorization": f"Basic {auth}"},
+    )
+    deadline = time.monotonic() + timeout
+    last_err: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    return
+                last_err = RuntimeError(f"HTTP {resp.status}")
+        except (urllib.error.URLError, OSError) as exc:
+            # Connection refused while the server is still starting, or a
+            # transient 401 before the root password is applied — keep polling.
+            last_err = exc
+        time.sleep(1.0)
+    raise RuntimeError(
+        f"ArangoDB did not become ready on {ARANGO_DB_HOST}:{port} "
+        f"within {timeout:.0f}s (last error: {last_err})"
+    )
+
+
 @task(name="start-arangodb", log_prints=True)
 def start_arangodb(arango_db_home: str, arango_db_password: str) -> int:
     """Start the ArangoDB container with the data directory mounted.
@@ -252,6 +296,11 @@ def start_arangodb(arango_db_home: str, arango_db_password: str) -> int:
         volumes=volumes,
     )
     logger.info(f"ArangoDB container started on port {arango_db_port}")
+    # Wait until the server accepts authenticated connections before returning;
+    # callers (dump/restore) connect immediately and a fresh data dir takes
+    # several seconds to initialise.
+    _wait_for_arangodb_ready(arango_db_port, arango_db_password)
+    logger.info("ArangoDB is accepting connections")
     return arango_db_port
 
 
