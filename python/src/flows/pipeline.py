@@ -690,6 +690,290 @@ def import_graphs_from_sidecar(dump_dir: Path, arango_db_password: str) -> None:
     logger.info("Graph sidecar import complete")
 
 
+def _dir_size_bytes(path: Path) -> int:
+    """Return the total uncompressed size, in bytes, of every file under ``path``.
+
+    Equivalent to ``du -sb``: sums ``os.path.getsize`` over the whole tree,
+    following the directory structure but not symlinks.  Pure helper (no
+    network, no ArangoDB) so it can be unit-tested over a fake directory.
+    """
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            fp = os.path.join(root, name)
+            if os.path.islink(fp):
+                continue
+            try:
+                total += os.path.getsize(fp)
+            except OSError:
+                continue
+    return total
+
+
+def _build_release_manifest(
+    tag: str,
+    uncompressed_bytes: int,
+    compressed_bytes: int,
+    databases: dict,
+    created_utc: str | None = None,
+) -> dict:
+    """Assemble the release-manifest dict from already-collected figures.
+
+    Pure function (no I/O) so it can be unit-tested directly.  ``databases``
+    maps a database name to ``{"total_bytes": int, "collections": {<name>:
+    {"documents": int, "bytes": int}}}``.
+
+    Parameters
+    ----------
+    tag:
+        Release tag / version — the same string used for the S3 run prefix.
+    uncompressed_bytes:
+        Total size of the uncompressed dump directory.
+    compressed_bytes:
+        Size of the compressed ``.tar.gz`` tarball.
+    databases:
+        Per-database document counts and on-disk sizes.
+    created_utc:
+        ISO-8601 UTC timestamp.  Defaults to ``now()`` when not provided.
+    """
+    if created_utc is None:
+        created_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {
+        "tag": tag,
+        "created_utc": created_utc,
+        "uncompressed_bytes": uncompressed_bytes,
+        "compressed_bytes": compressed_bytes,
+        "databases": databases,
+    }
+
+
+def _collect_db_figures(
+    dump_dir: Path,
+    arango_db_password: str,
+    logger,
+) -> dict:
+    """Collect per-database, per-collection document counts and on-disk sizes.
+
+    Reuses the ArangoDB REST API already used by ``export_graphs_and_analyzers``
+    (same endpoint, auth, and timeout) rather than introducing a new client.
+    Databases are discovered from the dump directory layout so this stays
+    aligned with what was actually dumped.  Best-effort: any failure for a
+    database or collection is logged and skipped, never raised.
+    """
+    import base64
+    import urllib.parse
+    import urllib.request
+
+    auth = base64.b64encode(f"root:{arango_db_password}".encode()).decode()
+    headers = {"Authorization": f"Basic {auth}"}
+    base_url = f"http://{ARANGO_DB_HOST}:{ARANGO_DB_PORT}"
+    _ARANGO_TIMEOUT = 30  # seconds; guards against a hung ArangoDB
+
+    def _get(path: str) -> dict:
+        req = urllib.request.Request(f"{base_url}{path}", headers=headers)
+        with urllib.request.urlopen(req, timeout=_ARANGO_TIMEOUT) as resp:
+            return json.loads(resp.read())
+
+    databases = [
+        d.name for d in dump_dir.iterdir()
+        if d.is_dir() and not d.name.startswith("_")
+    ]
+
+    result: dict = {}
+    for db in sorted(databases):
+        collections: dict = {}
+        total_bytes = 0
+        try:
+            listing = _get(f"/_db/{db}/_api/collection?excludeSystem=true")
+            names = sorted(c["name"] for c in listing.get("result", []))
+        except Exception as exc:
+            logger.warning(f"Could not list collections for {db}: {exc}")
+            result[db] = {"total_bytes": 0, "collections": {}}
+            continue
+
+        for name in names:
+            try:
+                quoted = urllib.parse.quote(name, safe="")
+                figures = _get(f"/_db/{db}/_api/collection/{quoted}/figures")
+                documents = int(figures.get("count", 0))
+                fig = figures.get("figures", {}) or {}
+                index_size = (fig.get("indexes", {}) or {}).get("size", 0) or 0
+                col_bytes = int(fig.get("documentsSize", 0) or 0) + int(index_size)
+                collections[name] = {"documents": documents, "bytes": col_bytes}
+                total_bytes += col_bytes
+            except Exception as exc:
+                logger.warning(f"Could not read figures for {db}/{name}: {exc}")
+
+        result[db] = {"total_bytes": total_bytes, "collections": collections}
+
+    return result
+
+
+def _upload_github_release_asset(asset_path: Path, logger) -> None:
+    """Attach ``asset_path`` to the GitHub Release for ``ETL_RELEASE_TAG``.
+
+    Reads ``GITHUB_TOKEN``, ``GITHUB_REPOSITORY``, and ``ETL_RELEASE_TAG`` from
+    the environment (the same container env used by
+    ``post_github_deployment_status``).  No-ops when any are absent — e.g. local
+    runs or manual Batch submissions not tied to a published Release.
+
+    Idempotent: an existing asset of the same name on the release is deleted
+    first so re-runs replace rather than 422.  Best-effort — any failure is
+    logged and swallowed so it never fails the release.
+    """
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    token = os.getenv("GITHUB_TOKEN", "")
+    repo = os.getenv("GITHUB_REPOSITORY", "")
+    tag = os.getenv("ETL_RELEASE_TAG", "")
+    if not (token and repo and tag):
+        logger.info(
+            "GITHUB_TOKEN/GITHUB_REPOSITORY/ETL_RELEASE_TAG not all set — "
+            "skipping GitHub release asset upload"
+        )
+        return
+
+    api = "https://api.github.com"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    def _api(method: str, url: str, data: bytes | None = None,
+             content_type: str | None = None) -> bytes:
+        h = dict(headers)
+        if content_type:
+            h["Content-Type"] = content_type
+        req = urllib.request.Request(url, data=data, headers=h, method=method)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.read()
+
+    # Resolve the release by tag.
+    release = json.loads(_api("GET", f"{api}/repos/{repo}/releases/tags/{tag}"))
+    release_id = release["id"]
+    asset_name = asset_path.name
+
+    # Delete an existing asset of the same name so re-runs replace it.
+    for asset in release.get("assets", []):
+        if asset.get("name") == asset_name:
+            try:
+                _api("DELETE", f"{api}/repos/{repo}/releases/assets/{asset['id']}")
+                logger.info(f"Replaced existing release asset: {asset_name}")
+            except Exception as exc:
+                logger.warning(f"Could not delete existing asset {asset_name}: {exc}")
+
+    upload_url = (
+        f"https://uploads.github.com/repos/{repo}/releases/{release_id}/assets"
+        f"?name={urllib.parse.quote(asset_name)}"
+    )
+    _api("POST", upload_url, data=asset_path.read_bytes(),
+         content_type="application/json")
+    logger.info(f"Uploaded release asset → {repo} release {tag}: {asset_name}")
+
+
+@task(name="write-release-manifest", log_prints=True)
+def write_release_manifest(
+    golden_dump_dir: Path,
+    arango_db_password: str,
+    run: str = "",
+) -> None:
+    """Capture dataset size and counts as a versioned release manifest artifact.
+
+    Writes ``manifest.json`` next to the golden dump and uploads it to the same
+    S3 run prefix as the dump (``s3://${S3_BUCKET}/runs/<run>/manifest.json``).
+    The manifest records the uncompressed dump size, the compressed tarball
+    size, and per-collection document counts / on-disk sizes — a cheap,
+    versioned early-warning signal for dataset growth against the 100 GB
+    Community License cap.
+
+    Best-effort by design: any failure during size/count collection or upload
+    is logged as a warning and swallowed so it can never fail the release.
+
+    Parameters
+    ----------
+    golden_dump_dir:
+        Golden dump directory created by ``dump_arangodb``.
+    arango_db_password:
+        ArangoDB root password (used for the REST figures queries).
+    run:
+        Run name; matches the S3 run prefix.  Defaults to ``$CKN_RUN`` or
+        ``'full'`` (same resolution as ``promote_to_production``).
+    """
+    logger = get_run_logger()
+    try:
+        golden_dump_dir = Path(golden_dump_dir)
+        if not golden_dump_dir.is_dir():
+            logger.warning(
+                f"Golden dump not found ({golden_dump_dir}) — skipping manifest"
+            )
+            return
+
+        run_name = run or os.getenv("CKN_RUN", "full")
+
+        uncompressed_bytes = _dir_size_bytes(golden_dump_dir)
+
+        # Measure the compressed size by tarring to a temp file (discarded).
+        compressed_bytes = 0
+        with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+        try:
+            with tarfile.open(tmp_path, "w:gz") as tar:
+                tar.add(golden_dump_dir, arcname=golden_dump_dir.name)
+            compressed_bytes = tmp_path.stat().st_size
+        except Exception as exc:
+            logger.warning(f"Could not measure compressed dump size: {exc}")
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        databases = _collect_db_figures(golden_dump_dir, arango_db_password, logger)
+
+        manifest = _build_release_manifest(
+            tag=run_name,
+            uncompressed_bytes=uncompressed_bytes,
+            compressed_bytes=compressed_bytes,
+            databases=databases,
+        )
+
+        manifest_path = golden_dump_dir.parent / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+        logger.info(
+            f"Release manifest: tag={run_name} "
+            f"uncompressed={uncompressed_bytes:,}B compressed={compressed_bytes:,}B "
+            f"→ {manifest_path.name}"
+        )
+
+        # Attach to the GitHub Release (no-op unless ETL_RELEASE_TAG et al. are
+        # set).  S3 remains the source of truth; this is a convenience copy.
+        try:
+            _upload_github_release_asset(manifest_path, logger)
+        except Exception as exc:
+            logger.warning(f"Could not upload manifest to GitHub release: {exc}")
+
+        if not S3_BUCKET:
+            logger.info("S3_BUCKET not set — manifest written locally only")
+            return
+
+        s3_manifest = f"s3://{S3_BUCKET}/runs/{run_name}/manifest.json"
+        bucket, key = _parse_s3_url(s3_manifest)
+        sse_args = (
+            {"ServerSideEncryption": "aws:kms", "SSEKMSKeyId": S3_KMS_KEY_ID}
+            if S3_KMS_KEY_ID
+            else {"ServerSideEncryption": "AES256"}
+        )
+        boto3.client("s3").upload_file(
+            str(manifest_path), bucket, key,
+            ExtraArgs={"ACL": "private", **sse_args},
+        )
+        logger.info(f"Uploaded release manifest → {s3_manifest}")
+    except Exception as exc:
+        # Defensive catch-all: the manifest is an observability nicety and must
+        # never fail the release.
+        logger.warning(f"Release manifest step failed (continuing): {exc}")
+
+
 @task(name="restore-arangodb", log_prints=True)
 def restore_arangodb(
     dump_dir: Path,
@@ -1546,6 +1830,10 @@ def nlm_ckn_etl(
         promote_to_production(
             golden_dump_dir, arango_db_password, jar_key=jar_key, run=run
         )
+
+        # Capture a versioned release manifest (dataset size + counts) alongside
+        # the dump.  Best-effort: never fails the release.
+        write_release_manifest(golden_dump_dir, arango_db_password, run=run)
 
         logger.info("Phase 3 complete")
 

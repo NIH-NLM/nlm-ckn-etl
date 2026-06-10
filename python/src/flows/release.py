@@ -228,6 +228,28 @@ def promote_results_to_latest(run: str = "") -> None:
     logger.info(f"Promoted {count} result file(s) to runs/latest/01-results/")
 
 
+def _fetch_info_age_hours(fetch_info: dict) -> float:
+    """Age in hours of a ``fetch-info.json`` payload, from its ``fetched_at``."""
+    fetched_at = datetime.fromisoformat(fetch_info["fetched_at"])
+    return (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
+
+
+def _read_fetch_info_s3(key: str, logger) -> dict | None:
+    """Download and parse a ``fetch-info.json`` from S3; ``None`` if absent/invalid."""
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+        boto3.client("s3").download_file(S3_BUCKET, key, str(tmp_path))
+        return json.loads(tmp_path.read_text())
+    except Exception as exc:
+        logger.info(f"Could not read s3://{S3_BUCKET}/{key}: {exc}")
+        return None
+    finally:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+
+
 @task(name="resolve-fetch-force", log_prints=True)
 def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> bool:
     """Return True (force full re-fetch) if the external cache is missing or stale.
@@ -239,6 +261,17 @@ def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> boo
     Otherwise returns ``False`` and the caller uses ``retry_empty=True`` to
     preserve cached data while retrying any previous failures.
 
+    Staging fallback
+    ----------------
+    When no ``external/fetch-info.json`` exists in S3, a previous release may
+    have completed its fetch (pushing data + marker to the run-scoped
+    ``runs/<run>/external-staging/`` prefix) but failed in a later stage
+    before the snapshot was promoted to the live ``external/`` prefix.  In that
+    case this task reuses the staging snapshot: it applies the same age check
+    (nothing prunes ``external-staging/``, so a stale snapshot must not be
+    silently reused) and, if fresh, server-side copies the staging snapshot
+    into ``external/`` so the subsequent ``sync_external_from_s3`` sees it.
+
     Parameters
     ----------
     run:
@@ -249,22 +282,36 @@ def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> boo
         trigger a full re-fetch.
     """
     logger = get_run_logger()
+    run_name = run or os.getenv("CKN_RUN", "full")
     fetch_info = None
 
     if S3_BUCKET:
-        tmp_path = None
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
-                tmp_path = Path(tmp.name)
-            boto3.client("s3").download_file(
-                S3_BUCKET, "external/fetch-info.json", str(tmp_path)
+        # Primary: the live external/ cache promoted by a completed fetch flow.
+        fetch_info = _read_fetch_info_s3("external/fetch-info.json", logger)
+
+        # Fallback: an unpromoted staging snapshot from a fetch that succeeded
+        # but whose release failed downstream.
+        if fetch_info is None:
+            staging_prefix = f"runs/{run_name}/external-staging/"
+            staging_info = _read_fetch_info_s3(
+                f"{staging_prefix}fetch-info.json", logger
             )
-            fetch_info = json.loads(tmp_path.read_text())
-        except Exception as exc:
-            logger.info(f"Could not read fetch-info.json from S3: {exc}")
-        finally:
-            if tmp_path is not None:
-                tmp_path.unlink(missing_ok=True)
+            if staging_info is not None:
+                age_hours = _fetch_info_age_hours(staging_info)
+                if age_hours > max_fetch_age_hours:
+                    logger.info(
+                        f"Staging cache is {age_hours:.1f}h old "
+                        f"(threshold: {max_fetch_age_hours}h) — forcing full re-fetch"
+                    )
+                    return True
+                logger.info(
+                    f"No external/fetch-info.json, but a {age_hours:.1f}h-old staging "
+                    f"snapshot exists — promoting {staging_prefix} → external/ and "
+                    "reusing it"
+                )
+                count = _s3_copy_prefix(S3_BUCKET, staging_prefix, "external/")
+                logger.info(f"Promoted {count} object(s) from staging to external/")
+                fetch_info = staging_info
     else:
         info_path = _external_dir(run) / "fetch-info.json"
         if info_path.exists():
@@ -277,9 +324,7 @@ def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> boo
         logger.info("No fetch-info.json found — forcing full re-fetch")
         return True
 
-    fetched_at = datetime.fromisoformat(fetch_info["fetched_at"])
-    age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
-
+    age_hours = _fetch_info_age_hours(fetch_info)
     if age_hours > max_fetch_age_hours:
         logger.info(
             f"External cache is {age_hours:.1f}h old (threshold: {max_fetch_age_hours}h)"

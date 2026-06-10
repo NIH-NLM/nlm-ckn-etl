@@ -36,6 +36,7 @@ import json
 import os
 import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import create_markdown_artifact
@@ -208,6 +209,83 @@ def transform_external_api_results(
     logger.info("External API results transformed")
 
 
+# Required raw + transformed cache files tracked in ``fetch-info.json``.
+_REQUIRED_CACHE_FILES = [
+    "cellxgene.json",
+    "opentargets.json",
+    "gene.json",
+    "uniprot.json",
+    "cellxgene_transformed.json",
+    "opentargets_transformed.json",
+    "gene_transformed.json",
+    "uniprot_transformed.json",
+]
+
+
+def _git_short_commit() -> str:
+    """Short git commit hash of the repo (best-effort; ``"unknown"`` on failure)."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=REPO_ROOT,
+            text=True,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def _write_fetch_info(external_dir: Path, run: str) -> dict:
+    """Write ``fetch-info.json`` into *external_dir* and return its contents.
+
+    ``files`` maps each required cache file to its byte size (``None`` when
+    absent — e.g. the ``*_transformed.json`` outputs before the transform
+    step runs, when this is called early to mark a freshly-fetched cache).
+    """
+    files_info: dict[str, int | None] = {}
+    for name in _REQUIRED_CACHE_FILES:
+        path = external_dir / name
+        files_info[name] = path.stat().st_size if path.exists() else None
+
+    info = {
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "commit": _git_short_commit(),
+        "run": run or os.getenv("CKN_RUN", "full"),
+        "files": files_info,
+    }
+    info_path = external_dir / "fetch-info.json"
+    info_path.write_text(json.dumps(info, indent=2))
+    return info
+
+
+@task(name="write-fetch-marker", log_prints=True)
+def write_fetch_marker(run: str = "") -> None:
+    """Write ``fetch-info.json`` immediately after fetching, before transform.
+
+    This lets ``resolve_fetch_force`` (in the release flow) detect a reusable
+    cache even when a later stage — the transform or the ETL pipeline — fails
+    before ``record_fetch_artifact`` runs.  Paired with an early
+    ``sync_external_to_s3_staging`` push, it ensures the expensive fetch output
+    survives a downstream failure so a re-run reuses it instead of re-fetching.
+
+    ``record_fetch_artifact`` overwrites this file at the end of a successful
+    fetch with the transformed-file sizes and the Prefect UI summary.
+
+    Parameters
+    ----------
+    run:
+        Run name (selects ``data/external-<run>/``).  Defaults to
+        ``$CKN_RUN`` or ``'full'``.
+    """
+    logger = get_run_logger()
+    external_dir = _external_dir(run)
+    info = _write_fetch_info(external_dir, run)
+    logger.info(
+        f"Fetch marker written to "
+        f"{(external_dir / 'fetch-info.json').relative_to(REPO_ROOT)} "
+        f"(fetched_at={info['fetched_at']})"
+    )
+
+
 @task(name="record-fetch-artifact", log_prints=True)
 def record_fetch_artifact(run: str = "") -> None:
     """Write ``fetch-info.json`` and a Prefect UI artifact summarising the run.
@@ -221,6 +299,7 @@ def record_fetch_artifact(run: str = "") -> None:
 
     - ``fetched_at``  — ISO-8601 UTC timestamp
     - ``commit``      — short git commit hash of the repo at fetch time
+    - ``run``         — run name the cache belongs to
     - ``files``       — mapping of cache filename → byte size (``null`` if missing)
 
     Parameters
@@ -232,40 +311,10 @@ def record_fetch_artifact(run: str = "") -> None:
     logger = get_run_logger()
     external_dir = _external_dir(run)
 
-    # Collect file sizes for the required raw + transformed cache files
-    required = [
-        "cellxgene.json",
-        "opentargets.json",
-        "gene.json",
-        "uniprot.json",
-        "cellxgene_transformed.json",
-        "opentargets_transformed.json",
-        "gene_transformed.json",
-        "uniprot_transformed.json",
-    ]
-    files_info: dict[str, int | None] = {}
-    for name in required:
-        path = external_dir / name
-        files_info[name] = path.stat().st_size if path.exists() else None
-
-    # Current git commit hash (best-effort; falls back to "unknown")
-    try:
-        commit = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=REPO_ROOT,
-            text=True,
-        ).strip()
-    except Exception:
-        commit = "unknown"
-
-    info = {
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "commit": commit,
-        "files": files_info,
-    }
-
+    info = _write_fetch_info(external_dir, run)
+    commit = info["commit"]
+    files_info = info["files"]
     info_path = external_dir / "fetch-info.json"
-    info_path.write_text(json.dumps(info, indent=2))
     logger.info(f"Fetch artifact written to {info_path.relative_to(REPO_ROOT)}")
 
     # Per-source status written by DataFetcher.py
@@ -422,6 +471,13 @@ def nlm_ckn_fetch(
         source_max_age=source_max_age,
         run=run,
     )
+    # Persist the freshly-fetched data and a fetch marker to run-scoped staging
+    # right away — before transform.  If a later stage (transform or ETL) fails,
+    # resolve_fetch_force finds this marker and reuses the cache instead of
+    # forcing a full, expensive re-fetch.  Staging never touches the live
+    # external/ prefix, so a concurrent pipeline.py is unaffected.
+    write_fetch_marker(run=run)
+    sync_external_to_s3_staging(run=run)
     transform_external_api_results(
         arango_db_password=arango_db_password,
         force=force,
@@ -429,7 +485,7 @@ def nlm_ckn_fetch(
     )
     validate_external_files(run=run)
     record_fetch_artifact(run=run)
-    sync_external_to_s3_staging(run=run)  # write to staging; pipeline.py is unaffected
+    sync_external_to_s3_staging(run=run)  # re-sync staging with transformed outputs
     promote_external_staging(run=run)  # server-side copy runs/{run}/external-staging/ → external/
 
 

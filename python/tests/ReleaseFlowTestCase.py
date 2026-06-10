@@ -141,7 +141,7 @@ class ResolveFetchForceTestCase(unittest.TestCase):
         self.assertTrue(result)
 
     def test_s3_temp_file_cleaned_up_when_json_invalid(self):
-        """Temp file is removed even when the S3 fetch-info.json contains bad JSON."""
+        """Temp files are removed even when every S3 fetch-info.json is bad JSON."""
         created_paths = []
 
         def fake_download(bucket, key, dest):
@@ -155,12 +155,60 @@ class ResolveFetchForceTestCase(unittest.TestCase):
              patch("release.boto3") as mock_boto3, \
              patch("release.get_run_logger", return_value=_noop_logger()):
             mock_boto3.client.return_value = mock_s3
-            # Bad JSON is caught; function falls through to "force re-fetch".
+            # Bad JSON is caught for both external/ and the staging fallback;
+            # the function falls through to "force re-fetch".
             result = resolve_fetch_force.fn(run="test-run", max_fetch_age_hours=48.0)
 
         self.assertTrue(result, "Bad fetch-info.json should trigger force re-fetch")
-        self.assertEqual(len(created_paths), 1, "download must have been attempted")
-        self.assertFalse(created_paths[0].exists(), "Temp file must be cleaned up")
+        self.assertGreaterEqual(len(created_paths), 1, "download must have been attempted")
+        for p in created_paths:
+            self.assertFalse(p.exists(), "Temp file must be cleaned up")
+
+    def test_reuses_staging_snapshot_when_external_missing(self):
+        """Promotes and reuses a fresh staging snapshot when external/ has none."""
+        recent = datetime.now(timezone.utc) - timedelta(hours=6)
+
+        def fake_download(bucket, key, dest):
+            if key == "external/fetch-info.json":
+                raise Exception("NoSuchKey")  # external/ not promoted yet
+            Path(dest).write_text(json.dumps({"fetched_at": recent.isoformat()}))
+
+        mock_s3 = MagicMock()
+        mock_s3.download_file.side_effect = fake_download
+
+        with patch("release.S3_BUCKET", "my-bucket"), \
+             patch("release.boto3") as mock_boto3, \
+             patch("release._s3_copy_prefix", return_value=9) as mock_copy, \
+             patch("release.get_run_logger", return_value=_noop_logger()):
+            mock_boto3.client.return_value = mock_s3
+            result = resolve_fetch_force.fn(run="test-run", max_fetch_age_hours=48.0)
+
+        self.assertFalse(result, "Fresh staging snapshot should be reused, not re-fetched")
+        mock_copy.assert_called_once_with(
+            "my-bucket", "runs/test-run/external-staging/", "external/"
+        )
+
+    def test_forces_refetch_when_staging_stale(self):
+        """A stale staging snapshot is not promoted; full re-fetch is forced."""
+        stale = datetime.now(timezone.utc) - timedelta(hours=72)
+
+        def fake_download(bucket, key, dest):
+            if key == "external/fetch-info.json":
+                raise Exception("NoSuchKey")
+            Path(dest).write_text(json.dumps({"fetched_at": stale.isoformat()}))
+
+        mock_s3 = MagicMock()
+        mock_s3.download_file.side_effect = fake_download
+
+        with patch("release.S3_BUCKET", "my-bucket"), \
+             patch("release.boto3") as mock_boto3, \
+             patch("release._s3_copy_prefix") as mock_copy, \
+             patch("release.get_run_logger", return_value=_noop_logger()):
+            mock_boto3.client.return_value = mock_s3
+            result = resolve_fetch_force.fn(run="test-run", max_fetch_age_hours=48.0)
+
+        self.assertTrue(result, "Stale staging snapshot should force re-fetch")
+        mock_copy.assert_not_called()
 
     def test_s3_temp_file_cleaned_up_on_success(self):
         """Temp file is removed after a successful S3 fetch-info.json read."""

@@ -247,6 +247,7 @@ env_json=$(
   JAVA_OPTS="${JAVA_OPTS}" \
   GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-}" \
   GITHUB_DEPLOYMENT_ID="${GITHUB_DEPLOYMENT_ID}" \
+  ETL_RELEASE_TAG="${ETL_RELEASE_TAG:-}" \
   SKIP_ONTOLOGY="${SKIP_ONTOLOGY}" \
   python3 - <<'PYEOF'
 import json, os
@@ -262,6 +263,7 @@ for key, envvar in [
     ("JAVA_OPTS",           "JAVA_OPTS"),
     ("GITHUB_REPOSITORY",   "GITHUB_REPOSITORY"),
     ("GITHUB_DEPLOYMENT_ID","GITHUB_DEPLOYMENT_ID"),
+    ("ETL_RELEASE_TAG",     "ETL_RELEASE_TAG"),
 ]:
     val = os.environ.get(envvar, "")
     if val:
