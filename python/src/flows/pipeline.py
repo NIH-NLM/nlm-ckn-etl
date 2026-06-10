@@ -95,6 +95,7 @@ from _common import (
     ARANGO_DB_HOME,
     ARANGO_DB_HOST,
     ARANGO_DB_HOST_HOME,
+    ARANGO_DB_IS_LOCAL,
     ARANGO_DB_PORT,
     ARANGO_DB_VOLUME_NAME,
     CLASSPATH,
@@ -258,14 +259,14 @@ def start_arangodb(arango_db_home: str, arango_db_password: str) -> int:
 def require_arangodb() -> None:
     """Verify ArangoDB is reachable before starting expensive tasks.
 
-    Remote mode (``ARANGO_DB_HOST`` != ``"localhost"``): ArangoDB is
+    Remote mode (``ARANGO_DB_HOST`` is not a loopback address): ArangoDB is
     managed externally (e.g. a dedicated EC2 instance).  Logs the endpoint
     and returns.
 
     Local mode: raises ``RuntimeError`` if no ArangoDB container is running.
     """
     logger = get_run_logger()
-    if ARANGO_DB_HOST != "localhost":
+    if not ARANGO_DB_IS_LOCAL:
         logger.info(
             f"Remote ArangoDB mode: host={ARANGO_DB_HOST}, port={ARANGO_DB_PORT}"
         )
@@ -1228,7 +1229,7 @@ def nlm_ckn_etl(
                 state="in_progress",
                 description="[3/3] ETL Phase 1: building ontology graph",
             )
-            if ARANGO_DB_HOST == "localhost":
+            if ARANGO_DB_IS_LOCAL:
                 # Wipe ArangoDB and start fresh so OntologyGraphBuilder has a
                 # clean slate.  The stopped container's data dir is removed so
                 # no stale collections carry over.
@@ -1285,7 +1286,7 @@ def nlm_ckn_etl(
     # because Phase 3 now restores the results dump into a fresh instance, so
     # archive-only no longer depends on Phase 2 having populated a live database.
     if (
-        ARANGO_DB_HOST == "localhost"
+        ARANGO_DB_IS_LOCAL
         and not phase1_started_arangodb
         and (run_phase2 or run_phase3)
     ):

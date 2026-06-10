@@ -49,6 +49,9 @@ CLASSPATH = "target/nlm-ckn-etl-1.0.jar"
 DEFAULT_JAVA_OPTS = "-Xmx32g"
 
 ARANGO_DB_HOST = os.getenv("ARANGO_DB_HOST", "localhost")
+# Loopback is local: the start/dump/restore tasks manage a local Docker
+# container and must run for 127.0.0.1 and ::1, not just the literal "localhost".
+ARANGO_DB_IS_LOCAL = ARANGO_DB_HOST in ("localhost", "127.0.0.1", "::1", "")
 ARANGO_DB_PORT = int(os.getenv("ARANGO_DB_PORT", "8529"))
 ARANGO_DB_HOME = os.getenv("ARANGO_DB_HOME", str(REPO_ROOT / "data" / "arangodb"))
 
