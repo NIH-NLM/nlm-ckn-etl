@@ -323,8 +323,9 @@ Each step assumes you are starting from the repository root directory.
    $ java -cp $CP gov.nih.nlm.InducedSubgraphBuilder
    ```
 
-7. **Create ArangoDB analyzers/views:**
+7. **Create ArangoDB analyzers/views** (one call per populated graph):
    ```
    $ cd python/src
-   $ python CellKnSchemaUtilities.py
+   $ python -c 'import ArangoDbUtilities as adb; adb.create_analyzers("Cell-KN-Ontologies"); adb.create_view("Cell-KN-Ontologies", "../../data/nlm-ckn-collection-maps.json")'
+   $ python -c 'import ArangoDbUtilities as adb; adb.create_analyzers("Cell-KN-Phenotypes"); adb.create_view("Cell-KN-Phenotypes", "../../data/nlm-ckn-collection-maps.json")'
    ```
