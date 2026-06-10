@@ -611,6 +611,11 @@ def restore_arangodb(
             f"--input-directory={container_in}",
             "--overwrite=true",
             "--all-databases=true",
+            # Create any database in the dump that is missing on the target.
+            # Required because each phase restores into a freshly-wiped instance
+            # where only _system exists; without this arangorestore refuses with
+            # "database does not exist".
+            "--create-database=true",
         ]
     )
     if result.exit_code != 0:
@@ -1290,6 +1295,12 @@ def nlm_ckn_etl(
         and not phase1_started_arangodb
         and (run_phase2 or run_phase3)
     ):
+        # Stop and remove any running container BEFORE wiping.  Otherwise the
+        # rmtree pulls the bind-mounted data dir out from under a live
+        # container (its mount goes stale → ArangoDB can no longer write), and
+        # start_arangodb would then reuse that broken container instead of
+        # starting fresh.  Mirrors the Phase 1 stop→wipe→start ordering.
+        stop_arangodb()
         # Wipe ArangoDB data (bind-mount dir or named Docker volume) before
         # starting so ArangoDB initialises fresh with the current password.
         # Without this, ArangoDB ignores ARANGO_ROOT_PASSWORD on restart and
