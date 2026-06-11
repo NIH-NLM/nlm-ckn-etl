@@ -246,7 +246,7 @@ test (ci.yml) → build (build-image.yml) → submit Batch job
 
 The Batch job runs `release.py` end-to-end (fetch + full ETL) on EC2 and returns immediately. Progress is tracked via a [GitHub Deployment](https://docs.github.com/en/rest/deployments) — the Batch container posts `success` or `failure` to the deployment status when the pipeline finishes, which triggers a notification in any Slack channel subscribed to the GitHub app's deployment events.
 
-Release settings (`cell_kn_tag`, `tar_source`, etc.) come from `release.json` at the repo root, not from this repo's release tag.
+Release settings (`nlm_ckn_tag`, `tar_source`, etc.) come from `release.json` at the repo root, not from this repo's release tag.
 
 Required secrets: `AWS_RELEASE_ROLE_ARN`, `AWS_REGION`, `S3_BUCKET`, `DEPLOYMENTS_TOKEN` (classic PAT with `repo:deployments` scope).
 

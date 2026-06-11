@@ -6,12 +6,12 @@
 # AWS Batch console.
 #
 # Config files loaded automatically (in order, later values win):
-#   release.json  — checked-in defaults (cell_kn_tag, tar_source, hubmap_urls, …)
+#   release.json  — checked-in defaults (nlm_ckn_tag, tar_source, hubmap_urls, …)
 #   .env          — local secrets, gitignored (S3_BUCKET, AWS creds, …)
 #
 # Required (one of):
 #   --nlm-ckn-tag TAG        nlm-ckn release tag, e.g. v2026-04
-#   cell_kn_tag      set in release.json (used when --nlm-ckn-tag is omitted)
+#   nlm_ckn_tag      set in release.json (used when --nlm-ckn-tag is omitted)
 #
 # Optional:
 #   --tar-source PATH_OR_URL
@@ -75,7 +75,7 @@ if [[ -f "${ENV_FILE}" ]]; then
 fi
 
 # ── Defaults from release.json (CLI flags override below) ────────────────────
-TAG="$(_from_json cell_kn_tag)"
+TAG="$(_from_json nlm_ckn_tag)"
 TAR_SOURCE="$(_from_json tar_source)"
 MAX_FETCH_AGE_HOURS="$(_from_json max_fetch_age_hours)"
 RUN_NAME=""
@@ -109,7 +109,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "${TAG}" ]] && { echo "ERROR: --nlm-ckn-tag is required (or set cell_kn_tag in release.json)" >&2; usage; }
+[[ -z "${TAG}" ]] && { echo "ERROR: --nlm-ckn-tag is required (or set nlm_ckn_tag in release.json)" >&2; usage; }
 
 # Derive the run name the same way release.py does: strip a leading 'v' from
 # the tag, unless --run-name was given explicitly.
@@ -228,13 +228,13 @@ PYEOF
 fi
 
 # ── Build container environment overrides ────────────────────────────────────
-# CELL_KN_TAG and RELEASE_CONFIG are always set. The rest are only included
+# NLM_CKN_TAG and RELEASE_CONFIG are always set. The rest are only included
 # when non-empty so the job definition defaults remain in effect otherwise.
 # Use Python json.dumps for safe JSON building to handle special characters.
 # GITHUB_TOKEN is intentionally omitted here — it is injected by the Batch
 # job definition via Secrets Manager (see cloudformation/batch.yaml).
 env_json=$(
-  CELL_KN_TAG="${TAG}" \
+  NLM_CKN_TAG="${TAG}" \
   RELEASE_CONFIG_S3="${RELEASE_CONFIG_S3}" \
   TAR_SOURCE="${TAR_SOURCE}" \
   RUN_NAME="${RUN_NAME}" \
@@ -245,7 +245,7 @@ env_json=$(
   python3 - <<'PYEOF'
 import json, os
 env = [
-    {"name": "CELL_KN_TAG",      "value": os.environ["CELL_KN_TAG"]},
+    {"name": "NLM_CKN_TAG",      "value": os.environ["NLM_CKN_TAG"]},
     {"name": "RELEASE_CONFIG",   "value": os.environ["RELEASE_CONFIG_S3"]},
 ]
 for key, envvar in [

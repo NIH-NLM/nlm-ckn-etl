@@ -45,7 +45,7 @@ class ReadReleaseJsonTestCase(unittest.TestCase):
 
     def test_reads_local_file(self):
         """Parses a local JSON file and returns its contents."""
-        data = {"cell_kn_tag": "v2026-04", "hubmap_urls": ["https://example.com"]}
+        data = {"nlm_ckn_tag": "v2026-04", "hubmap_urls": ["https://example.com"]}
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(data, f)
             tmp = f.name
@@ -53,7 +53,7 @@ class ReadReleaseJsonTestCase(unittest.TestCase):
             result = _read_release_json(tmp)
         finally:
             os.unlink(tmp)
-        self.assertEqual(result["cell_kn_tag"], "v2026-04")
+        self.assertEqual(result["nlm_ckn_tag"], "v2026-04")
 
     def test_returns_empty_dict_for_missing_file(self):
         """Returns {} when the local path does not exist."""
@@ -62,7 +62,7 @@ class ReadReleaseJsonTestCase(unittest.TestCase):
 
     def test_s3_temp_file_cleaned_up_on_success(self):
         """Temp file is removed after a successful S3 read."""
-        data = {"cell_kn_tag": "v2026-04"}
+        data = {"nlm_ckn_tag": "v2026-04"}
         created_paths = []
 
         def fake_download(bucket, key, dest):
@@ -76,7 +76,7 @@ class ReadReleaseJsonTestCase(unittest.TestCase):
             mock_boto3.client.return_value = mock_s3
             result = _read_release_json("s3://my-bucket/release.json")
 
-        self.assertEqual(result["cell_kn_tag"], "v2026-04")
+        self.assertEqual(result["nlm_ckn_tag"], "v2026-04")
         self.assertEqual(len(created_paths), 1)
         self.assertFalse(created_paths[0].exists(), "Temp file must be cleaned up on success")
 

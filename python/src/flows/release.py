@@ -32,7 +32,7 @@ Run directly::
 Or via the Prefect CLI::
 
     prefect deployment run 'nlm-ckn-release/production' \\
-        --param cell_kn_tag=v2026-04 \\
+        --param nlm_ckn_tag=v2026-04 \\
         --param ncbi_email=user@example.com \\
         --param ncbi_api_key=KEY
 
@@ -309,7 +309,7 @@ def resolve_fetch_force(run_name: str = "", max_fetch_age_hours: float = 48.0) -
 
 @flow(name="nlm-ckn-release", log_prints=True)
 def nlm_ckn_release(
-    cell_kn_tag: str,
+    nlm_ckn_tag: str,
     ncbi_email: str = "",
     ncbi_api_key: str = "",
     run_name: str = "",
@@ -327,7 +327,7 @@ def nlm_ckn_release(
 
     Parameters
     ----------
-    cell_kn_tag:
+    nlm_ckn_tag:
         Git tag on the nlm-ckn repository identifying the release, e.g.
         ``"v0.0.1"``.  Used to locate the GitHub Release asset and, if
         ``run_name`` is omitted, to derive the run name.
@@ -337,7 +337,7 @@ def nlm_ckn_release(
         NCBI E-Utilities API key.  Falls back to ``$NCBI_API_KEY``.
     run_name:
         ETL run name (scopes all output directories).  Defaults to
-        ``cell_kn_tag`` with any leading ``v`` stripped (e.g. ``"0.0.1"``).
+        ``nlm_ckn_tag`` with any leading ``v`` stripped (e.g. ``"0.0.1"``).
     github_repo:
         ``owner/repo`` path for the nlm-ckn GitHub repository.  Used to
         construct the Release asset URL when ``tar_source`` is not given.
@@ -345,7 +345,7 @@ def nlm_ckn_release(
     tar_source:
         Override URL or local path for the release tarball (``.tar.gz``).
         When omitted, the URL is derived from ``github_repo`` and
-        ``cell_kn_tag`` using the ``prod-data-<tag>.tar.gz`` naming
+        ``nlm_ckn_tag`` using the ``prod-data-<tag>.tar.gz`` naming
         convention.
     release_config:
         Path or S3 URL for ``release.json``, read for ``hubmap_urls``.  On the
@@ -364,8 +364,8 @@ def nlm_ckn_release(
     """
     logger = get_run_logger()
 
-    run_name = run_name or cell_kn_tag.lstrip("v")
-    logger.info(f"Release: tag={cell_kn_tag}  run={run_name}")
+    run_name = run_name or nlm_ckn_tag.lstrip("v")
+    logger.info(f"Release: tag={nlm_ckn_tag}  run={run_name}")
 
     start = datetime.now(timezone.utc)
 
@@ -377,17 +377,17 @@ def nlm_ckn_release(
     # Guard against the default placeholder values being committed unchanged.
     # Validate against the effective values after --nlm-ckn-tag/--tar-source overrides.
     _PLACEHOLDER_TAG = "v0.0.0-alpha"
-    if cell_kn_tag == _PLACEHOLDER_TAG:
+    if nlm_ckn_tag == _PLACEHOLDER_TAG:
         raise ValueError(
-            f"cell_kn_tag is still the default placeholder ({cell_kn_tag!r}). "
-            "Provide a real release tag via --nlm-ckn-tag or update cell_kn_tag in release.json."
+            f"nlm_ckn_tag is still the default placeholder ({nlm_ckn_tag!r}). "
+            "Provide a real release tag via --nlm-ckn-tag or update nlm_ckn_tag in release.json."
         )
     # Derive tarball URL from tag if not explicitly provided.
     if not tar_source:
-        tar_name = f"prod-data-{cell_kn_tag}.tar.gz"
+        tar_name = f"prod-data-{nlm_ckn_tag}.tar.gz"
         tar_source = (
             f"https://github.com/{github_repo}/releases/download"
-            f"/{cell_kn_tag}/{tar_name}"
+            f"/{nlm_ckn_tag}/{tar_name}"
         )
     if _PLACEHOLDER_TAG in tar_source:
         raise ValueError(
@@ -398,7 +398,7 @@ def nlm_ckn_release(
     # ── Step 1: Extract release tarball ──────────────────────────────────
     post_github_deployment_status(
         state="in_progress",
-        description=f"[1/3] Extracting release tarball for {cell_kn_tag}",
+        description=f"[1/3] Extracting release tarball for {nlm_ckn_tag}",
     )
     try:
         extract_release_tarball(tar_source, run_name, hubmap_urls)
@@ -407,7 +407,7 @@ def nlm_ckn_release(
         logger.error(
             "Step 1 (extract release tarball) failed.\n"
             "To retry from this step:\n"
-            f"  poetry run src/flows/release.py --nlm-ckn-tag {cell_kn_tag}"
+            f"  poetry run src/flows/release.py --nlm-ckn-tag {nlm_ckn_tag}"
         )
         post_github_deployment_status(
             state="failure",
@@ -441,7 +441,7 @@ def nlm_ckn_release(
             "  poetry run src/flows/release.py --nlm-ckn-tag %s",
             run_name,
             run_name,
-            cell_kn_tag,
+            nlm_ckn_tag,
         )
         post_github_deployment_status(
             state="failure",
@@ -452,7 +452,7 @@ def nlm_ckn_release(
     # ── Step 3: Three-phase ETL ───────────────────────────────────────────
     post_github_deployment_status(
         state="in_progress",
-        description=f"[3/3] Running ETL pipeline for {cell_kn_tag}",
+        description=f"[3/3] Running ETL pipeline for {nlm_ckn_tag}",
     )
     try:
         nlm_ckn_etl(
@@ -475,7 +475,7 @@ def nlm_ckn_release(
             "  poetry run src/flows/release.py --nlm-ckn-tag %s",
             run_name,
             run_name,
-            cell_kn_tag,
+            nlm_ckn_tag,
         )
         post_github_deployment_status(
             state="failure",
@@ -488,19 +488,19 @@ def nlm_ckn_release(
     try:
         promote_results_to_latest(run_name=run_name)
     except Exception as exc:
-        logger.error("Promotion of %s failed: %s", cell_kn_tag, exc)
+        logger.error("Promotion of %s failed: %s", nlm_ckn_tag, exc)
         post_github_deployment_status(
             state="failure",
-            description=f"Promotion of {cell_kn_tag} failed: {exc}"[:140],
+            description=f"Promotion of {nlm_ckn_tag} failed: {exc}"[:140],
         )
         raise
 
-    logger.info(f"Release {cell_kn_tag} complete (run={run_name})")
+    logger.info(f"Release {nlm_ckn_tag} complete (run={run_name})")
     elapsed = datetime.now(timezone.utc) - start
     minutes, seconds = divmod(int(elapsed.total_seconds()), 60)
     post_github_deployment_status(
         state="success",
-        description=f"Released {cell_kn_tag} in {minutes}m {seconds}s",
+        description=f"Released {nlm_ckn_tag} in {minutes}m {seconds}s",
     )
 
 
@@ -533,7 +533,7 @@ def _load_release_json(release_config: str = "") -> dict:
     vars and CLI flags win.  Returns the parsed dict.
     """
     data = _read_release_json(release_config)
-    os.environ.setdefault("CELL_KN_TAG", str(data.get("cell_kn_tag") or ""))
+    os.environ.setdefault("NLM_CKN_TAG", str(data.get("nlm_ckn_tag") or ""))
     os.environ.setdefault("GITHUB_REPO", str(data.get("github_repo") or "NIH-NLM/nlm-ckn"))
     os.environ.setdefault("TAR_SOURCE", str(data.get("tar_source") or ""))
     if data.get("max_fetch_age_hours") is not None:
@@ -564,10 +564,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--nlm-ckn-tag",
-        required=not os.getenv("CELL_KN_TAG"),
-        default=os.getenv("CELL_KN_TAG", ""),
-        dest="cell_kn_tag",
-        help="Upstream nlm-ckn git tag, e.g. v2026-04 (default: cell_kn_tag from release.json)",
+        required=not os.getenv("NLM_CKN_TAG"),
+        default=os.getenv("NLM_CKN_TAG", ""),
+        help="Upstream nlm-ckn git tag, e.g. v2026-04 (default: nlm_ckn_tag from release.json)",
     )
     parser.add_argument(
         "--ncbi-email",
@@ -625,14 +624,14 @@ if __name__ == "__main__":
 
     if args.save_config:
         _save_release_json({
-            "cell_kn_tag": args.cell_kn_tag,
+            "nlm_ckn_tag": args.nlm_ckn_tag,
             "github_repo": args.github_repo,
             "tar_source": args.tar_source,
             "max_fetch_age_hours": args.max_fetch_age_hours,
         })
 
     nlm_ckn_release(
-        cell_kn_tag=args.cell_kn_tag,
+        nlm_ckn_tag=args.nlm_ckn_tag,
         ncbi_email=args.ncbi_email,
         ncbi_api_key=args.ncbi_api_key,
         run_name=args.run_name,

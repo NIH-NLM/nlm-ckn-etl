@@ -23,7 +23,7 @@
 #       -v "$(pwd)/target:/app/target" \
 #       -v /var/run/docker.sock:/var/run/docker.sock \
 #       -e S3_BUCKET=<bucket> \
-#       -e CELL_KN_TAG=v2026-04 \
+#       -e NLM_CKN_TAG=v2026-04 \
 #       -e NCBI_EMAIL=<email> -e NCBI_API_KEY=<key> \
 #       nlm-ckn-etl-pipeline
 #
