@@ -353,9 +353,11 @@ def nlm_ckn_release(
         ``cell_kn_tag`` using the ``prod-data-<tag>.tar.gz`` naming
         convention.
     release_config:
-        Path or S3 URL for ``release.json``.  HuBMap URLs and other release
-        settings are read from this file.  Defaults to ``release.json`` in
-        the repository root.
+        Path or S3 URL for ``release.json``, read for ``hubmap_urls``.  On the
+        CLI this same file also seeds the defaults for ``--tag``,
+        ``--github-repo``, ``--tar-source``, ``--skip-ontology``, and
+        ``--max-fetch-age-hours``.  Defaults to ``release.json`` in the
+        repository root.
     skip_ontology:
         Skip Phase 1 (ontology build) and reuse the existing baseline dump
         for this run.  Useful when re-running a release after a failed
@@ -533,13 +535,14 @@ def _read_release_json(release_config: str = "") -> dict:
     return json.loads(p.read_text()) if p.exists() else {}
 
 
-def _load_release_json() -> dict:
-    """Load release.json from the repo root into os.environ (setdefault).
+def _load_release_json(release_config: str = "") -> dict:
+    """Seed os.environ defaults from a release.json (setdefault).
 
-    Only sets keys not already present, so real env vars and CLI flags win.
-    Returns the parsed dict.
+    Reads ``release_config`` (a local path or S3 URL) when given, otherwise the
+    repo-root ``release.json``.  Only sets keys not already present, so real env
+    vars and CLI flags win.  Returns the parsed dict.
     """
-    data = _read_release_json()
+    data = _read_release_json(release_config)
     os.environ.setdefault("CELL_KN_TAG", str(data.get("cell_kn_tag") or ""))
     os.environ.setdefault("GITHUB_REPO", str(data.get("github_repo") or "NIH-NLM/nlm-ckn"))
     os.environ.setdefault("TAR_SOURCE", str(data.get("tar_source") or ""))
@@ -559,7 +562,11 @@ def _save_release_json(updates: dict) -> None:
 
 
 if __name__ == "__main__":
-    _load_release_json()
+    # Resolve --release-config first so the file it points to (not just the
+    # repo-root release.json) seeds every env-backed default below.
+    _pre = argparse.ArgumentParser(add_help=False)
+    _pre.add_argument("--release-config", default="")
+    _load_release_json(_pre.parse_known_args()[0].release_config)
 
     parser = argparse.ArgumentParser(
         description="NLM-CKN end-to-end release pipeline (Prefect)",
