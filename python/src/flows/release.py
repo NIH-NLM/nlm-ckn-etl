@@ -630,6 +630,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    if args.max_fetch_age_hours < 0:
+        parser.error("--max-fetch-age-hours must be non-negative")
+
     if args.save_config:
         _save_release_json({
             "cell_kn_tag": args.cell_kn_tag,

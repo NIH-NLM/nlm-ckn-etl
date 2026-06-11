@@ -493,6 +493,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    if args.max_source_age_hours < 0:
+        parser.error("--max-source-age-hours must be non-negative")
+
     if args.ncbi_email and args.ncbi_api_key:
         nlm_ckn_fetch(
             ncbi_email=args.ncbi_email,

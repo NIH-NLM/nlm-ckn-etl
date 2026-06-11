@@ -739,6 +739,9 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.max_source_age_hours < 0:
+        parser.error("--max-source-age-hours must be non-negative")
+
     set_current_run(args.run_name)
 
     # Per-source fetch status — written alongside the cache files so it travels to S3
