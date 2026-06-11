@@ -22,7 +22,7 @@ the results dump, and Phase 3 the golden dump:
 **Phase 2 — Iterative Refinement** (``--run-results``):
   ``arangorestore`` the baseline dump → write all tuples → build the results
   graph → create ontology analyzers and views → ``arangodump`` the results
-  dump to ``data/arangodump-results-<jar>-<run>/``.  Because it restores from
+  dump to ``data/arangodump-results-<jar>-<name>/``.  Because it restores from
   the baseline each time, Phase 2 is fully repeatable without re-running the
   expensive ontology build.  Skipped when the results dump already exists
   unless ``--force-results`` is passed.
@@ -30,15 +30,15 @@ the results dump, and Phase 3 the golden dump:
 **Phase 3 — Production Handoff** (``--run-archive``):
   Restore the results dump (when Phase 2 did not just run) → build the induced
   phenotype subgraph → create phenotype analyzers and views → ``arangodump``
-  the golden state to ``data/arangodump-golden-<run>/``, then sync all
+  the golden state to ``data/arangodump-golden-<name>/``, then sync all
   production artifacts (dump, OBO files, external cache snapshot, build-info)
-  to ``s3://${S3_BUCKET}/runs/<run>/`` (stages 02–06 + build-info.txt).
+  to ``s3://${S3_BUCKET}/runs/<name>/`` (stages 02–06 + build-info.txt).
   Skipped when the golden dump already exists unless ``--force-archive`` is
   passed.
 
 Prerequisites
 -------------
-Run ``flows/fetch.py`` first (or ensure ``data/external-<run>/`` contains fresh
+Run ``flows/fetch.py`` first (or ensure ``data/external-<name>/`` contains fresh
 cache files), then::
 
     cd python
@@ -751,22 +751,22 @@ def restore_arangodb(
 
 
 @task(name="validate-release-dir", log_prints=True)
-def validate_release_dir(run: str = "") -> None:
+def validate_release_dir(run_name: str = "") -> None:
     """Fail fast if the flat release directory is missing or empty.
 
-    Checks that ``data/results-<run>/`` exists, contains at least one
+    Checks that ``data/results-<name>/`` exists, contains at least one
     ``*_results.csv`` file (NSForest output), and contains
     ``hubmap_urls.txt``.  This directory is populated by
     ``extract_release_zip`` in the release flow.
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/results-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/results-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     results_dir = REPO_ROOT / "data" / f"results-{run_name}"
 
     if not results_dir.is_dir():
@@ -797,29 +797,29 @@ def validate_release_dir(run: str = "") -> None:
 
 
 @task(name="sync-results-from-s3", log_prints=True)
-def sync_results_from_s3(run: str = "") -> None:
-    """Pull the flat release directory from S3 into ``data/results-<run>/``.
+def sync_results_from_s3(run_name: str = "") -> None:
+    """Pull the flat release directory from S3 into ``data/results-<name>/``.
 
-    The release zip is extracted to ``data/results-<run>/`` by the release
+    The release zip is extracted to ``data/results-<name>/`` by the release
     flow.  When running the pipeline standalone (without the release flow),
     this task restores that directory from S3 if ``S3_BUCKET`` is set.
 
     S3 layout mirrors the local path::
 
-        s3://bucket/results-<run>/ → data/results-<run>/
+        s3://bucket/results-<name>/ → data/results-<name>/
 
     No-op when ``S3_BUCKET`` is empty (local-only mode).
 
     Parameters
     ----------
-    run:
+    run_name:
         Run name.  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping S3 sync (local mode)")
         return
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     results_dir = REPO_ROOT / "data" / f"results-{run_name}"
     results_dir.mkdir(parents=True, exist_ok=True)
     s3_src = f"s3://{S3_BUCKET}/runs/{run_name}/01-results/"
@@ -829,7 +829,7 @@ def sync_results_from_s3(run: str = "") -> None:
 
 
 @task(name="write-tuples", log_prints=True)
-def write_tuples(arango_db_password: str, run: str = "") -> None:
+def write_tuples(arango_db_password: str, run_name: str = "") -> None:
     """Run TupleWriterPipeline.py to write all tuple types in sequence.
 
     Delegates to the unified pipeline script which runs each writer in order:
@@ -837,13 +837,13 @@ def write_tuples(arango_db_password: str, run: str = "") -> None:
 
     Parameters
     ----------
-    run:
+    run_name:
         Run name passed as ``--run`` (selects ``data/results-<name>/``).
         Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     logger.info("Writing all tuples (TupleWriterPipeline)")
-    extra_args = ["--run", run] if run else None
+    extra_args = ["--run-name", run_name] if run_name else None
     _run_python_script(
         "TupleWriterPipeline.py", arango_db_password, extra_args=extra_args
     )
@@ -851,22 +851,22 @@ def write_tuples(arango_db_password: str, run: str = "") -> None:
 
 
 @task(name="sync-tuples-to-s3", log_prints=True)
-def sync_tuples_to_s3(run: str = "") -> None:
-    """Push tuple JSON files from ``data/tuples-<run>/`` to S3.
+def sync_tuples_to_s3(run_name: str = "") -> None:
+    """Push tuple JSON files from ``data/tuples-<name>/`` to S3.
 
     No-op when ``S3_BUCKET`` is empty (local-only mode).
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/tuples-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/tuples-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping S3 sync (local mode)")
         return
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     tuples_dir = REPO_ROOT / "data" / f"tuples-{run_name}"
     s3_dest = f"s3://{S3_BUCKET}/runs/{run_name}/05-tuples.tar.gz"
     logger.info(f"Compressing and uploading {tuples_dir.name}/ → {s3_dest}")
@@ -875,17 +875,17 @@ def sync_tuples_to_s3(run: str = "") -> None:
 
 
 @task(name="validate-tuple-files", log_prints=True)
-def validate_tuple_files(run: str = "") -> None:
-    """Raise an error if no JSON files were produced in ``data/tuples-<run>/``.
+def validate_tuple_files(run_name: str = "") -> None:
+    """Raise an error if no JSON files were produced in ``data/tuples-<name>/``.
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/tuples-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/tuples-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     tuples_dir = REPO_ROOT / "data" / f"tuples-{run_name}"
     json_files = list(tuples_dir.glob("*.json"))
     if not json_files:
@@ -992,11 +992,11 @@ def sync_results_dump_from_s3(
 def build_results_graph(
     arango_db_password: str,
     java_opts: str = DEFAULT_JAVA_OPTS,
-    run: str = "",
+    run_name: str = "",
 ) -> None:
     """Run ResultsGraphBuilder to load result tuples into ArangoDB."""
     logger = get_run_logger()
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     logger.info(
         f"Building results graph (gov.nih.nlm.ResultsGraphBuilder, {java_opts})"
     )
@@ -1078,11 +1078,11 @@ def promote_to_production(
     golden_dump_dir: Path,
     arango_db_password: str,
     jar_key: str = "",
-    run: str = "",
+    run_name: str = "",
 ) -> None:
     """Upload the golden ArangoDB dump and supporting artifacts to production S3.
 
-    Syncs the following to ``s3://${S3_BUCKET}/runs/<run>/``:
+    Syncs the following to ``s3://${S3_BUCKET}/runs/<name>/``:
 
     - ``06-golden-dump/`` — the golden database dump (from ``golden_dump_dir``)
     - ``03-obo/``         — downloaded OWL ontology files
@@ -1103,8 +1103,8 @@ def promote_to_production(
     jar_key:
         16-char JAR content hash (from ``ensure_jar``).  Recorded in
         ``build-info.txt`` so a run can be traced back to its baseline dump.
-    run:
-        Run name (used to locate ``data/external-<run>/``).  Defaults to
+    run_name:
+        Run name (used to locate ``data/external-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
@@ -1119,7 +1119,7 @@ def promote_to_production(
             "Run the archive stage first (--run-archive)."
         )
 
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     run_prefix = f"s3://{S3_BUCKET}/runs/{run_name}"
     logger.info(f"Promoting artifacts to {run_prefix}/")
 
@@ -1140,7 +1140,7 @@ def promote_to_production(
     # Snapshot external API cache into the run (02-external.tar.gz).
     # The shared warm cache at s3://bucket/external/ is the source of truth for
     # incremental fetches; this copy locks the exact state used for this run.
-    ext_dir = _external_dir(run)
+    ext_dir = _external_dir(run_name)
     if ext_dir.is_dir():
         s3_ext = f"{run_prefix}/02-external.tar.gz"
         logger.info(f"Compressing and snapshotting external cache → {s3_ext}")
@@ -1248,7 +1248,7 @@ def nlm_ckn_etl(
     run_archive: bool = False,
     force_archive: bool = False,
     java_opts: str = DEFAULT_JAVA_OPTS,
-    run: str = "",
+    run_name: str = "",
 ) -> None:
     """NLM-CKN ETL pipeline — three-phase, orchestrated with Prefect.
 
@@ -1268,7 +1268,7 @@ def nlm_ckn_etl(
       Restore the results dump (when Phase 2 did not just run) → build the
       induced phenotype subgraph → create phenotype analyzers/views →
       ``arangodump`` the golden state → sync all artifacts into
-      ``s3://${S3_BUCKET}/runs/<run>/`` (stages 02–06 + build-info.txt).
+      ``s3://${S3_BUCKET}/runs/<name>/`` (stages 02–06 + build-info.txt).
       Skipped when the golden dump already exists unless ``force_archive=True``.
 
     At least one stage flag must be ``True``.
@@ -1293,7 +1293,7 @@ def nlm_ckn_etl(
     java_opts:
         JVM flags passed to every Java invocation (default: ``DEFAULT_JAVA_OPTS``,
         currently ``-Xmx32g``).  Increase further if you get OOM-killed (exit 137).
-    run:
+    run_name:
         Run name (selects ``data/results-<name>/`` for tuple writers and
         results sources).  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
@@ -1318,7 +1318,7 @@ def nlm_ckn_etl(
 
     arango_db_password = _get_or_create_arango_password()
     arango_db_home = ARANGO_DB_HOME
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
 
     if S3_BUCKET:
         logger.info(f"S3 mode: bucket={S3_BUCKET}")
@@ -1454,11 +1454,11 @@ def nlm_ckn_etl(
             )
 
         # Pull inputs from S3 (no-op in local mode)
-        sync_results_from_s3(run=run)  # flat release dir
-        sync_external_from_s3(run=run)  # external API cache from fetcher.py
+        sync_results_from_s3(run_name=run_name)  # flat release dir
+        sync_external_from_s3(run_name=run_name)  # external API cache from fetcher.py
 
-        validate_release_dir(run=run)
-        validate_external_files(run=run)
+        validate_release_dir(run_name=run_name)
+        validate_external_files(run_name=run_name)
 
         require_arangodb()
 
@@ -1472,15 +1472,15 @@ def nlm_ckn_etl(
         for f in tuples_dir.glob("*.json"):
             f.unlink()
 
-        write_tuples(arango_db_password, run=run)
+        write_tuples(arango_db_password, run_name=run_name)
 
-        sync_tuples_to_s3(run=run)  # persist tuple output
-        validate_tuple_files(run=run)
+        sync_tuples_to_s3(run_name=run_name)  # persist tuple output
+        validate_tuple_files(run_name=run_name)
 
         # Load result tuples into the ontology graph, then create its analyzers
         # and views now that Cell-KN-Ontologies is fully populated.  The induced
         # subgraph is built in Phase 3 from this state.
-        build_results_graph(arango_db_password, java_opts, run=run)
+        build_results_graph(arango_db_password, java_opts, run_name=run_name)
         create_analyzers_and_views(arango_db_password, "Cell-KN-Ontologies")
 
         # Save the ontology + results state as the results dump, keyed by
@@ -1544,7 +1544,7 @@ def nlm_ckn_etl(
         # The baseline dump is NOT re-uploaded here — it lives permanently at
         # s3://bucket/baselines/<jar_key>/ from the end of Phase 1.
         promote_to_production(
-            golden_dump_dir, arango_db_password, jar_key=jar_key, run=run
+            golden_dump_dir, arango_db_password, jar_key=jar_key, run_name=run_name
         )
 
         logger.info("Phase 3 complete")
@@ -1620,7 +1620,7 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--run",
+        "--run-name",
         default=os.getenv("CKN_RUN", ""),
         help=(
             "Run name (selects data/results-<name>/ for tuple writers and results sources). "
@@ -1637,5 +1637,5 @@ if __name__ == "__main__":
         run_archive=args.run_archive,
         force_archive=args.force_archive,
         java_opts=args.java_opts,
-        run=args.run,
+        run_name=args.run_name,
     )

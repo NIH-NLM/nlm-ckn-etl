@@ -206,6 +206,6 @@ poetry run src/flows/fetch.py \
   --ncbi-api-key KEY
 
 # Pipeline only (external cache and results already present locally or in S3)
-poetry run src/flows/pipeline.py --run-results --run 2026-04
-poetry run src/flows/pipeline.py --run-ontology --run-results --run-archive --run 2026-04
+poetry run src/flows/pipeline.py --run-results --run-name 2026-04
+poetry run src/flows/pipeline.py --run-ontology --run-results --run-archive --run-name 2026-04
 ```

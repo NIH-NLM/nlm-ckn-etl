@@ -724,7 +724,7 @@ def main():
         help="force fetching of all results",
     )
     parser.add_argument(
-        "--run",
+        "--run-name",
         default=None,
         help="run name (selects data/results-<name>/; defaults to $CKN_RUN or 'full')",
     )
@@ -740,7 +740,7 @@ def main():
     )
     args = parser.parse_args()
 
-    set_current_run(args.run)
+    set_current_run(args.run_name)
 
     # Per-source fetch status — written alongside the cache files so it travels to S3
     status_path = get_current_run().external_dir / "fetch-status.json"

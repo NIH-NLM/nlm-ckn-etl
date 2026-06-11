@@ -4,7 +4,7 @@
 Drives a full end-to-end release from an nlm-ckn GitHub Release tag:
 
 1. Download the release tarball from GitHub Releases and extract it to
-   ``data/results-<run>/`` (preserving the nested organ/dataset structure).
+   ``data/results-<name>/`` (preserving the nested organ/dataset structure).
 2. Run the external API fetch flow (``nlm_ckn_fetch``) with ``force=True``
    so every release captures a fresh, date-stamped snapshot.
 3. Run the three-phase ETL pipeline (``nlm_ckn_etl``):
@@ -16,7 +16,7 @@ Release format
 --------------
 The tarball (``prod-data-<tag>.tar.gz``) contains data under a nested
 ``data/prod/<organ>/...`` structure.  On extraction all files are flattened
-directly into ``data/results-<run>/``, consistent with what
+directly into ``data/results-<name>/``, consistent with what
 ``LoaderUtilities.get_dataset_file_paths`` expects.
 
 HuBMap URLs are read from ``release.json`` at the repo root and written
@@ -190,22 +190,22 @@ def extract_release_tarball(
 
 
 @task(name="sync-release-dir-to-s3", log_prints=True)
-def sync_release_dir_to_s3(run: str = "") -> None:
-    """Push ``data/results-<run>/`` to S3 so the pipeline can be re-run
+def sync_release_dir_to_s3(run_name: str = "") -> None:
+    """Push ``data/results-<name>/`` to S3 so the pipeline can be re-run
     without re-downloading the zip.
 
     No-op when ``S3_BUCKET`` is empty (local-only mode).
 
     Parameters
     ----------
-    run:
+    run_name:
         Run name.  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping (local mode)")
         return
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     results_dir = REPO_ROOT / "data" / f"results-{run_name}"
     s3_dst = f"s3://{S3_BUCKET}/runs/{run_name}/01-results/"
     logger.info(f"Syncing {results_dir.name}/ → {s3_dst}")
@@ -214,7 +214,7 @@ def sync_release_dir_to_s3(run: str = "") -> None:
 
 
 @task(name="promote-results-to-latest", log_prints=True)
-def promote_results_to_latest(run: str = "") -> None:
+def promote_results_to_latest(run_name: str = "") -> None:
     """Server-side copy ``runs/<run>/01-results/`` → ``runs/latest/01-results/`` in S3.
 
     Keeps a stable pointer that the scheduled fetch Fargate task always reads
@@ -225,14 +225,14 @@ def promote_results_to_latest(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
+    run_name:
         Run name.  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping (local mode)")
         return
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     src_prefix = f"runs/{run_name}/01-results/"
     dst_prefix = "runs/latest/01-results/"
     logger.info(
@@ -243,11 +243,11 @@ def promote_results_to_latest(run: str = "") -> None:
 
 
 @task(name="resolve-fetch-force", log_prints=True)
-def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> bool:
+def resolve_fetch_force(run_name: str = "", max_fetch_age_hours: float = 48.0) -> bool:
     """Return True (force full re-fetch) if the external cache is missing or stale.
 
     Reads ``fetch-info.json`` from S3 (when ``S3_BUCKET`` is set) or from the
-    local ``data/external-<run>/`` directory.  If the file is absent or the
+    local ``data/external-<name>/`` directory.  If the file is absent or the
     ``fetched_at`` timestamp is older than ``max_fetch_age_hours``, returns
     ``True`` so the caller passes ``force=True`` to ``nlm_ckn_fetch``.
     Otherwise returns ``False`` and the caller uses ``retry_empty=True`` to
@@ -255,8 +255,8 @@ def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> boo
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/external-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     max_fetch_age_hours:
         Maximum acceptable cache age in hours.  Caches older than this
@@ -280,7 +280,7 @@ def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> boo
             if tmp_path is not None:
                 tmp_path.unlink(missing_ok=True)
     else:
-        info_path = _external_dir(run) / "fetch-info.json"
+        info_path = _external_dir(run_name) / "fetch-info.json"
         if info_path.exists():
             try:
                 fetch_info = json.loads(info_path.read_text())
@@ -410,7 +410,7 @@ def nlm_ckn_release(
     )
     try:
         extract_release_tarball(tar_source, run_name, hubmap_urls)
-        sync_release_dir_to_s3(run=run_name)
+        sync_release_dir_to_s3(run_name=run_name)
     except Exception as exc:
         logger.error(
             "Step 1 (extract release tarball) failed.\n"
@@ -425,7 +425,7 @@ def nlm_ckn_release(
 
     # ── Step 2: Fetch external APIs ───────────────────────────────────────
     force_fetch = resolve_fetch_force(
-        run=run_name, max_fetch_age_hours=max_fetch_age_hours
+        run_name=run_name, max_fetch_age_hours=max_fetch_age_hours
     )
     post_github_deployment_status(
         state="in_progress",
@@ -437,14 +437,14 @@ def nlm_ckn_release(
             ncbi_api_key=ncbi_api_key,
             force=force_fetch,
             retry_empty=not force_fetch,
-            run=run_name,
+            run_name=run_name,
         )
     except Exception as exc:
         logger.error(
             "Step 2 (fetch external APIs) failed.\n"
             "Already-fetched files in data/external-%s/ are intact.\n"
             "To resume fetching without re-downloading completed sources:\n"
-            "  poetry run python src/DataFetcher.py --run %s\n"
+            "  poetry run python src/DataFetcher.py --run-name %s\n"
             "Then re-run the full release to continue from Step 3:\n"
             "  poetry run src/flows/release.py --tag %s",
             run_name,
@@ -471,14 +471,14 @@ def nlm_ckn_release(
             run_archive=True,
             force_archive=True,
             java_opts=java_opts,
-            run=run_name,
+            run_name=run_name,
         )
     except Exception as exc:
         logger.error(
             "Step 3 (ETL pipeline) failed.\n"
             "External data in data/external-%s/ is complete.\n"
             "To retry the ETL without re-fetching:\n"
-            "  poetry run python src/DataFetcher.py --run %s  # (will skip completed sources)\n"
+            "  poetry run python src/DataFetcher.py --run-name %s  # (will skip completed sources)\n"
             "  Then re-run the full release:\n"
             "  poetry run src/flows/release.py --tag %s",
             run_name,
@@ -494,7 +494,7 @@ def nlm_ckn_release(
     # Promote this release's results to the stable latest/ pointer so the
     # scheduled fetch targets the new gene set going forward.
     try:
-        promote_results_to_latest(run=run_name)
+        promote_results_to_latest(run_name=run_name)
     except Exception as exc:
         logger.error("Promotion of %s failed: %s", cell_kn_tag, exc)
         post_github_deployment_status(
