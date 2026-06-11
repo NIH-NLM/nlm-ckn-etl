@@ -121,7 +121,7 @@ def fetch_external_api_results(
     ncbi_email: str = "",
     ncbi_api_key: str = "",
     force: bool = False,
-    source_max_age: float = 0.0,
+    max_source_age_hours: float = 0.0,
     run_name: str = "",
 ) -> None:
     """Run ``DataFetcher.py`` using the host Python interpreter.
@@ -136,7 +136,7 @@ def fetch_external_api_results(
         Pass ``--force-all`` to ``DataFetcher.py``, bypassing all on-disk
         caches and re-fetching everything from scratch.  Use this for
         scheduled runs so stale or empty cache entries don't persist.
-    source_max_age:
+    max_source_age_hours:
         Hours of freshness before a source is re-fetched.  Sources whose
         last successful fetch is younger than this are skipped.  0 (default)
         disables the check and always re-fetches every source.
@@ -147,16 +147,16 @@ def fetch_external_api_results(
     logger = get_run_logger()
     if force:
         logger.info("Force mode: ignoring on-disk cache, re-fetching all sources")
-    if source_max_age > 0:
+    if max_source_age_hours > 0:
         logger.info(
-            f"Source max age: {source_max_age}h — fresh sources will be skipped"
+            f"Source max age: {max_source_age_hours}h — fresh sources will be skipped"
         )
     logger.info("Fetching external API results (DataFetcher)")
     extra_args = []
     if force:
         extra_args.append("--force-all")
-    if source_max_age > 0:
-        extra_args.extend(["--source-max-age", str(source_max_age)])
+    if max_source_age_hours > 0:
+        extra_args.extend(["--max-source-age-hours", str(max_source_age_hours)])
     if run_name:
         extra_args.extend(["--run-name", run_name])
     _run_python_script(
@@ -333,7 +333,7 @@ def nlm_ckn_fetch(
     ncbi_api_key: str = "",
     force: bool = False,
     retry_empty: bool = False,
-    source_max_age: float = 0.0,
+    max_source_age_hours: float = 0.0,
     run_name: str = "",
 ) -> None:
     """NLM-CKN external API fetch flow.
@@ -363,7 +363,7 @@ def nlm_ckn_fetch(
         Strip empty ``{}`` cache entries before fetching, so previously-failed
         API calls are retried while all successfully-fetched data is kept.
         Ignored when ``force=True`` (force already discards everything).
-    source_max_age:
+    max_source_age_hours:
         Hours of freshness before a source is re-fetched.  Sources whose
         ``last_success_at`` in ``fetch-status.json`` is younger than this are
         skipped entirely, saving API quota and time.  0 (default) disables
@@ -422,7 +422,7 @@ def nlm_ckn_fetch(
         ncbi_email=ncbi_email,
         ncbi_api_key=ncbi_api_key,
         force=force,
-        source_max_age=source_max_age,
+        max_source_age_hours=max_source_age_hours,
         run_name=run_name,
     )
     transform_external_api_results(
@@ -474,10 +474,9 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--source-max-age",
+        "--max-source-age-hours",
         type=float,
         default=0.0,
-        metavar="HOURS",
         help=(
             "Skip sources whose last successful fetch is younger than this many hours. "
             "0 (default) disables the check and always re-fetches every source. "
@@ -500,7 +499,7 @@ if __name__ == "__main__":
             ncbi_api_key=args.ncbi_api_key,
             force=args.force,
             retry_empty=args.retry_empty,
-            source_max_age=args.source_max_age,
+            max_source_age_hours=args.max_source_age_hours,
             run_name=args.run_name,
         )
     else:
