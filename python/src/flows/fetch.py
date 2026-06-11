@@ -404,15 +404,10 @@ def nlm_ckn_fetch(
         logger.info("Local mode: S3_BUCKET not set, writing to data/external/ only")
 
     sync_results_from_s3(run_name=run_name)  # ensure release results are available
-    try:
-        validate_release_dir(run_name=run_name)
-    except FileNotFoundError as exc:
-        logger.warning(
-            f"Release directory missing or empty: {exc}\n"
-            "Fetchers that depend on NSForest results (cellxgene, gene, "
-            "uniprot, opentargets) will produce no output. "
-            "HuBMAP will still run."
-        )
+    # Fail fast if the release results are missing: the NSForest results drive
+    # which genes the cellxgene/gene/uniprot/opentargets fetchers retrieve, so a
+    # missing results dir means a silently incomplete fetch.
+    validate_release_dir(run_name=run_name)
     sync_external_from_s3(run_name=run_name)  # restore external cache (no-op if no S3)
     clean_empty_external_files(run_name=run_name)
     if retry_empty and not force:
