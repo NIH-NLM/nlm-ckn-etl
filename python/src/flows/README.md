@@ -28,7 +28,7 @@ prefix after the full fetch passes validation.
 |-----------|---------|-------------|
 | `force` | `False` | Wipe the local cache and re-fetch all sources from scratch |
 | `retry_empty` | `False` | Retry only previously-failed entries; keep all successful data |
-| `run` | `$CKN_RUN` / `full` | Selects `data/external-{run}/` locally and `runs/{run}/01-results/` in S3 |
+| `run_name` | `$CKN_RUN` / `full` | Selects `data/external-{run}/` locally and `runs/{run}/01-results/` in S3 |
 
 ---
 
