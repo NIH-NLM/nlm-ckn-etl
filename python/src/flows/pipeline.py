@@ -401,7 +401,7 @@ def _java_cmd(
     arango_db_password:
         ArangoDB root password.  Injected via env (not as a flag).
     java_opts:
-        Space-separated JVM flags (e.g. ``"-Xmx4g"``).
+        Space-separated JVM flags (e.g. ``"-Xmx32g"``).
     """
     return ["java"] + java_opts.split() + ["-cp", CLASSPATH, main_class]
 
@@ -838,7 +838,7 @@ def write_tuples(arango_db_password: str, run: str = "") -> None:
     Parameters
     ----------
     run:
-        Run name passed as ``--run`` (selects ``data/run-<name>.json``).
+        Run name passed as ``--run`` (selects ``data/results-<name>/``).
         Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
@@ -891,7 +891,7 @@ def validate_tuple_files(run: str = "") -> None:
     if not json_files:
         raise FileNotFoundError(
             f"No JSON files in {tuples_dir.name}/ after tuple writers ran.\n"
-            f"Ensure data/run-{run_name}.json points to existing NSForest results."
+            f"Ensure data/results-{run_name}/ contains NSForest results (*_results.csv)."
         )
     logger.info(f"Tuple files: {len(json_files)} JSON file(s) in {tuples_dir.name}/")
 
@@ -1291,10 +1291,10 @@ def nlm_ckn_etl(
     force_archive:
         Run Phase 3 even if its golden dump already exists, overwriting it.
     java_opts:
-        JVM flags passed to every Java invocation (default: ``-Xmx4g``).
-        Increase (e.g. ``-Xmx8g``) if you get OOM-killed (exit 137).
+        JVM flags passed to every Java invocation (default: ``DEFAULT_JAVA_OPTS``,
+        currently ``-Xmx32g``).  Increase further if you get OOM-killed (exit 137).
     run:
-        Run name (selects ``data/run-<name>.json`` for tuple writers and
+        Run name (selects ``data/results-<name>/`` for tuple writers and
         results sources).  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
@@ -1623,7 +1623,7 @@ if __name__ == "__main__":
         "--run",
         default=os.getenv("CKN_RUN", ""),
         help=(
-            "Run name (selects data/run-<name>.json for tuple writers and results sources). "
+            "Run name (selects data/results-<name>/ for tuple writers and results sources). "
             "Defaults to $CKN_RUN or 'full'."
         ),
     )

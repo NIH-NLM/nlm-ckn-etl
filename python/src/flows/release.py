@@ -52,6 +52,7 @@ import os
 import shutil
 import tarfile
 import tempfile
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -112,11 +113,9 @@ def extract_release_tarball(
     logger = get_run_logger()
     results_dir = REPO_ROOT / "data" / f"results-{run_name}"
 
-    if results_dir.exists():
-        shutil.rmtree(results_dir)
-    results_dir.mkdir(parents=True)
-
-    # Download if URL, otherwise use local path directly.
+    # Resolve/download the tarball BEFORE touching results_dir, so a bad
+    # --tag / --github-repo / --tar-source (404 or missing file) fails without
+    # wiping an existing results directory.
     if tar_source.startswith("http://") or tar_source.startswith("https://"):
         tar_path = REPO_ROOT / "data" / f"release-{run_name}.tar.gz"
         logger.info(f"Downloading release tarball: {tar_source}")
@@ -125,8 +124,14 @@ def extract_release_tarball(
         if token:
             headers["Authorization"] = f"Bearer {token}"
         req = urllib.request.Request(tar_source, headers=headers)
-        with urllib.request.urlopen(req) as resp, open(tar_path, "wb") as out:
-            shutil.copyfileobj(resp, out)
+        try:
+            with urllib.request.urlopen(req) as resp, open(tar_path, "wb") as out:
+                shutil.copyfileobj(resp, out)
+        except urllib.error.HTTPError as exc:
+            raise FileNotFoundError(
+                f"Release tarball not found at {tar_source} (HTTP {exc.code}). "
+                "Check --tag, --github-repo, or --tar-source."
+            ) from exc
         logger.info(f"Downloaded to {tar_path.name}")
     elif tar_source.startswith("s3://"):
         tar_path = REPO_ROOT / "data" / f"release-{run_name}.tar.gz"
@@ -137,7 +142,16 @@ def extract_release_tarball(
         logger.info(f"Downloaded to {tar_path.name}")
     else:
         tar_path = Path(tar_source)
+        if not tar_path.is_file():
+            raise FileNotFoundError(
+                f"Local release tarball not found: {tar_path}. Check --tar-source."
+            )
         logger.info(f"Using local tarball: {tar_path}")
+
+    # Source confirmed reachable — only now (re)create the results directory.
+    if results_dir.exists():
+        shutil.rmtree(results_dir)
+    results_dir.mkdir(parents=True)
 
     # Extract, flattening all files into results_dir regardless of their nested
     # path within the tarball. Filenames are unique across datasets (they include
@@ -353,7 +367,8 @@ def nlm_ckn_release(
         previous failures).  If the cache is older or absent a full re-fetch is
         forced.  Defaults to 48 hours.
     java_opts:
-        JVM flags passed to every Java invocation (default: ``-Xmx4g``).
+        JVM flags passed to every Java invocation (default: ``DEFAULT_JAVA_OPTS``,
+        currently ``-Xmx32g``).
     """
     logger = get_run_logger()
 

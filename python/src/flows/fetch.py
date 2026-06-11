@@ -142,7 +142,7 @@ def fetch_external_api_results(
         disables the check and always re-fetches every source.
     run:
         Run name passed as ``--run`` to ``DataFetcher.py`` (selects
-        ``data/run-<name>.json``).  Defaults to ``$CKN_RUN`` or ``'full'``.
+        ``data/results-<name>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if force:
@@ -190,7 +190,7 @@ def transform_external_api_results(
         Pass ``--force`` to re-run all transformers even when outputs are
         up to date.
     run:
-        Run name passed as ``--run`` (selects ``data/run-<name>.json``).
+        Run name passed as ``--run`` (selects ``data/results-<name>/``).
         Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
@@ -371,7 +371,7 @@ def nlm_ckn_fetch(
         ``force=True``.
     run:
         Run name passed to ``DataFetcher.py`` (selects
-        ``data/run-<name>.json``).  Defaults to ``$CKN_RUN`` or ``'full'``.
+        ``data/results-<name>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
 
@@ -485,7 +485,7 @@ if __name__ == "__main__":
         "--run",
         default=os.getenv("CKN_RUN", ""),
         help=(
-            "Run name passed to DataFetcher.py (selects data/run-<name>.json). "
+            "Run name passed to DataFetcher.py (selects data/results-<name>/). "
             "Defaults to $CKN_RUN or 'full'."
         ),
     )
