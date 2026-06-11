@@ -36,10 +36,6 @@ Or via the Prefect CLI::
         --param ncbi_email=user@example.com \\
         --param ncbi_api_key=KEY
 
-Skip ontology rebuild (reuse existing baseline dump)::
-
-    python src/flows/release.py --tag v2026-04 --skip-ontology ...
-
 GitHub token
 ------------
 Set ``GITHUB_TOKEN`` to authenticate against the GitHub API and avoid rate
@@ -320,7 +316,6 @@ def nlm_ckn_release(
     github_repo: str = "NIH-NLM/nlm-ckn",
     tar_source: str = "",
     release_config: str = "",
-    skip_ontology: bool = False,
     max_fetch_age_hours: float = 48.0,
     java_opts: str = DEFAULT_JAVA_OPTS,
 ) -> None:
@@ -355,13 +350,8 @@ def nlm_ckn_release(
     release_config:
         Path or S3 URL for ``release.json``, read for ``hubmap_urls``.  On the
         CLI this same file also seeds the defaults for ``--tag``,
-        ``--github-repo``, ``--tar-source``, ``--skip-ontology``, and
-        ``--max-fetch-age-hours``.  Defaults to ``release.json`` in the
-        repository root.
-    skip_ontology:
-        Skip Phase 1 (ontology build) and reuse the existing baseline dump
-        for this run.  Useful when re-running a release after a failed
-        Phase 2 without repeating the expensive ontology build.
+        ``--github-repo``, ``--tar-source``, and ``--max-fetch-age-hours``.
+        Defaults to ``release.json`` in the repository root.
     max_fetch_age_hours:
         Maximum acceptable age of the external API cache before triggering a
         full re-fetch.  If ``fetch-info.json`` is younger than this threshold
@@ -466,7 +456,7 @@ def nlm_ckn_release(
     )
     try:
         nlm_ckn_etl(
-            run_ontology=not skip_ontology,
+            run_ontology=True,
             force_ontology=False,
             run_results=True,
             force_results=True,
@@ -546,7 +536,6 @@ def _load_release_json(release_config: str = "") -> dict:
     os.environ.setdefault("CELL_KN_TAG", str(data.get("cell_kn_tag") or ""))
     os.environ.setdefault("GITHUB_REPO", str(data.get("github_repo") or "NIH-NLM/nlm-ckn"))
     os.environ.setdefault("TAR_SOURCE", str(data.get("tar_source") or ""))
-    os.environ.setdefault("SKIP_ONTOLOGY", "true" if data.get("skip_ontology") else "false")
     if data.get("max_fetch_age_hours") is not None:
         os.environ.setdefault("MAX_FETCH_AGE_HOURS", str(data["max_fetch_age_hours"]))
     return data
@@ -611,12 +600,6 @@ if __name__ == "__main__":
         help="Path or S3 URL for release.json (default: release.json in repo root)",
     )
     parser.add_argument(
-        "--skip-ontology",
-        action="store_true",
-        default=os.getenv("SKIP_ONTOLOGY", "false").lower() == "true",
-        help="Skip Phase 1 and reuse existing baseline dump (default: skip_ontology from release.json)",
-    )
-    parser.add_argument(
         "--max-fetch-age-hours",
         type=float,
         default=float(os.getenv("MAX_FETCH_AGE_HOURS") or 48.0),
@@ -631,7 +614,7 @@ if __name__ == "__main__":
         "--save-config",
         action="store_true",
         help=(
-            "Write effective --tag, --tar-source, --github-repo, --skip-ontology, "
+            "Write effective --tag, --tar-source, --github-repo, "
             "and --max-fetch-age-hours values back to release.json before running."
         ),
     )
@@ -645,7 +628,6 @@ if __name__ == "__main__":
             "cell_kn_tag": args.cell_kn_tag,
             "github_repo": args.github_repo,
             "tar_source": args.tar_source,
-            "skip_ontology": args.skip_ontology,
             "max_fetch_age_hours": args.max_fetch_age_hours,
         })
 
@@ -657,7 +639,6 @@ if __name__ == "__main__":
         github_repo=args.github_repo,
         tar_source=args.tar_source,
         release_config=args.release_config,
-        skip_ontology=args.skip_ontology,
         max_fetch_age_hours=args.max_fetch_age_hours,
         java_opts=args.java_opts,
     )

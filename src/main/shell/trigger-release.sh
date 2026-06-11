@@ -20,8 +20,6 @@
 #       so the Batch container reads from S3 only.  Set GITHUB_TOKEN to
 #       authenticate HTTPS downloads from private GitHub releases.
 #       Default: tar_source from release.json, or derived from --tag.
-#   --skip-ontology
-#       Skip Phase 1 and reuse the existing baseline dump for this run.
 #   --run-name NAME
 #       ETL run name (default: tag with leading 'v' stripped).
 #   --max-fetch-age-hours N
@@ -41,7 +39,6 @@
 #   bash src/main/shell/trigger-release.sh
 #   bash src/main/shell/trigger-release.sh --tag v2026-04
 #   bash src/main/shell/trigger-release.sh --tag v2026-04 --tar-source /path/to/prod-data-v2026-04.tar.gz
-#   bash src/main/shell/trigger-release.sh --tag v2026-04 --skip-ontology
 
 set -euo pipefail
 
@@ -80,7 +77,6 @@ fi
 # ── Defaults from release.json (CLI flags override below) ────────────────────
 TAG="$(_from_json cell_kn_tag)"
 TAR_SOURCE="$(_from_json tar_source)"
-SKIP_ONTOLOGY="$(_from_json skip_ontology false)"
 MAX_FETCH_AGE_HOURS="$(_from_json max_fetch_age_hours)"
 RUN_NAME=""
 JAVA_OPTS=""
@@ -103,7 +99,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --tag)                  _require_arg "$1" "${2-}"; TAG="${2-}";                  shift 2 ;;
     --tar-source)           _require_arg "$1" "${2-}"; TAR_SOURCE="${2-}";           shift 2 ;;
-    --skip-ontology)        SKIP_ONTOLOGY="true";                                    shift   ;;
     --run-name)             _require_arg "$1" "${2-}"; RUN_NAME="${2-}";             shift 2 ;;
     --max-fetch-age-hours)  _require_arg "$1" "${2-}"; MAX_FETCH_AGE_HOURS="${2-}";  shift 2 ;;
     --java-opts)            [[ -z "${2-}" ]] && { echo "ERROR: $1 requires a value" >&2; usage; }; JAVA_OPTS="${2-}"; shift 2 ;;
@@ -247,13 +242,11 @@ env_json=$(
   JAVA_OPTS="${JAVA_OPTS}" \
   GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-}" \
   GITHUB_DEPLOYMENT_ID="${GITHUB_DEPLOYMENT_ID}" \
-  SKIP_ONTOLOGY="${SKIP_ONTOLOGY}" \
   python3 - <<'PYEOF'
 import json, os
 env = [
     {"name": "CELL_KN_TAG",      "value": os.environ["CELL_KN_TAG"]},
     {"name": "RELEASE_CONFIG",   "value": os.environ["RELEASE_CONFIG_S3"]},
-    {"name": "SKIP_ONTOLOGY",    "value": os.environ["SKIP_ONTOLOGY"]},
 ]
 for key, envvar in [
     ("TAR_SOURCE",          "TAR_SOURCE"),

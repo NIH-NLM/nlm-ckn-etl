@@ -110,8 +110,9 @@ fails, `latest` is never updated.
 
 The key design consequence: a new release is fast to iterate when the
 scheduled fetch has been running. If there are issues with a new dataset,
-re-running Step 2 and Step 3 alone (`--skip-ontology`) uses the already-warm
-cache rather than re-fetching hours of API data.
+re-running Step 2 and Step 3 alone uses the already-warm cache rather than
+re-fetching hours of API data (Phase 1 is skipped automatically when its
+baseline dump already exists).
 
 ---
 
@@ -196,7 +197,6 @@ poetry run src/flows/release.py \
 # Re-run ETL only after a failed Step 3 (cache and results already in S3)
 poetry run src/flows/release.py \
   --tag v0.0.2 \
-  --skip-ontology \
   --ncbi-email user@example.com \
   --ncbi-api-key KEY
 

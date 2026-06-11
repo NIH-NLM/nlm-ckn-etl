@@ -16,7 +16,6 @@
 # Optional environment variables (set via container overrides at submit time):
 #   TAR_SOURCE          — override tarball URL or S3 path (default: derived from tag)
 #   RUN_NAME            — ETL run name (default: tag with leading 'v' stripped)
-#   SKIP_ONTOLOGY       — set to 'true' to reuse an existing baseline dump
 #   MAX_FETCH_AGE_HOURS — max external cache age before forcing a re-fetch (default: 48)
 #   JAVA_OPTS              — JVM flags (default: -Xmx32g)
 #   GITHUB_TOKEN           — GitHub token; used for private tarball downloads and posting deployment statuses
@@ -43,6 +42,5 @@ args=(
 [[ -n "${RUN_NAME:-}"             ]] && args+=(--run-name            "${RUN_NAME}")
 [[ -n "${MAX_FETCH_AGE_HOURS:-}"  ]] && args+=(--max-fetch-age-hours "${MAX_FETCH_AGE_HOURS}")
 [[ -n "${JAVA_OPTS:-}"            ]] && args+=(--java-opts           "${JAVA_OPTS}")
-[[ "${SKIP_ONTOLOGY:-}" == "true" ]] && args+=(--skip-ontology)
 
 exec python /app/python/src/flows/release.py "${args[@]}"
