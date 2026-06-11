@@ -27,7 +27,7 @@ Usage
 -----
 Run directly::
 
-    python src/flows/release.py --tag v2026-04 --ncbi-email user@example.com --ncbi-api-key KEY
+    python src/flows/release.py --nlm-ckn-tag v2026-04 --ncbi-email user@example.com --ncbi-api-key KEY
 
 Or via the Prefect CLI::
 
@@ -110,7 +110,7 @@ def extract_release_tarball(
     results_dir = REPO_ROOT / "data" / f"results-{run_name}"
 
     # Resolve/download the tarball BEFORE touching results_dir, so a bad
-    # --tag / --github-repo / --tar-source (404 or missing file) fails without
+    # --nlm-ckn-tag / --github-repo / --tar-source (404 or missing file) fails without
     # wiping an existing results directory.
     if tar_source.startswith("http://") or tar_source.startswith("https://"):
         tar_path = REPO_ROOT / "data" / f"release-{run_name}.tar.gz"
@@ -126,7 +126,7 @@ def extract_release_tarball(
         except urllib.error.HTTPError as exc:
             raise FileNotFoundError(
                 f"Release tarball not found at {tar_source} (HTTP {exc.code}). "
-                "Check --tag, --github-repo, or --tar-source."
+                "Check --nlm-ckn-tag, --github-repo, or --tar-source."
             ) from exc
         logger.info(f"Downloaded to {tar_path.name}")
     elif tar_source.startswith("s3://"):
@@ -349,7 +349,7 @@ def nlm_ckn_release(
         convention.
     release_config:
         Path or S3 URL for ``release.json``, read for ``hubmap_urls``.  On the
-        CLI this same file also seeds the defaults for ``--tag``,
+        CLI this same file also seeds the defaults for ``--nlm-ckn-tag``,
         ``--github-repo``, ``--tar-source``, and ``--max-fetch-age-hours``.
         Defaults to ``release.json`` in the repository root.
     max_fetch_age_hours:
@@ -375,12 +375,12 @@ def nlm_ckn_release(
         raise ValueError("hubmap_urls is empty in release.json — cannot proceed")
 
     # Guard against the default placeholder values being committed unchanged.
-    # Validate against the effective values after --tag/--tar-source overrides.
+    # Validate against the effective values after --nlm-ckn-tag/--tar-source overrides.
     _PLACEHOLDER_TAG = "v0.0.0-alpha"
     if cell_kn_tag == _PLACEHOLDER_TAG:
         raise ValueError(
             f"cell_kn_tag is still the default placeholder ({cell_kn_tag!r}). "
-            "Provide a real release tag via --tag or update cell_kn_tag in release.json."
+            "Provide a real release tag via --nlm-ckn-tag or update cell_kn_tag in release.json."
         )
     # Derive tarball URL from tag if not explicitly provided.
     if not tar_source:
@@ -407,7 +407,7 @@ def nlm_ckn_release(
         logger.error(
             "Step 1 (extract release tarball) failed.\n"
             "To retry from this step:\n"
-            f"  poetry run src/flows/release.py --tag {cell_kn_tag}"
+            f"  poetry run src/flows/release.py --nlm-ckn-tag {cell_kn_tag}"
         )
         post_github_deployment_status(
             state="failure",
@@ -438,7 +438,7 @@ def nlm_ckn_release(
             "To resume fetching without re-downloading completed sources:\n"
             "  poetry run python src/DataFetcher.py --run-name %s\n"
             "Then re-run the full release to continue from Step 3:\n"
-            "  poetry run src/flows/release.py --tag %s",
+            "  poetry run src/flows/release.py --nlm-ckn-tag %s",
             run_name,
             run_name,
             cell_kn_tag,
@@ -472,7 +472,7 @@ def nlm_ckn_release(
             "To retry the ETL without re-fetching:\n"
             "  poetry run python src/DataFetcher.py --run-name %s  # (will skip completed sources)\n"
             "  Then re-run the full release:\n"
-            "  poetry run src/flows/release.py --tag %s",
+            "  poetry run src/flows/release.py --nlm-ckn-tag %s",
             run_name,
             run_name,
             cell_kn_tag,
@@ -563,7 +563,7 @@ if __name__ == "__main__":
         epilog=__doc__,
     )
     parser.add_argument(
-        "--tag",
+        "--nlm-ckn-tag",
         required=not os.getenv("CELL_KN_TAG"),
         default=os.getenv("CELL_KN_TAG", ""),
         dest="cell_kn_tag",
@@ -592,7 +592,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--tar-source",
         default=os.getenv("TAR_SOURCE", ""),
-        help="Override tarball URL or local path (default: tar_source from release.json, or derived from --tag)",
+        help="Override tarball URL or local path (default: tar_source from release.json, or derived from --nlm-ckn-tag)",
     )
     parser.add_argument(
         "--release-config",
@@ -614,7 +614,7 @@ if __name__ == "__main__":
         "--save-config",
         action="store_true",
         help=(
-            "Write effective --tag, --tar-source, --github-repo, "
+            "Write effective --nlm-ckn-tag, --tar-source, --github-repo, "
             "and --max-fetch-age-hours values back to release.json before running."
         ),
     )

@@ -10,8 +10,8 @@
 #   .env          — local secrets, gitignored (S3_BUCKET, AWS creds, …)
 #
 # Required (one of):
-#   --tag TAG        nlm-ckn release tag, e.g. v2026-04
-#   cell_kn_tag      set in release.json (used when --tag is omitted)
+#   --nlm-ckn-tag TAG        nlm-ckn release tag, e.g. v2026-04
+#   cell_kn_tag      set in release.json (used when --nlm-ckn-tag is omitted)
 #
 # Optional:
 #   --tar-source PATH_OR_URL
@@ -19,7 +19,7 @@
 #       Local paths and HTTPS URLs are downloaded/staged to S3 before submission
 #       so the Batch container reads from S3 only.  Set GITHUB_TOKEN to
 #       authenticate HTTPS downloads from private GitHub releases.
-#       Default: tar_source from release.json, or derived from --tag.
+#       Default: tar_source from release.json, or derived from --nlm-ckn-tag.
 #   --run-name NAME
 #       ETL run name (default: tag with leading 'v' stripped).
 #   --max-fetch-age-hours N
@@ -37,8 +37,8 @@
 #
 # Usage:
 #   bash src/main/shell/trigger-release.sh
-#   bash src/main/shell/trigger-release.sh --tag v2026-04
-#   bash src/main/shell/trigger-release.sh --tag v2026-04 --tar-source /path/to/prod-data-v2026-04.tar.gz
+#   bash src/main/shell/trigger-release.sh --nlm-ckn-tag v2026-04
+#   bash src/main/shell/trigger-release.sh --nlm-ckn-tag v2026-04 --tar-source /path/to/prod-data-v2026-04.tar.gz
 
 set -euo pipefail
 
@@ -97,7 +97,7 @@ _require_arg() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --tag)                  _require_arg "$1" "${2-}"; TAG="${2-}";                  shift 2 ;;
+    --nlm-ckn-tag)          _require_arg "$1" "${2-}"; TAG="${2-}";                  shift 2 ;;
     --tar-source)           _require_arg "$1" "${2-}"; TAR_SOURCE="${2-}";           shift 2 ;;
     --run-name)             _require_arg "$1" "${2-}"; RUN_NAME="${2-}";             shift 2 ;;
     --max-fetch-age-hours)  _require_arg "$1" "${2-}"; MAX_FETCH_AGE_HOURS="${2-}";  shift 2 ;;
@@ -109,7 +109,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "${TAG}" ]] && { echo "ERROR: --tag is required (or set cell_kn_tag in release.json)" >&2; usage; }
+[[ -z "${TAG}" ]] && { echo "ERROR: --nlm-ckn-tag is required (or set cell_kn_tag in release.json)" >&2; usage; }
 
 # Derive the run name the same way release.py does: strip a leading 'v' from
 # the tag, unless --run-name was given explicitly.

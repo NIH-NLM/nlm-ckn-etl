@@ -183,20 +183,20 @@ local disk.
 ```bash
 # Full release
 poetry run src/flows/release.py \
-  --tag v0.0.2 \
+  --nlm-ckn-tag v0.0.2 \
   --ncbi-email user@example.com \
   --ncbi-api-key KEY
 
 # Release reusing a fresh cache (skip re-fetch when cache < 48 h old)
 poetry run src/flows/release.py \
-  --tag v0.0.2 \
+  --nlm-ckn-tag v0.0.2 \
   --max-fetch-age-hours 48 \
   --ncbi-email user@example.com \
   --ncbi-api-key KEY
 
 # Re-run ETL only after a failed Step 3 (cache and results already in S3)
 poetry run src/flows/release.py \
-  --tag v0.0.2 \
+  --nlm-ckn-tag v0.0.2 \
   --ncbi-email user@example.com \
   --ncbi-api-key KEY
 

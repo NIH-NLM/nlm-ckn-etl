@@ -6,10 +6,10 @@ name: Trigger NLM-CKN Release
 #
 # To trigger from local:
 #   gh workflow run trigger-release.yml \
-#     --field tag=v2026-04
+#     --field nlm_ckn_tag=v2026-04
 #
 #   gh workflow run trigger-release.yml \
-#     --field tag=v2026-04 \
+#     --field nlm_ckn_tag=v2026-04 \
 #     --field tar_source=s3://my-bucket/runs/2026-04/prod-data-v2026-04.tar.gz \
 #
 # Required GitHub secrets:
@@ -20,7 +20,7 @@ name: Trigger NLM-CKN Release
 on:
   workflow_dispatch:
     inputs:
-      tag:
+      nlm_ckn_tag:
         description: 'nlm-ckn release tag (e.g. v2026-04)'
         required: true
         type: string
@@ -63,13 +63,13 @@ jobs:
       # uses them, preventing expression injection in the run: command.
       - name: Submit release job
         env:
-          TAG:                   ${{ inputs.tag }}
+          TAG:                   ${{ inputs.nlm_ckn_tag }}
           TAR_SOURCE:            ${{ inputs.tar_source }}
           RUN_NAME:              ${{ inputs.run_name }}
           MAX_FETCH_AGE_HOURS:   ${{ inputs.max_fetch_age_hours }}
           S3_BUCKET:             ${{ secrets.S3_BUCKET }}
         run: |
-          args=(--tag "${TAG}")
+          args=(--nlm-ckn-tag "${TAG}")
           [[ -n "${TAR_SOURCE}"          ]] && args+=(--tar-source          "${TAR_SOURCE}")
           [[ -n "${RUN_NAME}"            ]] && args+=(--run-name             "${RUN_NAME}")
           [[ -n "${MAX_FETCH_AGE_HOURS}" ]] && args+=(--max-fetch-age-hours "${MAX_FETCH_AGE_HOURS}")

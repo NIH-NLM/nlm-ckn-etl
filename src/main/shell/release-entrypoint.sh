@@ -32,7 +32,7 @@ set -euo pipefail
 echo "=== Starting release: tag=${CELL_KN_TAG} ==="
 
 args=(
-  --tag            "${CELL_KN_TAG}"
+  --nlm-ckn-tag            "${CELL_KN_TAG}"
   --ncbi-email     "${NCBI_EMAIL}"
   --ncbi-api-key   "${NCBI_API_KEY}"
   --release-config "${RELEASE_CONFIG}"
