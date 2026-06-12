@@ -629,8 +629,9 @@ def sync_external_from_s3(run_name: str = "") -> None:
     Parameters
     ----------
     run_name:
-        Run name (selects ``data/external-<name>/`` and S3 prefix
-        ``external-<name>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
+        Run name (selects ``data/external-<name>/`` locally; the S3 cache
+        prefix is the live, shared ``external/``).  Defaults to ``$CKN_RUN``
+        or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
@@ -653,8 +654,9 @@ def sync_external_to_s3(run_name: str = "") -> None:
     Parameters
     ----------
     run_name:
-        Run name (selects ``data/external-<name>/`` and S3 prefix
-        ``external-<name>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
+        Run name (selects ``data/external-<name>/`` locally; the S3 cache
+        prefix is the live, shared ``external/``).  Defaults to ``$CKN_RUN``
+        or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:

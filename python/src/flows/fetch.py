@@ -375,6 +375,11 @@ def nlm_ckn_fetch(
     """
     logger = get_run_logger()
 
+    # Validate here too (not only in the CLI): Prefect-deployment runs call the
+    # flow directly and would otherwise bypass the argparse check.
+    if max_source_age_hours < 0:
+        raise ValueError("max_source_age_hours must be non-negative")
+
     # Resolve credentials: explicit parameters take priority, then env vars
     ncbi_email = ncbi_email or os.getenv("NCBI_EMAIL", "")
     ncbi_api_key = ncbi_api_key or os.getenv("NCBI_API_KEY", "")

@@ -287,7 +287,16 @@ def resolve_fetch_force(run_name: str = "", max_fetch_age_hours: float = 48.0) -
         logger.info("No fetch-info.json found — forcing full re-fetch")
         return True
 
-    fetched_at = datetime.fromisoformat(fetch_info["fetched_at"])
+    try:
+        fetched_at = datetime.fromisoformat(fetch_info["fetched_at"])
+    except (KeyError, TypeError, ValueError) as exc:
+        logger.warning(
+            f"Missing/invalid fetched_at in fetch-info.json ({exc!r}) — "
+            "forcing full re-fetch"
+        )
+        return True
+    if fetched_at.tzinfo is None:  # tolerate naive timestamps
+        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
     age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
 
     if age_hours > max_fetch_age_hours:
@@ -363,6 +372,11 @@ def nlm_ckn_release(
         currently ``-Xmx32g``).
     """
     logger = get_run_logger()
+
+    # Validate here too (not only in the CLI): Prefect-deployment runs call the
+    # flow directly and would otherwise bypass the argparse check.
+    if max_fetch_age_hours < 0:
+        raise ValueError("max_fetch_age_hours must be non-negative")
 
     run_name = run_name or nlm_ckn_tag.lstrip("v")
     logger.info(f"Release: tag={nlm_ckn_tag}  run={run_name}")

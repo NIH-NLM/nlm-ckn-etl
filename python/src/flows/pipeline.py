@@ -838,7 +838,7 @@ def write_tuples(arango_db_password: str, run_name: str = "") -> None:
     Parameters
     ----------
     run_name:
-        Run name passed as ``--run`` (selects ``data/results-<name>/``).
+        Run name passed as ``--run-name`` (selects ``data/results-<name>/``).
         Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
