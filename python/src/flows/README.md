@@ -28,7 +28,7 @@ prefix after the full fetch passes validation.
 |-----------|---------|-------------|
 | `force` | `False` | Wipe the local cache and re-fetch all sources from scratch |
 | `retry_empty` | `False` | Retry only previously-failed entries; keep all successful data |
-| `run` | `$CKN_RUN` / `full` | Selects `data/external-{run}/` locally and `runs/{run}/01-results/` in S3 |
+| `run_name` | `$CKN_RUN` / `full` | Selects `data/external-{run}/` locally and `runs/{run}/01-results/` in S3 |
 
 ---
 
@@ -110,8 +110,9 @@ fails, `latest` is never updated.
 
 The key design consequence: a new release is fast to iterate when the
 scheduled fetch has been running. If there are issues with a new dataset,
-re-running Step 2 and Step 3 alone (`--skip-ontology`) uses the already-warm
-cache rather than re-fetching hours of API data.
+re-running Step 2 and Step 3 alone uses the already-warm cache rather than
+re-fetching hours of API data (Phase 1 is skipped automatically when its
+baseline dump already exists).
 
 ---
 
@@ -182,21 +183,20 @@ local disk.
 ```bash
 # Full release
 poetry run src/flows/release.py \
-  --tag v0.0.2 \
+  --nlm-ckn-tag v0.0.2 \
   --ncbi-email user@example.com \
   --ncbi-api-key KEY
 
 # Release reusing a fresh cache (skip re-fetch when cache < 48 h old)
 poetry run src/flows/release.py \
-  --tag v0.0.2 \
+  --nlm-ckn-tag v0.0.2 \
   --max-fetch-age-hours 48 \
   --ncbi-email user@example.com \
   --ncbi-api-key KEY
 
 # Re-run ETL only after a failed Step 3 (cache and results already in S3)
 poetry run src/flows/release.py \
-  --tag v0.0.2 \
-  --skip-ontology \
+  --nlm-ckn-tag v0.0.2 \
   --ncbi-email user@example.com \
   --ncbi-api-key KEY
 
@@ -206,6 +206,6 @@ poetry run src/flows/fetch.py \
   --ncbi-api-key KEY
 
 # Pipeline only (external cache and results already present locally or in S3)
-poetry run src/flows/pipeline.py --run-results --run 2026-04
-poetry run src/flows/pipeline.py --run-ontology --run-results --run-archive --run 2026-04
+poetry run src/flows/pipeline.py --run-results --run-name 2026-04
+poetry run src/flows/pipeline.py --run-ontology --run-results --run-archive --run-name 2026-04
 ```

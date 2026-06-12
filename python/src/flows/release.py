@@ -4,7 +4,7 @@
 Drives a full end-to-end release from an nlm-ckn GitHub Release tag:
 
 1. Download the release tarball from GitHub Releases and extract it to
-   ``data/results-<run>/`` (preserving the nested organ/dataset structure).
+   ``data/results-<name>/`` (preserving the nested organ/dataset structure).
 2. Run the external API fetch flow (``nlm_ckn_fetch``) with ``force=True``
    so every release captures a fresh, date-stamped snapshot.
 3. Run the three-phase ETL pipeline (``nlm_ckn_etl``):
@@ -16,7 +16,7 @@ Release format
 --------------
 The tarball (``prod-data-<tag>.tar.gz``) contains data under a nested
 ``data/prod/<organ>/...`` structure.  On extraction all files are flattened
-directly into ``data/results-<run>/``, consistent with what
+directly into ``data/results-<name>/``, consistent with what
 ``LoaderUtilities.get_dataset_file_paths`` expects.
 
 HuBMap URLs are read from ``release.json`` at the repo root and written
@@ -27,18 +27,14 @@ Usage
 -----
 Run directly::
 
-    python src/flows/release.py --tag v2026-04 --ncbi-email user@example.com --ncbi-api-key KEY
+    python src/flows/release.py --nlm-ckn-tag v2026-04 --ncbi-email user@example.com --ncbi-api-key KEY
 
 Or via the Prefect CLI::
 
     prefect deployment run 'nlm-ckn-release/production' \\
-        --param cell_kn_tag=v2026-04 \\
+        --param nlm_ckn_tag=v2026-04 \\
         --param ncbi_email=user@example.com \\
         --param ncbi_api_key=KEY
-
-Skip ontology rebuild (reuse existing baseline dump)::
-
-    python src/flows/release.py --tag v2026-04 --skip-ontology ...
 
 GitHub token
 ------------
@@ -114,7 +110,7 @@ def extract_release_tarball(
     results_dir = REPO_ROOT / "data" / f"results-{run_name}"
 
     # Resolve/download the tarball BEFORE touching results_dir, so a bad
-    # --tag / --github-repo / --tar-source (404 or missing file) fails without
+    # --nlm-ckn-tag / --github-repo / --tar-source (404 or missing file) fails without
     # wiping an existing results directory.
     if tar_source.startswith("http://") or tar_source.startswith("https://"):
         tar_path = REPO_ROOT / "data" / f"release-{run_name}.tar.gz"
@@ -130,7 +126,7 @@ def extract_release_tarball(
         except urllib.error.HTTPError as exc:
             raise FileNotFoundError(
                 f"Release tarball not found at {tar_source} (HTTP {exc.code}). "
-                "Check --tag, --github-repo, or --tar-source."
+                "Check --nlm-ckn-tag, --github-repo, or --tar-source."
             ) from exc
         logger.info(f"Downloaded to {tar_path.name}")
     elif tar_source.startswith("s3://"):
@@ -190,22 +186,22 @@ def extract_release_tarball(
 
 
 @task(name="sync-release-dir-to-s3", log_prints=True)
-def sync_release_dir_to_s3(run: str = "") -> None:
-    """Push ``data/results-<run>/`` to S3 so the pipeline can be re-run
+def sync_release_dir_to_s3(run_name: str = "") -> None:
+    """Push ``data/results-<name>/`` to S3 so the pipeline can be re-run
     without re-downloading the zip.
 
     No-op when ``S3_BUCKET`` is empty (local-only mode).
 
     Parameters
     ----------
-    run:
+    run_name:
         Run name.  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping (local mode)")
         return
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     results_dir = REPO_ROOT / "data" / f"results-{run_name}"
     s3_dst = f"s3://{S3_BUCKET}/runs/{run_name}/01-results/"
     logger.info(f"Syncing {results_dir.name}/ → {s3_dst}")
@@ -214,7 +210,7 @@ def sync_release_dir_to_s3(run: str = "") -> None:
 
 
 @task(name="promote-results-to-latest", log_prints=True)
-def promote_results_to_latest(run: str = "") -> None:
+def promote_results_to_latest(run_name: str = "") -> None:
     """Server-side copy ``runs/<run>/01-results/`` → ``runs/latest/01-results/`` in S3.
 
     Keeps a stable pointer that the scheduled fetch Fargate task always reads
@@ -225,14 +221,14 @@ def promote_results_to_latest(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
+    run_name:
         Run name.  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping (local mode)")
         return
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     src_prefix = f"runs/{run_name}/01-results/"
     dst_prefix = "runs/latest/01-results/"
     logger.info(
@@ -243,11 +239,11 @@ def promote_results_to_latest(run: str = "") -> None:
 
 
 @task(name="resolve-fetch-force", log_prints=True)
-def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> bool:
+def resolve_fetch_force(run_name: str = "", max_fetch_age_hours: float = 48.0) -> bool:
     """Return True (force full re-fetch) if the external cache is missing or stale.
 
     Reads ``fetch-info.json`` from S3 (when ``S3_BUCKET`` is set) or from the
-    local ``data/external-<run>/`` directory.  If the file is absent or the
+    local ``data/external-<name>/`` directory.  If the file is absent or the
     ``fetched_at`` timestamp is older than ``max_fetch_age_hours``, returns
     ``True`` so the caller passes ``force=True`` to ``nlm_ckn_fetch``.
     Otherwise returns ``False`` and the caller uses ``retry_empty=True`` to
@@ -255,8 +251,8 @@ def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> boo
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/external-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     max_fetch_age_hours:
         Maximum acceptable cache age in hours.  Caches older than this
@@ -280,7 +276,7 @@ def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> boo
             if tmp_path is not None:
                 tmp_path.unlink(missing_ok=True)
     else:
-        info_path = _external_dir(run) / "fetch-info.json"
+        info_path = _external_dir(run_name) / "fetch-info.json"
         if info_path.exists():
             try:
                 fetch_info = json.loads(info_path.read_text())
@@ -291,7 +287,16 @@ def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> boo
         logger.info("No fetch-info.json found — forcing full re-fetch")
         return True
 
-    fetched_at = datetime.fromisoformat(fetch_info["fetched_at"])
+    try:
+        fetched_at = datetime.fromisoformat(fetch_info["fetched_at"])
+    except (KeyError, TypeError, ValueError) as exc:
+        logger.warning(
+            f"Missing/invalid fetched_at in fetch-info.json ({exc!r}) — "
+            "forcing full re-fetch"
+        )
+        return True
+    if fetched_at.tzinfo is None:  # tolerate naive timestamps
+        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
     age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
 
     if age_hours > max_fetch_age_hours:
@@ -313,14 +318,13 @@ def resolve_fetch_force(run: str = "", max_fetch_age_hours: float = 48.0) -> boo
 
 @flow(name="nlm-ckn-release", log_prints=True)
 def nlm_ckn_release(
-    cell_kn_tag: str,
+    nlm_ckn_tag: str,
     ncbi_email: str = "",
     ncbi_api_key: str = "",
     run_name: str = "",
     github_repo: str = "NIH-NLM/nlm-ckn",
     tar_source: str = "",
     release_config: str = "",
-    skip_ontology: bool = False,
     max_fetch_age_hours: float = 48.0,
     java_opts: str = DEFAULT_JAVA_OPTS,
 ) -> None:
@@ -332,7 +336,7 @@ def nlm_ckn_release(
 
     Parameters
     ----------
-    cell_kn_tag:
+    nlm_ckn_tag:
         Git tag on the nlm-ckn repository identifying the release, e.g.
         ``"v0.0.1"``.  Used to locate the GitHub Release asset and, if
         ``run_name`` is omitted, to derive the run name.
@@ -342,7 +346,7 @@ def nlm_ckn_release(
         NCBI E-Utilities API key.  Falls back to ``$NCBI_API_KEY``.
     run_name:
         ETL run name (scopes all output directories).  Defaults to
-        ``cell_kn_tag`` with any leading ``v`` stripped (e.g. ``"0.0.1"``).
+        ``nlm_ckn_tag`` with any leading ``v`` stripped (e.g. ``"0.0.1"``).
     github_repo:
         ``owner/repo`` path for the nlm-ckn GitHub repository.  Used to
         construct the Release asset URL when ``tar_source`` is not given.
@@ -350,16 +354,13 @@ def nlm_ckn_release(
     tar_source:
         Override URL or local path for the release tarball (``.tar.gz``).
         When omitted, the URL is derived from ``github_repo`` and
-        ``cell_kn_tag`` using the ``prod-data-<tag>.tar.gz`` naming
+        ``nlm_ckn_tag`` using the ``prod-data-<tag>.tar.gz`` naming
         convention.
     release_config:
-        Path or S3 URL for ``release.json``.  HuBMap URLs and other release
-        settings are read from this file.  Defaults to ``release.json`` in
-        the repository root.
-    skip_ontology:
-        Skip Phase 1 (ontology build) and reuse the existing baseline dump
-        for this run.  Useful when re-running a release after a failed
-        Phase 2 without repeating the expensive ontology build.
+        Path or S3 URL for ``release.json``, read for ``hubmap_urls``.  On the
+        CLI this same file also seeds the defaults for ``--nlm-ckn-tag``,
+        ``--github-repo``, ``--tar-source``, and ``--max-fetch-age-hours``.
+        Defaults to ``release.json`` in the repository root.
     max_fetch_age_hours:
         Maximum acceptable age of the external API cache before triggering a
         full re-fetch.  If ``fetch-info.json`` is younger than this threshold
@@ -372,8 +373,13 @@ def nlm_ckn_release(
     """
     logger = get_run_logger()
 
-    run_name = run_name or cell_kn_tag.lstrip("v")
-    logger.info(f"Release: tag={cell_kn_tag}  run={run_name}")
+    # Validate here too (not only in the CLI): Prefect-deployment runs call the
+    # flow directly and would otherwise bypass the argparse check.
+    if max_fetch_age_hours < 0:
+        raise ValueError("max_fetch_age_hours must be non-negative")
+
+    run_name = run_name or nlm_ckn_tag.lstrip("v")
+    logger.info(f"Release: tag={nlm_ckn_tag}  run={run_name}")
 
     start = datetime.now(timezone.utc)
 
@@ -383,19 +389,19 @@ def nlm_ckn_release(
         raise ValueError("hubmap_urls is empty in release.json — cannot proceed")
 
     # Guard against the default placeholder values being committed unchanged.
-    # Validate against the effective values after --tag/--tar-source overrides.
+    # Validate against the effective values after --nlm-ckn-tag/--tar-source overrides.
     _PLACEHOLDER_TAG = "v0.0.0-alpha"
-    if cell_kn_tag == _PLACEHOLDER_TAG:
+    if nlm_ckn_tag == _PLACEHOLDER_TAG:
         raise ValueError(
-            f"cell_kn_tag is still the default placeholder ({cell_kn_tag!r}). "
-            "Provide a real release tag via --tag or update cell_kn_tag in release.json."
+            f"nlm_ckn_tag is still the default placeholder ({nlm_ckn_tag!r}). "
+            "Provide a real release tag via --nlm-ckn-tag or update nlm_ckn_tag in release.json."
         )
     # Derive tarball URL from tag if not explicitly provided.
     if not tar_source:
-        tar_name = f"prod-data-{cell_kn_tag}.tar.gz"
+        tar_name = f"prod-data-{nlm_ckn_tag}.tar.gz"
         tar_source = (
             f"https://github.com/{github_repo}/releases/download"
-            f"/{cell_kn_tag}/{tar_name}"
+            f"/{nlm_ckn_tag}/{tar_name}"
         )
     if _PLACEHOLDER_TAG in tar_source:
         raise ValueError(
@@ -406,16 +412,16 @@ def nlm_ckn_release(
     # ── Step 1: Extract release tarball ──────────────────────────────────
     post_github_deployment_status(
         state="in_progress",
-        description=f"[1/3] Extracting release tarball for {cell_kn_tag}",
+        description=f"[1/3] Extracting release tarball for {nlm_ckn_tag}",
     )
     try:
         extract_release_tarball(tar_source, run_name, hubmap_urls)
-        sync_release_dir_to_s3(run=run_name)
+        sync_release_dir_to_s3(run_name=run_name)
     except Exception as exc:
         logger.error(
             "Step 1 (extract release tarball) failed.\n"
             "To retry from this step:\n"
-            f"  poetry run src/flows/release.py --tag {cell_kn_tag}"
+            f"  poetry run src/flows/release.py --nlm-ckn-tag {nlm_ckn_tag}"
         )
         post_github_deployment_status(
             state="failure",
@@ -425,7 +431,7 @@ def nlm_ckn_release(
 
     # ── Step 2: Fetch external APIs ───────────────────────────────────────
     force_fetch = resolve_fetch_force(
-        run=run_name, max_fetch_age_hours=max_fetch_age_hours
+        run_name=run_name, max_fetch_age_hours=max_fetch_age_hours
     )
     post_github_deployment_status(
         state="in_progress",
@@ -437,19 +443,19 @@ def nlm_ckn_release(
             ncbi_api_key=ncbi_api_key,
             force=force_fetch,
             retry_empty=not force_fetch,
-            run=run_name,
+            run_name=run_name,
         )
     except Exception as exc:
         logger.error(
             "Step 2 (fetch external APIs) failed.\n"
             "Already-fetched files in data/external-%s/ are intact.\n"
             "To resume fetching without re-downloading completed sources:\n"
-            "  poetry run python src/DataFetcher.py --run %s\n"
+            "  poetry run python src/DataFetcher.py --run-name %s\n"
             "Then re-run the full release to continue from Step 3:\n"
-            "  poetry run src/flows/release.py --tag %s",
+            "  poetry run src/flows/release.py --nlm-ckn-tag %s",
             run_name,
             run_name,
-            cell_kn_tag,
+            nlm_ckn_tag,
         )
         post_github_deployment_status(
             state="failure",
@@ -460,30 +466,30 @@ def nlm_ckn_release(
     # ── Step 3: Three-phase ETL ───────────────────────────────────────────
     post_github_deployment_status(
         state="in_progress",
-        description=f"[3/3] Running ETL pipeline for {cell_kn_tag}",
+        description=f"[3/3] Running ETL pipeline for {nlm_ckn_tag}",
     )
     try:
         nlm_ckn_etl(
-            run_ontology=not skip_ontology,
+            run_ontology=True,
             force_ontology=False,
             run_results=True,
             force_results=True,
             run_archive=True,
             force_archive=True,
             java_opts=java_opts,
-            run=run_name,
+            run_name=run_name,
         )
     except Exception as exc:
         logger.error(
             "Step 3 (ETL pipeline) failed.\n"
             "External data in data/external-%s/ is complete.\n"
             "To retry the ETL without re-fetching:\n"
-            "  poetry run python src/DataFetcher.py --run %s  # (will skip completed sources)\n"
+            "  poetry run python src/DataFetcher.py --run-name %s  # (will skip completed sources)\n"
             "  Then re-run the full release:\n"
-            "  poetry run src/flows/release.py --tag %s",
+            "  poetry run src/flows/release.py --nlm-ckn-tag %s",
             run_name,
             run_name,
-            cell_kn_tag,
+            nlm_ckn_tag,
         )
         post_github_deployment_status(
             state="failure",
@@ -494,21 +500,21 @@ def nlm_ckn_release(
     # Promote this release's results to the stable latest/ pointer so the
     # scheduled fetch targets the new gene set going forward.
     try:
-        promote_results_to_latest(run=run_name)
+        promote_results_to_latest(run_name=run_name)
     except Exception as exc:
-        logger.error("Promotion of %s failed: %s", cell_kn_tag, exc)
+        logger.error("Promotion of %s failed: %s", nlm_ckn_tag, exc)
         post_github_deployment_status(
             state="failure",
-            description=f"Promotion of {cell_kn_tag} failed: {exc}"[:140],
+            description=f"Promotion of {nlm_ckn_tag} failed: {exc}"[:140],
         )
         raise
 
-    logger.info(f"Release {cell_kn_tag} complete (run={run_name})")
+    logger.info(f"Release {nlm_ckn_tag} complete (run={run_name})")
     elapsed = datetime.now(timezone.utc) - start
     minutes, seconds = divmod(int(elapsed.total_seconds()), 60)
     post_github_deployment_status(
         state="success",
-        description=f"Released {cell_kn_tag} in {minutes}m {seconds}s",
+        description=f"Released {nlm_ckn_tag} in {minutes}m {seconds}s",
     )
 
 
@@ -533,17 +539,17 @@ def _read_release_json(release_config: str = "") -> dict:
     return json.loads(p.read_text()) if p.exists() else {}
 
 
-def _load_release_json() -> dict:
-    """Load release.json from the repo root into os.environ (setdefault).
+def _load_release_json(release_config: str = "") -> dict:
+    """Seed os.environ defaults from a release.json (setdefault).
 
-    Only sets keys not already present, so real env vars and CLI flags win.
-    Returns the parsed dict.
+    Reads ``release_config`` (a local path or S3 URL) when given, otherwise the
+    repo-root ``release.json``.  Only sets keys not already present, so real env
+    vars and CLI flags win.  Returns the parsed dict.
     """
-    data = _read_release_json()
-    os.environ.setdefault("CELL_KN_TAG", str(data.get("cell_kn_tag") or ""))
+    data = _read_release_json(release_config)
+    os.environ.setdefault("NLM_CKN_TAG", str(data.get("nlm_ckn_tag") or ""))
     os.environ.setdefault("GITHUB_REPO", str(data.get("github_repo") or "NIH-NLM/nlm-ckn"))
     os.environ.setdefault("TAR_SOURCE", str(data.get("tar_source") or ""))
-    os.environ.setdefault("SKIP_ONTOLOGY", "true" if data.get("skip_ontology") else "false")
     if data.get("max_fetch_age_hours") is not None:
         os.environ.setdefault("MAX_FETCH_AGE_HOURS", str(data["max_fetch_age_hours"]))
     return data
@@ -558,20 +564,22 @@ def _save_release_json(updates: dict) -> None:
     print(f"[release] Saved config to {config_path}")
 
 
-if __name__ == "__main__":
-    _load_release_json()
+def _parse_args(argv=None):
+    """Build the release CLI parser, parse ``argv``, and validate.
 
+    Extracted from ``__main__`` so tests can exercise the parser (flag names,
+    negative-age rejection) in-process without spawning a subprocess.
+    """
     parser = argparse.ArgumentParser(
         description="NLM-CKN end-to-end release pipeline (Prefect)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
     parser.add_argument(
-        "--tag",
-        required=not os.getenv("CELL_KN_TAG"),
-        default=os.getenv("CELL_KN_TAG", ""),
-        dest="cell_kn_tag",
-        help="Upstream nlm-ckn git tag, e.g. v2026-04 (default: cell_kn_tag from release.json)",
+        "--nlm-ckn-tag",
+        required=not os.getenv("NLM_CKN_TAG"),
+        default=os.getenv("NLM_CKN_TAG", ""),
+        help="Upstream nlm-ckn git tag, e.g. v2026-04 (default: nlm_ckn_tag from release.json)",
     )
     parser.add_argument(
         "--ncbi-email",
@@ -596,18 +604,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--tar-source",
         default=os.getenv("TAR_SOURCE", ""),
-        help="Override tarball URL or local path (default: tar_source from release.json, or derived from --tag)",
+        help="Override tarball URL or local path (default: tar_source from release.json, or derived from --nlm-ckn-tag)",
     )
     parser.add_argument(
         "--release-config",
         default="",
         help="Path or S3 URL for release.json (default: release.json in repo root)",
-    )
-    parser.add_argument(
-        "--skip-ontology",
-        action="store_true",
-        default=os.getenv("SKIP_ONTOLOGY", "false").lower() == "true",
-        help="Skip Phase 1 and reuse existing baseline dump (default: skip_ontology from release.json)",
     )
     parser.add_argument(
         "--max-fetch-age-hours",
@@ -624,30 +626,42 @@ if __name__ == "__main__":
         "--save-config",
         action="store_true",
         help=(
-            "Write effective --tag, --tar-source, --github-repo, --skip-ontology, "
+            "Write effective --nlm-ckn-tag, --tar-source, --github-repo, "
             "and --max-fetch-age-hours values back to release.json before running."
         ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+
+    if args.max_fetch_age_hours < 0:
+        parser.error("--max-fetch-age-hours must be non-negative")
+    return args
+
+
+if __name__ == "__main__":
+    # Resolve --release-config first so the file it points to (not just the
+    # repo-root release.json) seeds every env-backed default below.
+    _pre = argparse.ArgumentParser(add_help=False)
+    _pre.add_argument("--release-config", default="")
+    _load_release_json(_pre.parse_known_args()[0].release_config)
+
+    args = _parse_args()
 
     if args.save_config:
         _save_release_json({
-            "cell_kn_tag": args.cell_kn_tag,
+            "nlm_ckn_tag": args.nlm_ckn_tag,
             "github_repo": args.github_repo,
             "tar_source": args.tar_source,
-            "skip_ontology": args.skip_ontology,
             "max_fetch_age_hours": args.max_fetch_age_hours,
         })
 
     nlm_ckn_release(
-        cell_kn_tag=args.cell_kn_tag,
+        nlm_ckn_tag=args.nlm_ckn_tag,
         ncbi_email=args.ncbi_email,
         ncbi_api_key=args.ncbi_api_key,
         run_name=args.run_name,
         github_repo=args.github_repo,
         tar_source=args.tar_source,
         release_config=args.release_config,
-        skip_ontology=args.skip_ontology,
         max_fetch_age_hours=args.max_fetch_age_hours,
         java_opts=args.java_opts,
     )

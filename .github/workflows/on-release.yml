@@ -6,11 +6,11 @@ name: On Release — Trigger ETL
 #
 # The upstream nlm-ckn tag and all release settings come from the checked-in
 # release.json at the repo root, NOT from this repo's release tag.
-# A developer preparing a release should update release.json (cell_kn_tag, etc.)
+# A developer preparing a release should update release.json (nlm_ckn_tag, etc.)
 # and commit it before publishing the ETL release.
 #
 # Config (checked in, repo root):
-#   release.json  — cell_kn_tag, tar_source, skip_ontology, max_fetch_age_hours, hubmap_urls
+#   release.json  — nlm_ckn_tag, tar_source, max_fetch_age_hours, hubmap_urls
 #
 # Required GitHub secrets:
 #   AWS_RELEASE_ROLE_ARN  — IAM role ARN to assume (batch:SubmitJob + s3:PutObject)

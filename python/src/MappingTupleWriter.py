@@ -15,10 +15,10 @@ from LoaderUtilities import (
     PURLBASE,
     RDFSBASE,
     get_cellxgene_harvester_data,
+    get_current_run,
     get_dataset_file_paths,
     get_dataset_version_id_lists,
     get_gene_ensembl_id_to_names_map,
-    get_results_sources,
     hyphenate,
     load_results,
 )
@@ -242,9 +242,9 @@ def main():
     each dataset with a mapping file. Writes one JSON tuple file per
     dataset.
     """
-    results_sources = get_results_sources()
-    harvester_data = get_cellxgene_harvester_data(results_sources)
-    file_paths = get_dataset_file_paths(results_sources)
+    results_dir = get_current_run().results_dir
+    harvester_data = get_cellxgene_harvester_data(results_dir)
+    file_paths = get_dataset_file_paths(results_dir)
     dataset_version_id_lists = get_dataset_version_id_lists(file_paths)
 
     for nsforest_path, mapping_path, scores_path, dvids in zip(

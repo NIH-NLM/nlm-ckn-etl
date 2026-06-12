@@ -15,7 +15,7 @@ Run directly (no Prefect server needed)::
     cd python
     python src/flows/fetch.py
     python src/flows/fetch.py --ncbi-email user@example.com --ncbi-api-key KEY
-    python src/flows/fetch.py --run sample
+    python src/flows/fetch.py --run-name sample
 
 Or with the Prefect CLI after ``prefect server start``::
 
@@ -57,8 +57,8 @@ from pipeline import sync_results_from_s3, validate_release_dir
 
 
 @task(name="retry-failed-cache-entries", log_prints=True)
-def retry_failed_cache_entries(run: str = "") -> None:
-    """Remove empty ``{}`` entries from every JSON cache file in ``data/external-<run>/``.
+def retry_failed_cache_entries(run_name: str = "") -> None:
+    """Remove empty ``{}`` entries from every JSON cache file in ``data/external-<name>/``.
 
     ``DataFetcher.py`` records a failed API call as an empty dict ``{}`` so
     the fetch loop skips it on the next run.  This task strips those entries
@@ -73,12 +73,12 @@ def retry_failed_cache_entries(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/external-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
-    external_dir = _external_dir(run)
+    external_dir = _external_dir(run_name)
     if not external_dir.is_dir():
         logger.info(f"{external_dir.name}/ does not exist — nothing to clean")
         return
@@ -121,8 +121,8 @@ def fetch_external_api_results(
     ncbi_email: str = "",
     ncbi_api_key: str = "",
     force: bool = False,
-    source_max_age: float = 0.0,
-    run: str = "",
+    max_source_age_hours: float = 0.0,
+    run_name: str = "",
 ) -> None:
     """Run ``DataFetcher.py`` using the host Python interpreter.
 
@@ -136,29 +136,29 @@ def fetch_external_api_results(
         Pass ``--force-all`` to ``DataFetcher.py``, bypassing all on-disk
         caches and re-fetching everything from scratch.  Use this for
         scheduled runs so stale or empty cache entries don't persist.
-    source_max_age:
+    max_source_age_hours:
         Hours of freshness before a source is re-fetched.  Sources whose
         last successful fetch is younger than this are skipped.  0 (default)
         disables the check and always re-fetches every source.
-    run:
-        Run name passed as ``--run`` to ``DataFetcher.py`` (selects
+    run_name:
+        Run name passed as ``--run-name`` to ``DataFetcher.py`` (selects
         ``data/results-<name>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if force:
         logger.info("Force mode: ignoring on-disk cache, re-fetching all sources")
-    if source_max_age > 0:
+    if max_source_age_hours > 0:
         logger.info(
-            f"Source max age: {source_max_age}h — fresh sources will be skipped"
+            f"Source max age: {max_source_age_hours}h — fresh sources will be skipped"
         )
     logger.info("Fetching external API results (DataFetcher)")
     extra_args = []
     if force:
         extra_args.append("--force-all")
-    if source_max_age > 0:
-        extra_args.extend(["--source-max-age", str(source_max_age)])
-    if run:
-        extra_args.extend(["--run", run])
+    if max_source_age_hours > 0:
+        extra_args.extend(["--max-source-age-hours", str(max_source_age_hours)])
+    if run_name:
+        extra_args.extend(["--run-name", run_name])
     _run_python_script(
         "DataFetcher.py",
         arango_db_password=arango_db_password,
@@ -175,7 +175,7 @@ def fetch_external_api_results(
 def transform_external_api_results(
     arango_db_password: str = "",
     force: bool = False,
-    run: str = "",
+    run_name: str = "",
 ) -> None:
     """Run ``DataTransformer.py`` to convert raw fetcher JSON into
     ``*_transformed.json`` files consumed by the tuple writers.
@@ -189,8 +189,8 @@ def transform_external_api_results(
     force:
         Pass ``--force`` to re-run all transformers even when outputs are
         up to date.
-    run:
-        Run name passed as ``--run`` (selects ``data/results-<name>/``).
+    run_name:
+        Run name passed as ``--run-name`` (selects ``data/results-<name>/``).
         Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
@@ -198,8 +198,8 @@ def transform_external_api_results(
     extra_args = []
     if force:
         extra_args.append("--force")
-    if run:
-        extra_args.extend(["--run", run])
+    if run_name:
+        extra_args.extend(["--run-name", run_name])
     _run_python_script(
         "DataTransformer.py",
         arango_db_password=arango_db_password,
@@ -209,11 +209,11 @@ def transform_external_api_results(
 
 
 @task(name="record-fetch-artifact", log_prints=True)
-def record_fetch_artifact(run: str = "") -> None:
+def record_fetch_artifact(run_name: str = "") -> None:
     """Write ``fetch-info.json`` and a Prefect UI artifact summarising the run.
 
     ``fetch-info.json`` is stored alongside the cache files in
-    ``data/external-<run>/`` so it travels to S3 with the
+    ``data/external-<name>/`` so it travels to S3 with the
     ``sync_external_to_s3`` task.  ``pipeline.py`` reads it during the archive
     stage and merges its contents into ``build-info.txt``.
 
@@ -225,12 +225,12 @@ def record_fetch_artifact(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/external-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
-    external_dir = _external_dir(run)
+    external_dir = _external_dir(run_name)
 
     # Collect file sizes for the required raw + transformed cache files
     required = [
@@ -333,8 +333,8 @@ def nlm_ckn_fetch(
     ncbi_api_key: str = "",
     force: bool = False,
     retry_empty: bool = False,
-    source_max_age: float = 0.0,
-    run: str = "",
+    max_source_age_hours: float = 0.0,
+    run_name: str = "",
 ) -> None:
     """NLM-CKN external API fetch flow.
 
@@ -342,7 +342,7 @@ def nlm_ckn_fetch(
     and HuBMAP into ``data/external/`` (local) and
     ``s3://${S3_BUCKET}/external/`` (when ``S3_BUCKET`` is set).
 
-    Requires the release results directory (``data/results-<run>/``) to be
+    Requires the release results directory (``data/results-<name>/``) to be
     populated first — either by running ``release.py`` or by syncing from S3.
     The NSForest results determine which genes are fetched from external APIs.
 
@@ -363,17 +363,22 @@ def nlm_ckn_fetch(
         Strip empty ``{}`` cache entries before fetching, so previously-failed
         API calls are retried while all successfully-fetched data is kept.
         Ignored when ``force=True`` (force already discards everything).
-    source_max_age:
+    max_source_age_hours:
         Hours of freshness before a source is re-fetched.  Sources whose
         ``last_success_at`` in ``fetch-status.json`` is younger than this are
         skipped entirely, saving API quota and time.  0 (default) disables
         the check so every source is always re-fetched.  Ignored when
         ``force=True``.
-    run:
+    run_name:
         Run name passed to ``DataFetcher.py`` (selects
         ``data/results-<name>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
+
+    # Validate here too (not only in the CLI): Prefect-deployment runs call the
+    # flow directly and would otherwise bypass the argparse check.
+    if max_source_age_hours < 0:
+        raise ValueError("max_source_age_hours must be non-negative")
 
     # Resolve credentials: explicit parameters take priority, then env vars
     ncbi_email = ncbi_email or os.getenv("NCBI_EMAIL", "")
@@ -395,47 +400,50 @@ def nlm_ckn_fetch(
     # container env for forward-compatibility; ignore if unset.
     arango_db_password = os.getenv("ARANGO_DB_PASSWORD", "")
 
+    # Resolve the run name once and thread the resolved value to every task.
+    run_name = run_name or os.getenv("CKN_RUN", "full")
+
     if S3_BUCKET:
         logger.info(f"S3 mode: bucket={S3_BUCKET}")
     else:
         logger.info("Local mode: S3_BUCKET not set, writing to data/external/ only")
 
-    sync_results_from_s3(run=run)  # ensure release results are available
-    try:
-        validate_release_dir(run=run)
-    except FileNotFoundError as exc:
-        logger.warning(
-            f"Release directory missing or empty: {exc}\n"
-            "Fetchers that depend on NSForest results (cellxgene, gene, "
-            "uniprot, opentargets) will produce no output. "
-            "HuBMAP will still run."
-        )
-    sync_external_from_s3(run=run)  # restore external cache (no-op if no S3)
-    clean_empty_external_files(run=run)
+    sync_results_from_s3(run_name=run_name)  # ensure release results are available
+    # Fail fast if the release results are missing: the NSForest results drive
+    # which genes the cellxgene/gene/uniprot/opentargets fetchers retrieve, so a
+    # missing results dir means a silently incomplete fetch.
+    validate_release_dir(run_name=run_name)
+    sync_external_from_s3(run_name=run_name)  # restore external cache (no-op if no S3)
+    clean_empty_external_files(run_name=run_name)
     if retry_empty and not force:
-        retry_failed_cache_entries(run=run)
+        retry_failed_cache_entries(run_name=run_name)
     fetch_external_api_results(
         arango_db_password=arango_db_password,
         ncbi_email=ncbi_email,
         ncbi_api_key=ncbi_api_key,
         force=force,
-        source_max_age=source_max_age,
-        run=run,
+        max_source_age_hours=max_source_age_hours,
+        run_name=run_name,
     )
     transform_external_api_results(
         arango_db_password=arango_db_password,
         force=force,
-        run=run,
+        run_name=run_name,
     )
-    validate_external_files(run=run)
-    record_fetch_artifact(run=run)
-    sync_external_to_s3_staging(run=run)  # write to staging; pipeline.py is unaffected
-    promote_external_staging(run=run)  # server-side copy runs/{run}/external-staging/ → external/
+    validate_external_files(run_name=run_name)
+    record_fetch_artifact(run_name=run_name)
+    sync_external_to_s3_staging(run_name=run_name)  # write to staging; pipeline.py is unaffected
+    promote_external_staging(run_name=run_name)  # server-side copy runs/{run}/external-staging/ → external/
 
 
 # ── CLI entry point ────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+def _parse_args(argv=None):
+    """Build the fetch CLI parser, parse ``argv``, and validate.
+
+    Extracted from ``__main__`` so tests can exercise the parser (flag names,
+    negative-age rejection) in-process without spawning a subprocess.
+    """
     parser = argparse.ArgumentParser(
         description="NLM-CKN external API fetch (Prefect)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -471,10 +479,9 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--source-max-age",
+        "--max-source-age-hours",
         type=float,
         default=0.0,
-        metavar="HOURS",
         help=(
             "Skip sources whose last successful fetch is younger than this many hours. "
             "0 (default) disables the check and always re-fetches every source. "
@@ -482,27 +489,33 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--run",
+        "--run-name",
         default=os.getenv("CKN_RUN", ""),
         help=(
             "Run name passed to DataFetcher.py (selects data/results-<name>/). "
             "Defaults to $CKN_RUN or 'full'."
         ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    if args.ncbi_email and args.ncbi_api_key:
-        nlm_ckn_fetch(
-            ncbi_email=args.ncbi_email,
-            ncbi_api_key=args.ncbi_api_key,
-            force=args.force,
-            retry_empty=args.retry_empty,
-            source_max_age=args.source_max_age,
-            run=args.run,
-        )
-    else:
+    if args.max_source_age_hours < 0:
+        parser.error("--max-source-age-hours must be non-negative")
+    if not (args.ncbi_email and args.ncbi_api_key):
         parser.error(
             "Both NCBI email and API key are required. "
             "Use --ncbi-email and --ncbi-api-key, or set NCBI_EMAIL and NCBI_API_KEY "
             "environment variables."
         )
+    return args
+
+
+if __name__ == "__main__":
+    args = _parse_args()
+    nlm_ckn_fetch(
+        ncbi_email=args.ncbi_email,
+        ncbi_api_key=args.ncbi_api_key,
+        force=args.force,
+        retry_empty=args.retry_empty,
+        max_source_age_hours=args.max_source_age_hours,
+        run_name=args.run_name,
+    )

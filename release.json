@@ -1,9 +1,8 @@
 {
-    "_comment": "Checked-in release config. Update cell_kn_tag and tar_source when starting a new release cycle, then commit alongside your code changes. See README for details.",
-    "cell_kn_tag": "v1.0.0-rc.1",
+    "_comment": "Checked-in release config. Update nlm_ckn_tag and tar_source when starting a new release cycle, then commit alongside your code changes. See README for details.",
+    "nlm_ckn_tag": "v1.0.0-rc.1",
     "github_repo": "Springbok-LLC/nlm-ckn",
     "tar_source": "https://github.com/Springbok-LLC/nlm-ckn/releases/download/v1.0.0-rc.1/prod-data-v1.0.0-rc.1.tar.gz",
-    "skip_ontology": false,
     "max_fetch_age_hours": 48,
     "hubmap_urls": [
         "https://lod.humanatlas.io/asct-b/allen-brain/latest/",

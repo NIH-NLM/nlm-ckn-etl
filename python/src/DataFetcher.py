@@ -724,15 +724,14 @@ def main():
         help="force fetching of all results",
     )
     parser.add_argument(
-        "--run",
+        "--run-name",
         default=None,
         help="run name (selects data/results-<name>/; defaults to $CKN_RUN or 'full')",
     )
     parser.add_argument(
-        "--source-max-age",
+        "--max-source-age-hours",
         type=float,
         default=0.0,
-        metavar="HOURS",
         help=(
             "Skip sources whose last successful fetch is younger than this many hours. "
             "0 (default) disables freshness checking and always re-fetches every source."
@@ -740,7 +739,10 @@ def main():
     )
     args = parser.parse_args()
 
-    set_current_run(args.run)
+    if args.max_source_age_hours < 0:
+        parser.error("--max-source-age-hours must be non-negative")
+
+    set_current_run(args.run_name)
 
     # Per-source fetch status — written alongside the cache files so it travels to S3
     status_path = get_current_run().external_dir / "fetch-status.json"
@@ -799,16 +801,16 @@ def main():
         force = getattr(args, force_flag, False) or args.force_all
 
         # Freshness check: skip sources that succeeded recently (unless forced)
-        if not force and args.source_max_age > 0:
+        if not force and args.max_source_age_hours > 0:
             last_success = status.get(fetcher.name, {}).get("last_success_at")
             if last_success:
                 age_hours = (
                     now_utc - datetime.fromisoformat(last_success)
                 ).total_seconds() / 3600
-                if age_hours < args.source_max_age:
+                if age_hours < args.max_source_age_hours:
                     print(
                         f"[{fetcher.name}] Skipping — last success"
-                        f" {age_hours:.1f}h ago (max age: {args.source_max_age}h)"
+                        f" {age_hours:.1f}h ago (max age: {args.max_source_age_hours}h)"
                     )
                     status.setdefault(fetcher.name, {})["last_outcome"] = "skipped"
                     _save_fetch_status(status_path, status)

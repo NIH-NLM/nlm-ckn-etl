@@ -186,11 +186,6 @@ def parse_term(term, ro=None):
         return None, None, None, Path(path).stem, "literal"
 
 
-def get_results_sources():
-    """Return the results directory for the current run."""
-    return get_current_run().results_dir
-
-
 def get_cellxgene_harvester_data(results_dir=None):
     """Get and concatenate cellxgene-harvester data from the flat results dir.
 

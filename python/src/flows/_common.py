@@ -482,7 +482,7 @@ def _jar_key() -> str:
     return h.hexdigest()[:16]
 
 
-def _external_dir(run: str = "") -> Path:
+def _external_dir(run_name: str = "") -> Path:
     """Return the run-specific external cache directory.
 
     Mirrors ``RunConfig.external_dir`` (``data/external-{run_name}``) without
@@ -490,15 +490,15 @@ def _external_dir(run: str = "") -> Path:
     """
     import os as _os
 
-    run_name = run or _os.getenv("CKN_RUN", "full")
+    run_name = run_name or _os.getenv("CKN_RUN", "full")
     return REPO_ROOT / "data" / f"external-{run_name}"
 
 
 @task(name="clean-empty-external-files", log_prints=True)
-def clean_empty_external_files(run: str = "") -> None:
-    """Remove corrupt or structurally invalid files from ``data/external-<run>/``.
+def clean_empty_external_files(run_name: str = "") -> None:
+    """Remove corrupt or structurally invalid files from ``data/external-<name>/``.
 
-    ``DataFetcher.py`` uses cache files in ``data/external-<run>/``
+    ``DataFetcher.py`` uses cache files in ``data/external-<name>/``
     to resume interrupted runs.  Two classes of bad files are cleaned here:
 
     1. **Zero-byte files** — causes ``JSONDecodeError`` on next load.
@@ -513,12 +513,12 @@ def clean_empty_external_files(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/external-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
-    external_dir = _external_dir(run)
+    external_dir = _external_dir(run_name)
     external_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Remove zero-byte files
@@ -554,7 +554,7 @@ def clean_empty_external_files(run: str = "") -> None:
 
 
 @task(name="validate-external-files", log_prints=True)
-def validate_external_files(run: str = "") -> None:
+def validate_external_files(run_name: str = "") -> None:
     """Verify that all required external cache files exist and contain valid JSON.
 
     Called by the fetch flow after fetching+transforming and by the pipeline
@@ -568,12 +568,12 @@ def validate_external_files(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/external-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
-    external_dir = _external_dir(run)
+    external_dir = _external_dir(run_name)
     raw_required = [
         "cellxgene.json",
         "opentargets.json",
@@ -619,8 +619,8 @@ def validate_external_files(run: str = "") -> None:
 
 
 @task(name="sync-external-from-s3", log_prints=True)
-def sync_external_from_s3(run: str = "") -> None:
-    """Restore the external API cache from S3 to ``data/external-<run>/``.
+def sync_external_from_s3(run_name: str = "") -> None:
+    """Restore the external API cache from S3 to ``data/external-<name>/``.
 
     No-op when ``S3_BUCKET`` is empty (local-only mode).  Used by both the
     fetch flow (to resume an interrupted run) and the pipeline flow (to pull
@@ -628,15 +628,16 @@ def sync_external_from_s3(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/`` and S3 prefix
-        ``external-<run>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
+    run_name:
+        Run name (selects ``data/external-<name>/`` locally; the S3 cache
+        prefix is the live, shared ``external/``).  Defaults to ``$CKN_RUN``
+        or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping S3 sync (local mode)")
         return
-    external_dir = _external_dir(run)
+    external_dir = _external_dir(run_name)
     external_dir.mkdir(parents=True, exist_ok=True)
     s3_prefix = f"s3://{S3_BUCKET}/external/"
     logger.info(f"Syncing {s3_prefix} → {external_dir.name}/")
@@ -645,22 +646,23 @@ def sync_external_from_s3(run: str = "") -> None:
 
 
 @task(name="sync-external-to-s3", log_prints=True)
-def sync_external_to_s3(run: str = "") -> None:
-    """Push the external API cache from ``data/external-<run>/`` to S3.
+def sync_external_to_s3(run_name: str = "") -> None:
+    """Push the external API cache from ``data/external-<name>/`` to S3.
 
     No-op when ``S3_BUCKET`` is empty (local-only mode).
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/`` and S3 prefix
-        ``external-<run>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
+    run_name:
+        Run name (selects ``data/external-<name>/`` locally; the S3 cache
+        prefix is the live, shared ``external/``).  Defaults to ``$CKN_RUN``
+        or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping S3 sync (local mode)")
         return
-    external_dir = _external_dir(run)
+    external_dir = _external_dir(run_name)
     s3_prefix = f"s3://{S3_BUCKET}/external/"
     logger.info(f"Syncing {external_dir.name}/ → {s3_prefix}")
     _s3_sync(str(external_dir), s3_prefix)
@@ -668,10 +670,10 @@ def sync_external_to_s3(run: str = "") -> None:
 
 
 @task(name="sync-external-to-s3-staging", log_prints=True)
-def sync_external_to_s3_staging(run: str = "") -> None:
+def sync_external_to_s3_staging(run_name: str = "") -> None:
     """Push the external API cache to the run-scoped staging prefix.
 
-    Writes to ``s3://{S3_BUCKET}/runs/{run}/external-staging/`` rather than
+    Writes to ``s3://{S3_BUCKET}/runs/<name>/external-staging/`` rather than
     the live ``external/`` prefix so that a concurrent ``pipeline.py`` reading
     from ``external/`` sees only complete, validated snapshots.  Call
     ``promote_external_staging`` after validation to atomically swap the
@@ -684,17 +686,17 @@ def sync_external_to_s3_staging(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/`` locally and
-        ``runs/<run>/external-staging/`` in S3).  Defaults to
+    run_name:
+        Run name (selects ``data/external-<name>/`` locally and
+        ``runs/<name>/external-staging/`` in S3).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping S3 sync (local mode)")
         return
-    run_name = run or os.getenv("CKN_RUN", "full")
-    external_dir = _external_dir(run)
+    run_name = run_name or os.getenv("CKN_RUN", "full")
+    external_dir = _external_dir(run_name)
     s3_staging = f"s3://{S3_BUCKET}/runs/{run_name}/external-staging/"
     logger.info(f"Syncing {external_dir.name}/ → {s3_staging} (staging)")
     _s3_sync(str(external_dir), s3_staging)
@@ -702,8 +704,8 @@ def sync_external_to_s3_staging(run: str = "") -> None:
 
 
 @task(name="promote-external-staging", log_prints=True)
-def promote_external_staging(run: str = "") -> None:
-    """Server-side copy ``runs/{run}/external-staging/`` → ``external/`` in S3.
+def promote_external_staging(run_name: str = "") -> None:
+    """Server-side copy ``runs/<name>/external-staging/`` → ``external/`` in S3.
 
     Called after the fetch flow has validated its output.  Uses S3
     ``CopyObject`` so no data travels through the client and the promotion
@@ -715,7 +717,7 @@ def promote_external_staging(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
+    run_name:
         Run name (must match the value passed to ``sync_external_to_s3_staging``).
         Defaults to ``$CKN_RUN`` or ``'full'``.
     """
@@ -723,7 +725,7 @@ def promote_external_staging(run: str = "") -> None:
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping staging promotion (local mode)")
         return
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     src_prefix = f"runs/{run_name}/external-staging/"
     logger.info(
         f"Promoting s3://{S3_BUCKET}/{src_prefix} → s3://{S3_BUCKET}/external/"

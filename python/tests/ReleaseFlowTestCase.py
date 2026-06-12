@@ -45,7 +45,7 @@ class ReadReleaseJsonTestCase(unittest.TestCase):
 
     def test_reads_local_file(self):
         """Parses a local JSON file and returns its contents."""
-        data = {"cell_kn_tag": "v2026-04", "hubmap_urls": ["https://example.com"]}
+        data = {"nlm_ckn_tag": "v2026-04", "hubmap_urls": ["https://example.com"]}
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(data, f)
             tmp = f.name
@@ -53,7 +53,7 @@ class ReadReleaseJsonTestCase(unittest.TestCase):
             result = _read_release_json(tmp)
         finally:
             os.unlink(tmp)
-        self.assertEqual(result["cell_kn_tag"], "v2026-04")
+        self.assertEqual(result["nlm_ckn_tag"], "v2026-04")
 
     def test_returns_empty_dict_for_missing_file(self):
         """Returns {} when the local path does not exist."""
@@ -62,7 +62,7 @@ class ReadReleaseJsonTestCase(unittest.TestCase):
 
     def test_s3_temp_file_cleaned_up_on_success(self):
         """Temp file is removed after a successful S3 read."""
-        data = {"cell_kn_tag": "v2026-04"}
+        data = {"nlm_ckn_tag": "v2026-04"}
         created_paths = []
 
         def fake_download(bucket, key, dest):
@@ -76,7 +76,7 @@ class ReadReleaseJsonTestCase(unittest.TestCase):
             mock_boto3.client.return_value = mock_s3
             result = _read_release_json("s3://my-bucket/release.json")
 
-        self.assertEqual(result["cell_kn_tag"], "v2026-04")
+        self.assertEqual(result["nlm_ckn_tag"], "v2026-04")
         self.assertEqual(len(created_paths), 1)
         self.assertFalse(created_paths[0].exists(), "Temp file must be cleaned up on success")
 
@@ -113,7 +113,7 @@ class ResolveFetchForceTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("release.S3_BUCKET", ""), \
                  patch("release._external_dir", return_value=Path(tmpdir)):
-                result = self._call(run="test-run", max_fetch_age_hours=48.0)
+                result = self._call(run_name="test-run", max_fetch_age_hours=48.0)
         self.assertTrue(result)
 
     def test_returns_false_when_local_cache_fresh(self):
@@ -125,7 +125,7 @@ class ResolveFetchForceTestCase(unittest.TestCase):
             (Path(tmpdir) / "fetch-info.json").write_text(json.dumps(fetch_info))
             with patch("release.S3_BUCKET", ""), \
                  patch("release._external_dir", return_value=Path(tmpdir)):
-                result = self._call(run="test-run", max_fetch_age_hours=48.0)
+                result = self._call(run_name="test-run", max_fetch_age_hours=48.0)
         self.assertFalse(result)
 
     def test_returns_true_when_local_cache_stale(self):
@@ -137,7 +137,7 @@ class ResolveFetchForceTestCase(unittest.TestCase):
             (Path(tmpdir) / "fetch-info.json").write_text(json.dumps(fetch_info))
             with patch("release.S3_BUCKET", ""), \
                  patch("release._external_dir", return_value=Path(tmpdir)):
-                result = self._call(run="test-run", max_fetch_age_hours=48.0)
+                result = self._call(run_name="test-run", max_fetch_age_hours=48.0)
         self.assertTrue(result)
 
     def test_s3_temp_file_cleaned_up_when_json_invalid(self):
@@ -156,7 +156,7 @@ class ResolveFetchForceTestCase(unittest.TestCase):
              patch("release.get_run_logger", return_value=_noop_logger()):
             mock_boto3.client.return_value = mock_s3
             # Bad JSON is caught; function falls through to "force re-fetch".
-            result = resolve_fetch_force.fn(run="test-run", max_fetch_age_hours=48.0)
+            result = resolve_fetch_force.fn(run_name="test-run", max_fetch_age_hours=48.0)
 
         self.assertTrue(result, "Bad fetch-info.json should trigger force re-fetch")
         self.assertEqual(len(created_paths), 1, "download must have been attempted")
@@ -179,7 +179,7 @@ class ResolveFetchForceTestCase(unittest.TestCase):
              patch("release.boto3") as mock_boto3, \
              patch("release.get_run_logger", return_value=_noop_logger()):
             mock_boto3.client.return_value = mock_s3
-            result = resolve_fetch_force.fn(run="test-run", max_fetch_age_hours=48.0)
+            result = resolve_fetch_force.fn(run_name="test-run", max_fetch_age_hours=48.0)
 
         self.assertFalse(result)
         self.assertEqual(len(created_paths), 1)

@@ -27,12 +27,12 @@ def main():
     """Run all tuple writers."""
     parser = argparse.ArgumentParser(description="Run all tuple writers")
     parser.add_argument(
-        "--run",
+        "--run-name",
         default=None,
         help="run name (selects data/results-<name>/; defaults to $CKN_RUN or 'full')",
     )
     args = parser.parse_args()
-    set_current_run(args.run)
+    set_current_run(args.run_name)
 
     print("=" * 70)
     print("Running NSForest tuple writer")
