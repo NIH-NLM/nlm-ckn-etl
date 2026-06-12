@@ -755,7 +755,7 @@ def validate_release_dir(run_name: str = "") -> None:
     """Fail fast if the flat release directory is missing or empty.
 
     Checks that ``data/results-<name>/`` exists, contains at least one
-    ``*_results.csv`` file (NSForest output), and contains
+    ``results_ensg_*.csv`` file (NSForest output), and contains
     ``hubmap_urls.txt``.  This directory is populated by
     ``extract_release_zip`` in the release flow.
 
@@ -776,10 +776,10 @@ def validate_release_dir(run_name: str = "") -> None:
             f"  unzip release-{run_name}.zip -d data/results-{run_name}/"
         )
 
-    nsforest_files = sorted(results_dir.glob("*_results.csv"))
+    nsforest_files = sorted(results_dir.glob("results_ensg_*.csv"))
     if not nsforest_files:
         raise FileNotFoundError(
-            f"{results_dir.name}/ contains no *_results.csv files.\n"
+            f"{results_dir.name}/ contains no results_ensg_*.csv files.\n"
             "The release zip may be empty or incorrectly extracted."
         )
 
@@ -891,7 +891,7 @@ def validate_tuple_files(run_name: str = "") -> None:
     if not json_files:
         raise FileNotFoundError(
             f"No JSON files in {tuples_dir.name}/ after tuple writers ran.\n"
-            f"Ensure data/results-{run_name}/ contains NSForest results (*_results.csv)."
+            f"Ensure data/results-{run_name}/ contains NSForest results (results_ensg_*.csv)."
         )
     logger.info(f"Tuple files: {len(json_files)} JSON file(s) in {tuples_dir.name}/")
 

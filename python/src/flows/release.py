@@ -43,6 +43,8 @@ limits.  Required for private repositories.
 """
 
 import argparse
+import csv
+import io
 import json
 import os
 import shutil
@@ -150,11 +152,15 @@ def extract_release_tarball(
     results_dir.mkdir(parents=True)
 
     # Extract, flattening all files into results_dir regardless of their nested
-    # path within the tarball. Filenames are unique across datasets (they include
-    # organ, author, and year) so collisions are not a concern. This keeps
+    # path within the tarball. Per-dataset result files carry organ/author/year
+    # in their names, so they don't collide. The per-organ master_s3_manifest.csv
+    # files, however, all share one basename and WOULD collide (last-writer-wins),
+    # silently reducing the downstream integrity check to a single organ; they are
+    # intercepted below and unioned into one complete manifest instead. This keeps
     # results_dir flat, consistent with what LoaderUtilities expects.
     logger.info(f"Extracting → {results_dir.name}/ (flat)")
     base_dir = results_dir.resolve()
+    manifest_rows = {}  # filename -> s3_path, unioned across all per-organ manifests
     with tarfile.open(tar_path, "r:gz") as tf:
         for member in tf.getmembers():
             if not member.name.startswith(_TARBALL_PREFIX):
@@ -164,11 +170,35 @@ def extract_release_tarball(
             filename = Path(member.name).name
             if not filename:
                 continue
+            # Union per-organ manifests rather than flattening them onto one
+            # basename (which would keep only the last-extracted organ's rows).
+            if filename == "master_s3_manifest.csv":
+                fobj = tf.extractfile(member)
+                if fobj is not None:
+                    reader = csv.DictReader(io.TextIOWrapper(fobj, encoding="utf-8"))
+                    for row in reader:
+                        fn = row.get("filename")
+                        if fn:
+                            manifest_rows[fn] = row.get("s3_path", "")
+                continue
             resolved = (results_dir / filename).resolve()
             if not str(resolved).startswith(str(base_dir) + os.sep):
                 continue
             member.name = filename
             tf.extract(member, results_dir)
+
+    # Write the unioned manifest (complete across all organs) so the
+    # LoaderUtilities cross-check validates the whole run, not just one organ.
+    if manifest_rows:
+        manifest_dst = results_dir / "master_s3_manifest.csv"
+        with open(manifest_dst, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["filename", "s3_path"])
+            for fn in sorted(manifest_rows):
+                writer.writerow([fn, manifest_rows[fn]])
+        logger.info(
+            f"Unioned {len(manifest_rows)} manifest rows across all datasets"
+        )
 
     # Remove downloaded tarball — contents are now in results_dir.
     if tar_path.parent == REPO_ROOT / "data" and tar_path.name.startswith("release-"):
@@ -180,8 +210,21 @@ def extract_release_tarball(
     hubmap_dst.write_text("\n".join(hubmap_urls) + "\n")
     logger.info(f"HuBMap URLs written to {hubmap_dst.name} ({len(hubmap_urls)} entries)")
 
-    csv_count = len(list(results_dir.glob("*_results.csv")))
-    logger.info(f"Extracted {csv_count} NSForest result files to {results_dir.name}/")
+    # Validate that the extracted tarball actually contains NSForest result
+    # files under the canonical results_ensg_*.csv naming.  An empty match means
+    # the tarball uses an outdated convention (pre results_ensg/symbols split) or
+    # is otherwise malformed — fail here, before the expensive fetch + ETL steps,
+    # rather than silently building an empty graph downstream.
+    nsforest_paths = list(results_dir.glob("results_ensg_*.csv"))
+    if not nsforest_paths:
+        raise FileNotFoundError(
+            f"No results_ensg_*.csv files extracted to {results_dir.name}/ — the "
+            "release tarball may use an outdated NSForest naming convention "
+            "(pre results_ensg/symbols split) or be malformed."
+        )
+    logger.info(
+        f"Extracted {len(nsforest_paths)} NSForest result files to {results_dir.name}/"
+    )
     return results_dir
 
 
