@@ -564,13 +564,12 @@ def _save_release_json(updates: dict) -> None:
     print(f"[release] Saved config to {config_path}")
 
 
-if __name__ == "__main__":
-    # Resolve --release-config first so the file it points to (not just the
-    # repo-root release.json) seeds every env-backed default below.
-    _pre = argparse.ArgumentParser(add_help=False)
-    _pre.add_argument("--release-config", default="")
-    _load_release_json(_pre.parse_known_args()[0].release_config)
+def _parse_args(argv=None):
+    """Build the release CLI parser, parse ``argv``, and validate.
 
+    Extracted from ``__main__`` so tests can exercise the parser (flag names,
+    negative-age rejection) in-process without spawning a subprocess.
+    """
     parser = argparse.ArgumentParser(
         description="NLM-CKN end-to-end release pipeline (Prefect)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -631,10 +630,21 @@ if __name__ == "__main__":
             "and --max-fetch-age-hours values back to release.json before running."
         ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.max_fetch_age_hours < 0:
         parser.error("--max-fetch-age-hours must be non-negative")
+    return args
+
+
+if __name__ == "__main__":
+    # Resolve --release-config first so the file it points to (not just the
+    # repo-root release.json) seeds every env-backed default below.
+    _pre = argparse.ArgumentParser(add_help=False)
+    _pre.add_argument("--release-config", default="")
+    _load_release_json(_pre.parse_known_args()[0].release_config)
+
+    args = _parse_args()
 
     if args.save_config:
         _save_release_json({

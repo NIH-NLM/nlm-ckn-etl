@@ -438,7 +438,12 @@ def nlm_ckn_fetch(
 
 # ── CLI entry point ────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+def _parse_args(argv=None):
+    """Build the fetch CLI parser, parse ``argv``, and validate.
+
+    Extracted from ``__main__`` so tests can exercise the parser (flag names,
+    negative-age rejection) in-process without spawning a subprocess.
+    """
     parser = argparse.ArgumentParser(
         description="NLM-CKN external API fetch (Prefect)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -491,23 +496,26 @@ if __name__ == "__main__":
             "Defaults to $CKN_RUN or 'full'."
         ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.max_source_age_hours < 0:
         parser.error("--max-source-age-hours must be non-negative")
-
-    if args.ncbi_email and args.ncbi_api_key:
-        nlm_ckn_fetch(
-            ncbi_email=args.ncbi_email,
-            ncbi_api_key=args.ncbi_api_key,
-            force=args.force,
-            retry_empty=args.retry_empty,
-            max_source_age_hours=args.max_source_age_hours,
-            run_name=args.run_name,
-        )
-    else:
+    if not (args.ncbi_email and args.ncbi_api_key):
         parser.error(
             "Both NCBI email and API key are required. "
             "Use --ncbi-email and --ncbi-api-key, or set NCBI_EMAIL and NCBI_API_KEY "
             "environment variables."
         )
+    return args
+
+
+if __name__ == "__main__":
+    args = _parse_args()
+    nlm_ckn_fetch(
+        ncbi_email=args.ncbi_email,
+        ncbi_api_key=args.ncbi_api_key,
+        force=args.force,
+        retry_empty=args.retry_empty,
+        max_source_age_hours=args.max_source_age_hours,
+        run_name=args.run_name,
+    )
