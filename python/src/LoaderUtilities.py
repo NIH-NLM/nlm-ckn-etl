@@ -219,7 +219,8 @@ def get_dataset_file_paths(results_dir=None):
     convention.  For each ``results_ensg_*.csv`` file the companion files are
     located by substituting the ``results_ensg`` prefix:
 
-    - mapping:  ``results_ensg`` → ``mapping``
+    - mapping:  ``results_ensg`` → ``cluster_cid_mapping`` (sparse — only the
+      reference dataset per organ has one, so most results sets have none)
     - scores:   ``results_ensg`` → ``silhouette_fscore_summary``
     - summary:  ``results_ensg`` → ``master_dataset_summary``
 
@@ -249,7 +250,11 @@ def get_dataset_file_paths(results_dir=None):
 
     for p in nsforest_paths:
         mapping_paths.append(
-            list(results_dir.glob("**/" + p.name.replace("results_ensg", "mapping")))
+            list(
+                results_dir.glob(
+                    "**/" + p.name.replace("results_ensg", "cluster_cid_mapping")
+                )
+            )
         )
         scores_paths.append(
             list(
@@ -266,13 +271,16 @@ def get_dataset_file_paths(results_dir=None):
             )
         )
 
-    # Warn for any results file whose companion files were not found — these will
-    # fail later in get_dataset_version_id_lists with a confusing traceback.
-    for p, mp, sp in zip(nsforest_paths, mapping_paths, summary_paths):
-        if not mp and not sp:
+    # Warn for any results file missing its summary — get_dataset_version_id_lists
+    # reads the dataset_version_id column from the summary, so its absence fails
+    # later with a confusing traceback.  A missing cluster_cid_mapping is NOT an
+    # error: it is sparse (only the reference dataset per organ has one), and
+    # MappingTupleWriter simply skips results sets without a mapping.
+    for p, sp in zip(nsforest_paths, summary_paths):
+        if not sp:
             print(
-                f"WARNING: No companion files (mapping or master_dataset_summary) "
-                f"found for {p.name} — dataset version id lookup will fail."
+                f"WARNING: No master_dataset_summary found for {p.name} — "
+                f"dataset version id lookup will fail."
             )
 
     # Cross-check against the manifest so missing results files are caught at
@@ -306,10 +314,12 @@ def get_dataset_file_paths(results_dir=None):
 
 
 def get_dataset_version_id_lists(file_paths):
-    """Get dataset version id lists for each results source, first from the
-    dataset summary file, or if not available, from the author to CL mapping
-    file, or if not available, from the NSForest file name. Discovery of a
-    dataset version id is not assured.
+    """Get dataset version id lists for each results source from the dataset
+    summary file's ``dataset_version_id`` column.
+
+    A single results set can correspond to multiple datasets (e.g. Jorstad,
+    whose summary has one row per dataset), so every row of every summary file
+    paired with the results set contributes a dataset version id.
 
     Parameters
     ----------
@@ -324,42 +334,20 @@ def get_dataset_version_id_lists(file_paths):
     """
     dataset_version_id_lists = []
 
-    for summary_path, mapping_path, nsforest_path in zip(
+    for summary_path, nsforest_path in zip(
         file_paths["summary_paths"],
-        file_paths["mapping_paths"],
         file_paths["nsforest_paths"],
     ):
-        # Summary files are checked first because a single results file can
-        # correspond to multiple datasets (one summary per dataset), whereas
-        # mapping files encode all dataset IDs as a "--"-delimited string in a
-        # single row and cannot represent multiple summaries
-        # independently. Note that the summary file for Jorstad must be
-        # present, but does not contain the needed column.
-        summary_data = pd.DataFrame()
-        if len(summary_path) >= 1:
-            summary_data = pd.read_csv(summary_path[0])
-        if "h5ad_url" in summary_data:
-            dataset_version_ids = [
-                pd.read_csv(p)["h5ad_url"][0].split("/")[-1].split(".")[0]
-                for p in summary_path
-            ]
+        dataset_version_ids = []
+        for p in summary_path:
+            summary_data = pd.read_csv(p)
+            if "dataset_version_id" in summary_data.columns:
+                dataset_version_ids.extend(
+                    summary_data["dataset_version_id"].dropna().astype(str).tolist()
+                )
 
-        elif len(mapping_path) == 1:
-            dataset_version_ids = (
-                pd.read_csv(mapping_path[0]).loc[0, "dataset_version_id"].split("--")
-            )
-
-        else:
+        if not dataset_version_ids:
             raise Exception(f"No dataset version id found for {nsforest_path}")
-            # TODO: Restore if needed to process older production delivery
-            # match = re.search(
-            #     r"_([0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12})_",
-            #     nsforest_path.name,
-            # )
-            # if match:
-            #     dataset_version_ids = [match.group(1)]
-            # else:
-            #     dataset_version_ids = []
 
         dataset_version_id_lists.append(dataset_version_ids)
 
