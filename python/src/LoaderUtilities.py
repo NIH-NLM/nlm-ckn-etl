@@ -332,8 +332,13 @@ def get_dataset_version_id_lists(file_paths):
         # Summary files are checked first because a single results file can
         # correspond to multiple datasets (one summary per dataset), whereas
         # mapping files encode all dataset IDs as a "--"-delimited string in a
-        # single row and cannot represent multiple summaries independently.
+        # single row and cannot represent multiple summaries
+        # independently. Note that the summary file for Jorstad must be
+        # present, but does not contain the needed column.
+        summary_data = pd.DataFrame()
         if len(summary_path) >= 1:
+            summary_data = pd.read_csv(summary_path[0])
+        if "h5ad_url" in summary_data:
             dataset_version_ids = [
                 pd.read_csv(p)["h5ad_url"][0].split("/")[-1].split(".")[0]
                 for p in summary_path
@@ -346,7 +351,7 @@ def get_dataset_version_id_lists(file_paths):
 
         else:
             raise Exception(f"No dataset version id found for {nsforest_path}")
-            # TODO: Resore if needed to process older production delivery
+            # TODO: Restore if needed to process older production delivery
             # match = re.search(
             #     r"_([0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12})_",
             #     nsforest_path.name,
