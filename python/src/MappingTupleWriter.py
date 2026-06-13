@@ -255,6 +255,10 @@ def main():
         mapping_results = load_results(cluster_cid_path).sort_values(
             "cluster_name", ignore_index=True
         )
+        # load_results adds a uuid column to every CSV; drop the mapping's so the
+        # merged uuid (the CellSet identity) comes from the NSForest cluster row,
+        # not a colliding uuid_x/uuid_y pair.
+        mapping_results = mapping_results.drop(columns=["uuid"], errors="ignore")
         mapping_results = mapping_results.merge(
             nsforest_results[
                 [

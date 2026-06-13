@@ -87,6 +87,33 @@ class MappingTupleWriterTestCase(unittest.TestCase):
         tuples = create_tuples(data, self._make_summary())
         self.assertEqual(len(tuples), 0)
 
+    def test_merge_uuid_collision_resolved(self):
+        # Mirrors main(): load_results adds a uuid to BOTH the mapping and the
+        # NSForest frames; the mapping's must be dropped so the merged uuid (the
+        # CellSet identity) resolves to the NSForest cluster's, not uuid_x/uuid_y.
+        mapping = pd.DataFrame({
+            "dataset_version_id": ["dv-001"],
+            "cluster_name": ["T-Cell"],
+            "skos": ["skos:broadMatch"],
+            "manual_mapped_cid": ["CL:0000084"],
+            "cell_ontology_id": ["CL:0000236"],
+            "uuid": ["mapping-uuid"],
+        })
+        nsforest = pd.DataFrame({
+            "clusterName": ["T-Cell"],
+            "clusterSize": [1718],
+            "NSForest_markers": ["['TP53']"],
+            "binary_genes": ["['TP53']"],
+            "uuid": ["nsforest-uuid"],
+        })
+        mapping = mapping.drop(columns=["uuid"], errors="ignore")
+        merged = mapping.merge(nsforest, left_on="cluster_name", right_on="clusterName")
+        self.assertIn("uuid", merged.columns)
+        tuples = create_tuples(merged, self._make_summary())
+        self.assertGreater(len(tuples), 0)
+        blob = " ".join(str(part) for t in tuples for part in t)
+        self.assertIn("nsforest-uuid", blob)
+
 
 if __name__ == "__main__":
     unittest.main()
