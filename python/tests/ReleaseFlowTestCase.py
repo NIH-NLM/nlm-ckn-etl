@@ -212,15 +212,15 @@ class ExtractReleaseTarballTestCase(unittest.TestCase):
             root = Path(tmpdir)
             tar = self._make_tar(
                 {
-                    "data/prod/organ_a/lung_results.csv": "col1,col2\n1,2",
-                    "data/prod/organ_b/heart_results.csv": "col1,col2\n3,4",
+                    "data/prod/organ_a/results_ensg_lung.csv": "col1,col2\n1,2",
+                    "data/prod/organ_b/results_ensg_heart.csv": "col1,col2\n3,4",
                 },
                 root / "release.tar.gz",
             )
             results_dir = self._call(str(tar), "test-run", [], root)
 
-            self.assertTrue((results_dir / "lung_results.csv").exists())
-            self.assertTrue((results_dir / "heart_results.csv").exists())
+            self.assertTrue((results_dir / "results_ensg_lung.csv").exists())
+            self.assertTrue((results_dir / "results_ensg_heart.csv").exists())
 
     def test_hubmap_urls_written(self):
         """hubmap_urls.txt is created with one URL per line."""
@@ -228,7 +228,7 @@ class ExtractReleaseTarballTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             tar = self._make_tar(
-                {"data/prod/lung_results.csv": "a,b\n1,2"},
+                {"data/prod/results_ensg_lung.csv": "a,b\n1,2"},
                 root / "release.tar.gz",
             )
             results_dir = self._call(str(tar), "test-run", urls, root)
@@ -243,7 +243,7 @@ class ExtractReleaseTarballTestCase(unittest.TestCase):
             root = Path(tmpdir)
             tar = self._make_tar(
                 {
-                    "data/prod/good_results.csv": "a,b\n1,2",
+                    "data/prod/results_ensg_good.csv": "a,b\n1,2",
                     "README.txt": "should be skipped",
                     "data/other/skipped.csv": "x,y\n1,2",
                 },
@@ -251,7 +251,7 @@ class ExtractReleaseTarballTestCase(unittest.TestCase):
             )
             results_dir = self._call(str(tar), "test-run", [], root)
 
-            self.assertTrue((results_dir / "good_results.csv").exists())
+            self.assertTrue((results_dir / "results_ensg_good.csv").exists())
             self.assertFalse((results_dir / "README.txt").exists())
             self.assertFalse((results_dir / "skipped.csv").exists())
 
@@ -265,12 +265,12 @@ class ExtractReleaseTarballTestCase(unittest.TestCase):
                 dir_info.type = tarfile.DIRTYPE
                 tf.addfile(dir_info)
                 data = b"col\n1"
-                file_info = tarfile.TarInfo(name="data/prod/subdir/file_results.csv")
+                file_info = tarfile.TarInfo(name="data/prod/subdir/results_ensg_file.csv")
                 file_info.size = len(data)
                 tf.addfile(file_info, io.BytesIO(data))
             results_dir = self._call(str(tar_path), "test-run", [], root)
 
-            self.assertTrue((results_dir / "file_results.csv").exists())
+            self.assertTrue((results_dir / "results_ensg_file.csv").exists())
             self.assertFalse((results_dir / "subdir").exists())
 
     def test_symlinks_skipped(self):
@@ -280,18 +280,18 @@ class ExtractReleaseTarballTestCase(unittest.TestCase):
             tar_path = root / "release.tar.gz"
             with tarfile.open(tar_path, "w:gz") as tf:
                 data = b"col\n1"
-                file_info = tarfile.TarInfo(name="data/prod/real_results.csv")
+                file_info = tarfile.TarInfo(name="data/prod/results_ensg_real.csv")
                 file_info.size = len(data)
                 tf.addfile(file_info, io.BytesIO(data))
 
-                sym_info = tarfile.TarInfo(name="data/prod/link_results.csv")
+                sym_info = tarfile.TarInfo(name="data/prod/results_ensg_link.csv")
                 sym_info.type = tarfile.SYMTYPE
                 sym_info.linkname = "/etc/passwd"
                 tf.addfile(sym_info)
             results_dir = self._call(str(tar_path), "test-run", [], root)
 
-            self.assertTrue((results_dir / "real_results.csv").exists())
-            self.assertFalse((results_dir / "link_results.csv").exists())
+            self.assertTrue((results_dir / "results_ensg_real.csv").exists())
+            self.assertFalse((results_dir / "results_ensg_link.csv").exists())
 
     def test_path_traversal_via_prefix_blocked(self):
         """A member whose name starts with data/prod/ but traverses upward is blocked."""
@@ -300,7 +300,7 @@ class ExtractReleaseTarballTestCase(unittest.TestCase):
             tar_path = root / "release.tar.gz"
             with tarfile.open(tar_path, "w:gz") as tf:
                 good_data = b"good"
-                good_info = tarfile.TarInfo(name="data/prod/good_results.csv")
+                good_info = tarfile.TarInfo(name="data/prod/results_ensg_good.csv")
                 good_info.size = len(good_data)
                 tf.addfile(good_info, io.BytesIO(good_data))
 
@@ -313,7 +313,7 @@ class ExtractReleaseTarballTestCase(unittest.TestCase):
 
             results_dir = self._call(str(tar_path), "test-run", [], root)
 
-            self.assertTrue((results_dir / "good_results.csv").exists())
+            self.assertTrue((results_dir / "results_ensg_good.csv").exists())
             # The evil file must not appear anywhere outside results_dir.
             self.assertFalse((root / "outside.txt").exists())
             self.assertFalse((root / "data" / "outside.txt").exists())
@@ -327,13 +327,54 @@ class ExtractReleaseTarballTestCase(unittest.TestCase):
             stale_file.write_text("old data")
 
             tar = self._make_tar(
-                {"data/prod/fresh_results.csv": "new,data\n1,2"},
+                {"data/prod/results_ensg_fresh.csv": "new,data\n1,2"},
                 root / "release.tar.gz",
             )
             results_dir = self._call(str(tar), "test-run", [], root)
 
-            self.assertTrue((results_dir / "fresh_results.csv").exists())
+            self.assertTrue((results_dir / "results_ensg_fresh.csv").exists())
             self.assertFalse((results_dir / "stale.csv").exists())
+
+    def test_missing_results_ensg_raises(self):
+        """A tarball with no results_ensg_*.csv fails loudly rather than
+        silently producing an empty results_dir.  Guards against an outdated
+        NSForest naming convention (pre results_ensg/symbols split)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            tar = self._make_tar(
+                {"data/prod/organ_a/old_results.csv": "col1,col2\n1,2"},
+                root / "release.tar.gz",
+            )
+            with self.assertRaises(FileNotFoundError):
+                self._call(str(tar), "test-run", [], root)
+
+    def test_per_organ_manifests_unioned(self):
+        """The per-organ master_s3_manifest.csv files are unioned into one
+        complete top-level manifest rather than colliding on a single basename
+        (which would leave only the last-extracted organ's rows)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            tar = self._make_tar(
+                {
+                    "data/prod/organ_a/results_ensg_a.csv": "c\n1",
+                    "data/prod/organ_a/master_s3_manifest.csv": (
+                        "filename,s3_path\n"
+                        "results_ensg_a.csv,s3://bucket/a\n"
+                    ),
+                    "data/prod/organ_b/results_ensg_b.csv": "c\n2",
+                    "data/prod/organ_b/master_s3_manifest.csv": (
+                        "filename,s3_path\n"
+                        "results_ensg_b.csv,s3://bucket/b\n"
+                    ),
+                },
+                root / "release.tar.gz",
+            )
+            results_dir = self._call(str(tar), "test-run", [], root)
+
+            manifest = (results_dir / "master_s3_manifest.csv").read_text()
+            # Both organs' rows survive — not just the last-extracted one.
+            self.assertIn("results_ensg_a.csv", manifest)
+            self.assertIn("results_ensg_b.csv", manifest)
 
 
 if __name__ == "__main__":

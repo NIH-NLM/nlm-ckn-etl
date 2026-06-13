@@ -216,12 +216,12 @@ def get_dataset_file_paths(results_dir=None):
     the flat release zip directory.
 
     The release zip stores all files at the top level using a stable naming
-    convention.  For each ``*_results.csv`` file the companion files are
-    located by substituting the ``_results.csv`` suffix:
+    convention.  For each ``results_ensg_*.csv`` file the companion files are
+    located by substituting the ``results_ensg`` prefix:
 
-    - mapping:  ``_results.csv`` → ``_mapping.csv``
-    - scores:   ``_results.csv`` → ``_silhouette_fscore_summary.csv``
-    - summary:  ``_results.csv`` → ``_*_master_dataset_summary.csv`` (glob)
+    - mapping:  ``results_ensg`` → ``mapping``
+    - scores:   ``results_ensg`` → ``silhouette_fscore_summary``
+    - summary:  ``results_ensg`` → ``master_dataset_summary``
 
     Parameters
     ----------
@@ -241,28 +241,27 @@ def get_dataset_file_paths(results_dir=None):
         results_dir = get_current_run().results_dir
 
     results_dir = Path(results_dir)
-    nsforest_paths = sorted(results_dir.glob("*_results.csv"))
+    nsforest_paths = sorted(results_dir.glob("**/results_ensg_*.csv"))
 
     mapping_paths = []
     scores_paths = []
     summary_paths = []
 
     for p in nsforest_paths:
-        stem = p.name
         mapping_paths.append(
-            list(results_dir.glob(stem.replace("_results.csv", "_mapping.csv")))
+            list(results_dir.glob("**/" + p.name.replace("results_ensg", "mapping")))
         )
         scores_paths.append(
             list(
                 results_dir.glob(
-                    stem.replace("_results.csv", "_silhouette_fscore_summary.csv")
+                    "**/" + p.name.replace("results_ensg", "silhouette_fscore_summary")
                 )
             )
         )
         summary_paths.append(
             list(
                 results_dir.glob(
-                    stem.replace("_results.csv", "*_master_dataset_summary.csv")
+                    "**/" + p.name.replace("results_ensg", "master_dataset_summary")
                 )
             )
         )
@@ -285,7 +284,8 @@ def get_dataset_file_paths(results_dir=None):
             expected = {
                 row["filename"]
                 for _, row in manifest.iterrows()
-                if str(row["filename"]).endswith("_results.csv")
+                if str(row["filename"]).startswith("results_ensg_")
+                and str(row["filename"]).endswith(".csv")
             }
             found = {p.name for p in nsforest_paths}
             missing = expected - found
@@ -332,8 +332,13 @@ def get_dataset_version_id_lists(file_paths):
         # Summary files are checked first because a single results file can
         # correspond to multiple datasets (one summary per dataset), whereas
         # mapping files encode all dataset IDs as a "--"-delimited string in a
-        # single row and cannot represent multiple summaries independently.
+        # single row and cannot represent multiple summaries
+        # independently. Note that the summary file for Jorstad must be
+        # present, but does not contain the needed column.
+        summary_data = pd.DataFrame()
         if len(summary_path) >= 1:
+            summary_data = pd.read_csv(summary_path[0])
+        if "h5ad_url" in summary_data:
             dataset_version_ids = [
                 pd.read_csv(p)["h5ad_url"][0].split("/")[-1].split(".")[0]
                 for p in summary_path
@@ -346,7 +351,7 @@ def get_dataset_version_id_lists(file_paths):
 
         else:
             raise Exception(f"No dataset version id found for {nsforest_path}")
-            # TODO: Resore if needed to process older production delivery
+            # TODO: Restore if needed to process older production delivery
             # match = re.search(
             #     r"_([0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12})_",
             #     nsforest_path.name,

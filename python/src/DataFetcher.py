@@ -772,7 +772,7 @@ def main():
             dataset_version_id_lists = []
     else:
         print(
-            f"WARNING: No *_results.csv files found in {results_dir.name}/ — "
+            f"WARNING: No results_ensg_*.csv files found in {results_dir.name}/ — "
             "fetchers that depend on NSForest results will produce no output."
         )
         dataset_version_id_lists = []

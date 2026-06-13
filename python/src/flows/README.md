@@ -139,7 +139,7 @@ s3://{S3_BUCKET}/
 └── runs/
     ├── latest/
     │   └── 01-results/              # Stable pointer → last successful release
-    │       └── *_results.csv
+    │       └── results_ensg_*.csv
     │
     └── {run}/                       # One directory per release tag (e.g. 0.0.0-alpha)
         ├── 01-results/              # Flat NSForest result CSVs + hubmap_urls.txt
