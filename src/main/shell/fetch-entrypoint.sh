@@ -20,10 +20,14 @@ set -euo pipefail
 : "${NCBI_EMAIL:?NCBI_EMAIL must be set}"
 : "${NCBI_API_KEY:?NCBI_API_KEY must be set}"
 
+# --max-fetch-age-hours auto-resolves whether to force a full re-fetch: it forces
+# only if the cached external data is missing, older than 4 weeks (672h), or was
+# produced by changed fetch code; otherwise it reuses the cache and retries any
+# previously-failed entries.  Avoids a full re-fetch on every scheduled run.
 echo "=== Running fetch flow ==="
 exec python /app/python/src/flows/fetch.py \
-    --ncbi-email   "${NCBI_EMAIL}" \
-    --ncbi-api-key "${NCBI_API_KEY}" \
-    --force
+    --ncbi-email          "${NCBI_EMAIL}" \
+    --ncbi-api-key        "${NCBI_API_KEY}" \
+    --max-fetch-age-hours 672
 
 echo "=== Fetch complete ==="

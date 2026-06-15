@@ -23,6 +23,7 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(_SRC / "flows"))
 sys.path.insert(0, str(_SRC))
 
+import _common  # noqa: E402
 import release as _release_module
 from release import (
     _read_release_json,
@@ -101,42 +102,54 @@ class ReadReleaseJsonTestCase(unittest.TestCase):
 
 
 class ResolveFetchForceTestCase(unittest.TestCase):
-    """Tests for the resolve_fetch_force Prefect task."""
+    """Tests for resolve_fetch_force (thin wrapper over _common.should_force_fetch)."""
 
     def _call(self, **kwargs):
         """Invoke the task's underlying function, bypassing the Prefect runtime."""
         with patch("release.get_run_logger", return_value=_noop_logger()):
             return resolve_fetch_force.fn(**kwargs)
 
+    def _fresh_info(self, hours_old):
+        """fetch-info.json with the CURRENT code hash so the age branch is exercised."""
+        ts = (datetime.now(timezone.utc) - timedelta(hours=hours_old)).isoformat()
+        return {"fetched_at": ts, "fetch_code_hash": _common._fetch_code_hash()}
+
     def test_returns_true_when_no_local_fetch_info(self):
         """Returns True (force re-fetch) when fetch-info.json doesn't exist locally."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            with patch("release.S3_BUCKET", ""), \
-                 patch("release._external_dir", return_value=Path(tmpdir)):
+            with patch("_common.S3_BUCKET", ""), \
+                 patch("_common._external_dir", return_value=Path(tmpdir)):
                 result = self._call(run_name="test-run", max_fetch_age_hours=48.0)
         self.assertTrue(result)
 
     def test_returns_false_when_local_cache_fresh(self):
-        """Returns False when fetch-info.json is within the age threshold."""
-        recent = datetime.now(timezone.utc) - timedelta(hours=10)
-        fetch_info = {"fetched_at": recent.isoformat()}
-
+        """Returns False when fresh AND the fetch code is unchanged."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            (Path(tmpdir) / "fetch-info.json").write_text(json.dumps(fetch_info))
-            with patch("release.S3_BUCKET", ""), \
-                 patch("release._external_dir", return_value=Path(tmpdir)):
+            (Path(tmpdir) / "fetch-info.json").write_text(json.dumps(self._fresh_info(10)))
+            with patch("_common.S3_BUCKET", ""), \
+                 patch("_common._external_dir", return_value=Path(tmpdir)):
                 result = self._call(run_name="test-run", max_fetch_age_hours=48.0)
         self.assertFalse(result)
 
     def test_returns_true_when_local_cache_stale(self):
-        """Returns True when fetch-info.json is older than the threshold."""
-        stale = datetime.now(timezone.utc) - timedelta(hours=72)
-        fetch_info = {"fetched_at": stale.isoformat()}
-
+        """Returns True when older than the threshold (code unchanged)."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            (Path(tmpdir) / "fetch-info.json").write_text(json.dumps(fetch_info))
-            with patch("release.S3_BUCKET", ""), \
-                 patch("release._external_dir", return_value=Path(tmpdir)):
+            (Path(tmpdir) / "fetch-info.json").write_text(json.dumps(self._fresh_info(72)))
+            with patch("_common.S3_BUCKET", ""), \
+                 patch("_common._external_dir", return_value=Path(tmpdir)):
+                result = self._call(run_name="test-run", max_fetch_age_hours=48.0)
+        self.assertTrue(result)
+
+    def test_returns_true_when_fetch_code_changed(self):
+        """Returns True when the fetch_code_hash differs, even if the cache is fresh."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            info = {
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "fetch_code_hash": "0000deadbeef0000",
+            }
+            (Path(tmpdir) / "fetch-info.json").write_text(json.dumps(info))
+            with patch("_common.S3_BUCKET", ""), \
+                 patch("_common._external_dir", return_value=Path(tmpdir)):
                 result = self._call(run_name="test-run", max_fetch_age_hours=48.0)
         self.assertTrue(result)
 
@@ -151,8 +164,8 @@ class ResolveFetchForceTestCase(unittest.TestCase):
         mock_s3 = MagicMock()
         mock_s3.download_file.side_effect = fake_download
 
-        with patch("release.S3_BUCKET", "my-bucket"), \
-             patch("release.boto3") as mock_boto3, \
+        with patch("_common.S3_BUCKET", "my-bucket"), \
+             patch("_common.boto3") as mock_boto3, \
              patch("release.get_run_logger", return_value=_noop_logger()):
             mock_boto3.client.return_value = mock_s3
             # Bad JSON is caught; function falls through to "force re-fetch".
@@ -164,8 +177,7 @@ class ResolveFetchForceTestCase(unittest.TestCase):
 
     def test_s3_temp_file_cleaned_up_on_success(self):
         """Temp file is removed after a successful S3 fetch-info.json read."""
-        recent = datetime.now(timezone.utc) - timedelta(hours=5)
-        fetch_info = {"fetched_at": recent.isoformat()}
+        fetch_info = self._fresh_info(5)
         created_paths = []
 
         def fake_download(bucket, key, dest):
@@ -175,8 +187,8 @@ class ResolveFetchForceTestCase(unittest.TestCase):
         mock_s3 = MagicMock()
         mock_s3.download_file.side_effect = fake_download
 
-        with patch("release.S3_BUCKET", "my-bucket"), \
-             patch("release.boto3") as mock_boto3, \
+        with patch("_common.S3_BUCKET", "my-bucket"), \
+             patch("_common.boto3") as mock_boto3, \
              patch("release.get_run_logger", return_value=_noop_logger()):
             mock_boto3.client.return_value = mock_s3
             result = resolve_fetch_force.fn(run_name="test-run", max_fetch_age_hours=48.0)

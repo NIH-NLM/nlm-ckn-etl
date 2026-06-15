@@ -44,9 +44,11 @@ from _common import (
     REPO_ROOT,
     S3_BUCKET,
     _external_dir,
+    _fetch_code_hash,
     _run_python_script,
     clean_empty_external_files,
     promote_external_staging,
+    should_force_fetch,
     sync_external_from_s3,
     sync_external_to_s3_staging,
     validate_external_files,
@@ -261,6 +263,7 @@ def record_fetch_artifact(run_name: str = "") -> None:
     info = {
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "commit": commit,
+        "fetch_code_hash": _fetch_code_hash(),
         "files": files_info,
     }
 
@@ -334,6 +337,7 @@ def nlm_ckn_fetch(
     force: bool = False,
     retry_empty: bool = False,
     max_source_age_hours: float = 0.0,
+    max_fetch_age_hours: float = 0.0,
     run_name: str = "",
 ) -> None:
     """NLM-CKN external API fetch flow.
@@ -369,6 +373,13 @@ def nlm_ckn_fetch(
         skipped entirely, saving API quota and time.  0 (default) disables
         the check so every source is always re-fetched.  Ignored when
         ``force=True``.
+    max_fetch_age_hours:
+        Whole-cache max age in hours.  When > 0 and ``force`` is not already
+        set, ``force`` is auto-resolved from the cached ``fetch-info.json``:
+        a full re-fetch is forced if the cache is missing, older than this, or
+        was produced by different fetch code (the ``fetch_code_hash`` changed);
+        otherwise the cache is reused with ``retry_empty=True``.  0 (default)
+        disables the check.  Used by the scheduled fetch in place of ``--force``.
     run_name:
         Run name passed to ``DataFetcher.py`` (selects
         ``data/results-<name>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
@@ -379,6 +390,8 @@ def nlm_ckn_fetch(
     # flow directly and would otherwise bypass the argparse check.
     if max_source_age_hours < 0:
         raise ValueError("max_source_age_hours must be non-negative")
+    if max_fetch_age_hours < 0:
+        raise ValueError("max_fetch_age_hours must be non-negative")
 
     # Resolve credentials: explicit parameters take priority, then env vars
     ncbi_email = ncbi_email or os.getenv("NCBI_EMAIL", "")
@@ -407,6 +420,12 @@ def nlm_ckn_fetch(
         logger.info(f"S3 mode: bucket={S3_BUCKET}")
     else:
         logger.info("Local mode: S3_BUCKET not set, writing to data/external/ only")
+
+    # Auto-resolve force from cache age + fetch-code hash when a whole-cache max
+    # age is given (the scheduled fetch) and force was not requested explicitly.
+    if max_fetch_age_hours > 0 and not force:
+        force = should_force_fetch(run_name, max_fetch_age_hours, logger.info)
+        retry_empty = not force
 
     sync_results_from_s3(run_name=run_name)  # ensure release results are available
     # Fail fast if the release results are missing: the NSForest results drive
@@ -489,6 +508,17 @@ def _parse_args(argv=None):
         ),
     )
     parser.add_argument(
+        "--max-fetch-age-hours",
+        type=float,
+        default=0.0,
+        help=(
+            "Whole-cache max age in hours.  When > 0 (and --force is not set), "
+            "auto-force a full re-fetch if the cache is missing, older than this, "
+            "or produced by different fetch code; otherwise reuse + retry empties. "
+            "0 (default) disables.  Used by the scheduled fetch in place of --force."
+        ),
+    )
+    parser.add_argument(
         "--run-name",
         default=os.getenv("CKN_RUN", ""),
         help=(
@@ -500,6 +530,8 @@ def _parse_args(argv=None):
 
     if args.max_source_age_hours < 0:
         parser.error("--max-source-age-hours must be non-negative")
+    if args.max_fetch_age_hours < 0:
+        parser.error("--max-fetch-age-hours must be non-negative")
     if not (args.ncbi_email and args.ncbi_api_key):
         parser.error(
             "Both NCBI email and API key are required. "
@@ -517,5 +549,6 @@ if __name__ == "__main__":
         force=args.force,
         retry_empty=args.retry_empty,
         max_source_age_hours=args.max_source_age_hours,
+        max_fetch_age_hours=args.max_fetch_age_hours,
         run_name=args.run_name,
     )

@@ -29,6 +29,7 @@ import tarfile
 import tempfile
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
@@ -480,6 +481,121 @@ def _jar_key() -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()[:16]
+
+
+# Files whose content determines what or how external data is fetched.  A change
+# to any of them invalidates a cached external fetch (see ``should_force_fetch``).
+_FETCH_CODE_FILES = (
+    "python/src/DataFetcher.py",
+    "python/src/DataTransformer.py",
+    "python/src/E_Utilities.py",
+    "python/src/flows/fetch.py",
+)
+
+
+def _fetch_code_hash() -> str:
+    """Return a 16-char SHA-256 prefix over the fetch code files.
+
+    Content-addressed so the key changes whenever the fetcher/transformer logic
+    changes.  Written into ``fetch-info.json`` and compared on later runs to
+    decide whether a cached external fetch is still valid.
+    """
+    h = hashlib.sha256()
+    for rel in _FETCH_CODE_FILES:
+        p = REPO_ROOT / rel
+        h.update(rel.encode())
+        h.update(p.read_bytes() if p.exists() else b"")
+    return h.hexdigest()[:16]
+
+
+def should_force_fetch(
+    run_name: str = "", max_fetch_age_hours: float = 672.0, log=None
+) -> bool:
+    """Decide whether the external fetch should force a full re-fetch.
+
+    Returns ``True`` when the cached external fetch is missing, was produced by
+    different fetch code (``fetch_code_hash`` no longer matches), or is older
+    than ``max_fetch_age_hours``.  Otherwise returns ``False`` (reuse the cache,
+    retry any previous failures).
+
+    Reads ``fetch-info.json`` from S3 (when ``S3_BUCKET`` is set) or from the
+    local ``data/external-<name>/`` directory.
+
+    Parameters
+    ----------
+    run_name:
+        Run name (selects ``data/external-<name>/`` in local mode).
+    max_fetch_age_hours:
+        Maximum acceptable cache age in hours before forcing a re-fetch.
+        Defaults to 672 (four weeks).
+    log:
+        Optional ``callable(str)`` for progress messages (defaults to the
+        module logger so this works outside a Prefect run context).
+    """
+    log = log or _log.info
+    fetch_info = None
+
+    if S3_BUCKET:
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+            boto3.client("s3").download_file(
+                S3_BUCKET, "external/fetch-info.json", str(tmp_path)
+            )
+            fetch_info = json.loads(tmp_path.read_text())
+        except Exception as exc:
+            log(f"Could not read fetch-info.json from S3: {exc}")
+        finally:
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
+    else:
+        info_path = _external_dir(run_name) / "fetch-info.json"
+        if info_path.exists():
+            try:
+                fetch_info = json.loads(info_path.read_text())
+            except Exception as exc:
+                log(f"Could not parse fetch-info.json: {exc}")
+
+    if fetch_info is None:
+        log("No fetch-info.json found — forcing full re-fetch")
+        return True
+
+    # Force if the fetch code changed since this cache was produced — even a
+    # fresh cache is invalid if the fetcher/transformer logic has changed.
+    cached_hash = fetch_info.get("fetch_code_hash")
+    current_hash = _fetch_code_hash()
+    if cached_hash != current_hash:
+        log(
+            f"Fetch code changed since cache was written "
+            f"(cached={cached_hash}, current={current_hash}) — forcing full re-fetch"
+        )
+        return True
+
+    try:
+        fetched_at = datetime.fromisoformat(fetch_info["fetched_at"])
+    except (KeyError, TypeError, ValueError) as exc:
+        log(
+            f"Missing/invalid fetched_at in fetch-info.json ({exc!r}) — "
+            "forcing full re-fetch"
+        )
+        return True
+    if fetched_at.tzinfo is None:  # tolerate naive timestamps
+        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+    age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
+
+    if age_hours > max_fetch_age_hours:
+        log(
+            f"External cache is {age_hours:.1f}h old "
+            f"(threshold: {max_fetch_age_hours}h) — forcing full re-fetch"
+        )
+        return True
+
+    log(
+        f"External cache is {age_hours:.1f}h old (threshold: {max_fetch_age_hours}h)"
+        " — reusing cache, retrying any previous failures"
+    )
+    return False
 
 
 def _external_dir(run_name: str = "") -> Path:
