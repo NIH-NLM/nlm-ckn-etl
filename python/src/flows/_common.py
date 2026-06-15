@@ -513,10 +513,13 @@ def should_force_fetch(
 ) -> bool:
     """Decide whether the external fetch should force a full re-fetch.
 
-    Returns ``True`` when the cached external fetch is missing, was produced by
-    different fetch code (``fetch_code_hash`` no longer matches), or is older
-    than ``max_fetch_age_hours``.  Otherwise returns ``False`` (reuse the cache,
-    retry any previous failures).
+    Returns ``True`` only when the cached fetch is genuinely untrustworthy: it
+    was produced by different fetch code (``fetch_code_hash`` no longer matches)
+    or is older than ``max_fetch_age_hours``.  A missing or corrupt marker
+    returns ``False`` (resume) — the per-source caches on disk are reused and
+    only missing/failed entries are re-fetched — so a run that fetched data but
+    failed validation (or was interrupted before recording a marker) is not
+    discarded and re-fetched from scratch on the next attempt.
 
     Reads ``fetch-info.json`` from S3 (when ``S3_BUCKET`` is set) or from the
     local ``data/external-<name>/`` directory.
@@ -558,8 +561,12 @@ def should_force_fetch(
                 log(f"Could not parse fetch-info.json: {exc}")
 
     if fetch_info is None:
-        log("No fetch-info.json found — forcing full re-fetch")
-        return True
+        # No marker (first-ever fetch, or a prior run failed / was interrupted
+        # before recording one).  Resume rather than wipe: the per-source caches
+        # on disk are reused and only missing/failed entries are re-fetched (an
+        # empty cache simply fetches everything).
+        log("No fetch-info.json found — resuming from on-disk cache")
+        return False
 
     # Force if the fetch code changed since this cache was produced — even a
     # fresh cache is invalid if the fetcher/transformer logic has changed.
@@ -577,9 +584,9 @@ def should_force_fetch(
     except (KeyError, TypeError, ValueError) as exc:
         log(
             f"Missing/invalid fetched_at in fetch-info.json ({exc!r}) — "
-            "forcing full re-fetch"
+            "resuming from on-disk cache"
         )
-        return True
+        return False
     if fetched_at.tzinfo is None:  # tolerate naive timestamps
         fetched_at = fetched_at.replace(tzinfo=timezone.utc)
     age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600

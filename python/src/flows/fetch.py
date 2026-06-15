@@ -211,7 +211,7 @@ def transform_external_api_results(
 
 
 @task(name="record-fetch-artifact", log_prints=True)
-def record_fetch_artifact(run_name: str = "") -> None:
+def record_fetch_artifact(run_name: str = "", validated: bool = True) -> None:
     """Write ``fetch-info.json`` and a Prefect UI artifact summarising the run.
 
     ``fetch-info.json`` is stored alongside the cache files in
@@ -221,15 +221,20 @@ def record_fetch_artifact(run_name: str = "") -> None:
 
     Fields written:
 
-    - ``fetched_at``  — ISO-8601 UTC timestamp
-    - ``commit``      — short git commit hash of the repo at fetch time
-    - ``files``       — mapping of cache filename → byte size (``null`` if missing)
+    - ``fetched_at``       — ISO-8601 UTC timestamp
+    - ``commit``           — short git commit hash of the repo at fetch time
+    - ``fetch_code_hash``  — content hash of the fetch code (see _fetch_code_hash)
+    - ``validated``        — whether validate_external_files passed
+    - ``files``            — mapping of cache filename → byte size (``null`` if missing)
 
     Parameters
     ----------
     run_name:
         Run name (selects ``data/external-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
+    validated:
+        ``False`` when recorded after a validation failure, so the data is kept
+        (the next run resumes + re-validates) without being marked complete.
     """
     logger = get_run_logger()
     external_dir = _external_dir(run_name)
@@ -264,6 +269,7 @@ def record_fetch_artifact(run_name: str = "") -> None:
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "commit": commit,
         "fetch_code_hash": _fetch_code_hash(),
+        "validated": validated,
         "files": files_info,
     }
 
@@ -449,8 +455,16 @@ def nlm_ckn_fetch(
         force=force,
         run_name=run_name,
     )
-    validate_external_files(run_name=run_name)
-    record_fetch_artifact(run_name=run_name)
+    # Record the artifact even when validation fails, so the fetched data is not
+    # discarded: the next run resumes + re-validates (see should_force_fetch)
+    # instead of re-fetching from scratch.  A failed validation still re-raises
+    # (and skips promotion below), so invalid data is never pushed to S3.
+    try:
+        validate_external_files(run_name=run_name)
+    except Exception:
+        record_fetch_artifact(run_name=run_name, validated=False)
+        raise
+    record_fetch_artifact(run_name=run_name, validated=True)
     sync_external_to_s3_staging(run_name=run_name)  # write to staging; pipeline.py is unaffected
     promote_external_staging(run_name=run_name)  # server-side copy runs/{run}/external-staging/ → external/
 

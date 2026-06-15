@@ -114,13 +114,14 @@ class ResolveFetchForceTestCase(unittest.TestCase):
         ts = (datetime.now(timezone.utc) - timedelta(hours=hours_old)).isoformat()
         return {"fetched_at": ts, "fetch_code_hash": _common._fetch_code_hash()}
 
-    def test_returns_true_when_no_local_fetch_info(self):
-        """Returns True (force re-fetch) when fetch-info.json doesn't exist locally."""
+    def test_returns_false_when_no_local_fetch_info(self):
+        """Returns False (resume from on-disk cache) when fetch-info.json is absent —
+        a fetch that failed validation must not be discarded and re-fetched."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch("_common.S3_BUCKET", ""), \
                  patch("_common._external_dir", return_value=Path(tmpdir)):
                 result = self._call(run_name="test-run", max_fetch_age_hours=48.0)
-        self.assertTrue(result)
+        self.assertFalse(result)
 
     def test_returns_false_when_local_cache_fresh(self):
         """Returns False when fresh AND the fetch code is unchanged."""
@@ -168,10 +169,10 @@ class ResolveFetchForceTestCase(unittest.TestCase):
              patch("_common.boto3") as mock_boto3, \
              patch("release.get_run_logger", return_value=_noop_logger()):
             mock_boto3.client.return_value = mock_s3
-            # Bad JSON is caught; function falls through to "force re-fetch".
+            # Bad JSON is caught -> no marker -> resume from on-disk cache.
             result = resolve_fetch_force.fn(run_name="test-run", max_fetch_age_hours=48.0)
 
-        self.assertTrue(result, "Bad fetch-info.json should trigger force re-fetch")
+        self.assertFalse(result, "Unreadable fetch-info.json should resume, not force")
         self.assertEqual(len(created_paths), 1, "download must have been attempted")
         self.assertFalse(created_paths[0].exists(), "Temp file must be cleaned up")
 
