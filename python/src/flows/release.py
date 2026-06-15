@@ -63,10 +63,10 @@ from _common import (
     DEFAULT_JAVA_OPTS,
     REPO_ROOT,
     S3_BUCKET,
-    _external_dir,
     _s3_copy_prefix,
     _s3_sync,
     post_github_deployment_status,
+    should_force_fetch,
 )
 from fetch import nlm_ckn_fetch
 from pipeline import nlm_ckn_etl
@@ -282,78 +282,27 @@ def promote_results_to_latest(run_name: str = "") -> None:
 
 
 @task(name="resolve-fetch-force", log_prints=True)
-def resolve_fetch_force(run_name: str = "", max_fetch_age_hours: float = 48.0) -> bool:
-    """Return True (force full re-fetch) if the external cache is missing or stale.
+def resolve_fetch_force(run_name: str = "", max_fetch_age_hours: float = 672.0) -> bool:
+    """Return True (force full re-fetch) if the external cache is missing, stale,
+    or was produced by different fetch code.
 
-    Reads ``fetch-info.json`` from S3 (when ``S3_BUCKET`` is set) or from the
-    local ``data/external-<name>/`` directory.  If the file is absent or the
-    ``fetched_at`` timestamp is older than ``max_fetch_age_hours``, returns
-    ``True`` so the caller passes ``force=True`` to ``nlm_ckn_fetch``.
-    Otherwise returns ``False`` and the caller uses ``retry_empty=True`` to
-    preserve cached data while retrying any previous failures.
+    Thin Prefect-task wrapper over :func:`_common.should_force_fetch` so the
+    release flow and the scheduled fetch share one decision.  Forces when the
+    cached ``fetch-info.json`` is absent, its ``fetch_code_hash`` no longer
+    matches the current fetch code, or its ``fetched_at`` is older than
+    ``max_fetch_age_hours``.  Otherwise returns ``False`` and the caller uses
+    ``retry_empty=True`` to preserve cached data while retrying any failures.
 
     Parameters
     ----------
     run_name:
-        Run name (selects ``data/external-<name>/``).  Defaults to
-        ``$CKN_RUN`` or ``'full'``.
+        Run name (selects ``data/external-<name>/`` in local mode).
     max_fetch_age_hours:
-        Maximum acceptable cache age in hours.  Caches older than this
-        trigger a full re-fetch.
+        Maximum acceptable cache age in hours.  Caches older than this trigger
+        a full re-fetch.  Defaults to 672 (four weeks).
     """
     logger = get_run_logger()
-    fetch_info = None
-
-    if S3_BUCKET:
-        tmp_path = None
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
-                tmp_path = Path(tmp.name)
-            boto3.client("s3").download_file(
-                S3_BUCKET, "external/fetch-info.json", str(tmp_path)
-            )
-            fetch_info = json.loads(tmp_path.read_text())
-        except Exception as exc:
-            logger.info(f"Could not read fetch-info.json from S3: {exc}")
-        finally:
-            if tmp_path is not None:
-                tmp_path.unlink(missing_ok=True)
-    else:
-        info_path = _external_dir(run_name) / "fetch-info.json"
-        if info_path.exists():
-            try:
-                fetch_info = json.loads(info_path.read_text())
-            except Exception as exc:
-                logger.warning(f"Could not parse fetch-info.json: {exc}")
-
-    if fetch_info is None:
-        logger.info("No fetch-info.json found — forcing full re-fetch")
-        return True
-
-    try:
-        fetched_at = datetime.fromisoformat(fetch_info["fetched_at"])
-    except (KeyError, TypeError, ValueError) as exc:
-        logger.warning(
-            f"Missing/invalid fetched_at in fetch-info.json ({exc!r}) — "
-            "forcing full re-fetch"
-        )
-        return True
-    if fetched_at.tzinfo is None:  # tolerate naive timestamps
-        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
-    age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
-
-    if age_hours > max_fetch_age_hours:
-        logger.info(
-            f"External cache is {age_hours:.1f}h old (threshold: {max_fetch_age_hours}h)"
-            " — forcing full re-fetch"
-        )
-        return True
-
-    logger.info(
-        f"External cache is {age_hours:.1f}h old (threshold: {max_fetch_age_hours}h)"
-        " — reusing cache, retrying any previous failures"
-    )
-    return False
+    return should_force_fetch(run_name, max_fetch_age_hours, logger.info)
 
 
 # ── Flow ───────────────────────────────────────────────────────────────────
@@ -368,7 +317,7 @@ def nlm_ckn_release(
     github_repo: str = "NIH-NLM/nlm-ckn",
     tar_source: str = "",
     release_config: str = "",
-    max_fetch_age_hours: float = 48.0,
+    max_fetch_age_hours: float = 672.0,
     java_opts: str = DEFAULT_JAVA_OPTS,
 ) -> None:
     """End-to-end NLM-CKN release pipeline driven by an nlm-ckn GitHub tag.
@@ -409,7 +358,7 @@ def nlm_ckn_release(
         full re-fetch.  If ``fetch-info.json`` is younger than this threshold
         the existing cache is reused (with ``retry_empty=True`` to recover any
         previous failures).  If the cache is older or absent a full re-fetch is
-        forced.  Defaults to 48 hours.
+        forced.  Defaults to 672 hours (four weeks).
     java_opts:
         JVM flags passed to every Java invocation (default: ``DEFAULT_JAVA_OPTS``,
         currently ``-Xmx32g``).
@@ -657,8 +606,8 @@ def _parse_args(argv=None):
     parser.add_argument(
         "--max-fetch-age-hours",
         type=float,
-        default=float(os.getenv("MAX_FETCH_AGE_HOURS") or 48.0),
-        help="Maximum external cache age in hours before forcing a re-fetch (default: max_fetch_age_hours from release.json, or 48)",
+        default=float(os.getenv("MAX_FETCH_AGE_HOURS") or 672.0),
+        help="Maximum external cache age in hours before forcing a re-fetch (default: max_fetch_age_hours from release.json, or 672 = four weeks)",
     )
     parser.add_argument(
         "--java-opts",
