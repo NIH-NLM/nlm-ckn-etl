@@ -24,12 +24,12 @@ prefix after the full fetch passes validation.
 
 **Key parameters**
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `force` | `False` | Wipe the local cache and re-fetch all sources from scratch |
-| `retry_empty` | `False` | Retry only previously-failed entries; keep all successful data |
-| `max_fetch_age_hours` | `0` (off) | When > 0 and `force` is not set, auto-force a full re-fetch if the cache is missing, older than this, or produced by different fetch code; otherwise reuse and retry empties. Used by the scheduled fetch in place of `force`. |
-| `run_name` | `$CKN_RUN` / `full` | Selects `data/external-{run}/` locally and `runs/{run}/01-results/` in S3 |
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--force` | off | Wipe the local cache and re-fetch all sources from scratch |
+| `--retry-empty` | off | Retry only previously-failed entries; keep all successful data |
+| `--max-fetch-age-hours` | `0` (off) | When > 0 and `--force` is not set, auto-force a full re-fetch if the cache is missing, older than this, or produced by different fetch code; otherwise reuse and retry empties. Used by the scheduled fetch in place of `--force`. |
+| `--run-name` | `$CKN_RUN` / `full` | Selects `data/external-{run}/` locally and `runs/{run}/01-results/` in S3 |
 
 ---
 
