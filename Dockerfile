@@ -149,6 +149,10 @@ COPY python/src /app/python/src
 # synced from S3 at runtime.
 COPY data/*.json data/*.csv /app/data/
 COPY data/schema/ /app/data/schema/
+# Checked-in release config (nlm_ckn_tag, max_fetch_age_hours, etc.).  The
+# fetch-entrypoint reads max_fetch_age_hours from here so the scheduled fetch
+# tracks release.json without hardcoding the value.
+COPY release.json /app/release.json
 # data/obo/ files are generated at runtime:
 #   deprecated_terms.txt and edge_labels.txt are WRITTEN by OntologyGraphBuilder
 #   during --run-ontology; *.owl files are downloaded by OntologyDownloader.
@@ -156,6 +160,15 @@ COPY data/schema/ /app/data/schema/
 # (which opens it at module import time) doesn't crash with FileNotFoundError
 # when the pipeline container starts before --run-ontology has run.
 RUN mkdir -p /app/data/obo && touch /app/data/obo/deprecated_terms.txt
+
+# Commit the image was built from, baked in so entrypoints can echo it to
+# CloudWatch — maps a running task back to a git commit.  Defaults to
+# "unknown" for local builds that don't pass --build-arg GIT_SHA=...
+# Declared last in the base stage: GIT_SHA changes every commit, so keeping it
+# after the cache-heavy dependency install / source copy layers preserves their
+# cache while still propagating GIT_SHA into the fetcher and pipeline stages.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
 
 
 # ── Stage 2: fetcher (ECS Fargate scheduled fetch task) ─────────────────────
