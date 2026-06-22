@@ -24,6 +24,8 @@ from UniProtIdMapper import (
     get_id_mapping_results_search,
 )
 
+import ProductionDataSpecification as spec
+
 ALPHABET = string.ascii_lowercase + string.digits
 
 OPENTARGETS_RESOURCES = [
@@ -117,7 +119,9 @@ def get_current_run():
 with open(DATA_DIRPATH / "obo" / "deprecated_terms.txt", "r") as fp:
     DEPRECATED_TERMS = fp.read().splitlines()
 
-MIN_CLUSTER_SIZE = 10
+# Re-exported from ProductionDataSpecification so the naming/column spec and the readers
+# share one definition (see ProductionDataValidator).
+MIN_CLUSTER_SIZE = spec.MIN_CLUSTER_SIZE
 
 URIREF_PATTERN = re.compile(r"/obo/([A-Za-z]*)_([A-Za-z0-9-+]*)")
 
@@ -204,7 +208,7 @@ def get_cellxgene_harvester_data(results_dir=None):
         results_dir = get_current_run().results_dir
 
     results_dir = Path(results_dir)
-    harvester_paths = sorted(results_dir.glob("*_harvester_final.csv"))
+    harvester_paths = sorted(results_dir.glob(spec.HARVESTER_GLOB))
 
     if harvester_paths:
         return pd.concat([pd.read_csv(p) for p in harvester_paths])
@@ -242,7 +246,7 @@ def get_dataset_file_paths(results_dir=None):
         results_dir = get_current_run().results_dir
 
     results_dir = Path(results_dir)
-    nsforest_paths = sorted(results_dir.glob("**/results_ensg_*.csv"))
+    nsforest_paths = sorted(results_dir.glob(spec.NSFOREST_GLOB))
 
     mapping_paths = []
     scores_paths = []
@@ -252,21 +256,21 @@ def get_dataset_file_paths(results_dir=None):
         mapping_paths.append(
             list(
                 results_dir.glob(
-                    "**/" + p.name.replace("results_ensg", "cluster_cid_mapping")
+                    "**/" + spec.companion_basename(p.name, spec.MAPPING_PREFIX)
                 )
             )
         )
         scores_paths.append(
             list(
                 results_dir.glob(
-                    "**/" + p.name.replace("results_ensg", "silhouette_fscore_summary")
+                    "**/" + spec.companion_basename(p.name, spec.SILHOUETTE_PREFIX)
                 )
             )
         )
         summary_paths.append(
             list(
                 results_dir.glob(
-                    "**/" + p.name.replace("results_ensg", "master_dataset_summary")
+                    "**/" + spec.companion_basename(p.name, spec.SUMMARY_PREFIX)
                 )
             )
         )
@@ -285,14 +289,14 @@ def get_dataset_file_paths(results_dir=None):
 
     # Cross-check against the manifest so missing results files are caught at
     # extraction time rather than discovered implicitly through absent output.
-    manifest_path = results_dir / "master_s3_manifest.csv"
+    manifest_path = results_dir / spec.MANIFEST_NAME
     if manifest_path.exists():
         try:
             manifest = pd.read_csv(manifest_path)
             expected = {
                 row["filename"]
                 for _, row in manifest.iterrows()
-                if str(row["filename"]).startswith("results_ensg_")
+                if str(row["filename"]).startswith(f"{spec.NSFOREST_PREFIX}_")
                 and str(row["filename"]).endswith(".csv")
             }
             found = {p.name for p in nsforest_paths}
