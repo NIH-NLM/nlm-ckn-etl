@@ -60,6 +60,10 @@ NSFOREST_REQUIRED_COLUMNS = [
     "NSForest_markers",
     "binary_genes",
 ]
+# Columns whose values must be stringified Python lists of gene tokens.
+# collect_unique_gene_names ast.literal_evals these without a guard, so a
+# malformed value raises during gene collection.
+GENE_LIST_COLUMNS = ["NSForest_markers", "binary_genes"]
 # Used opportunistically via as_float/as_int/.get — absence is tolerated.
 NSFOREST_OPTIONAL_COLUMNS = [
     "precision",
@@ -137,6 +141,10 @@ CONSUMED_PREFIXES = [
 
 # A valid Cell Ontology CURIE after purl_to_curie normalization.
 CL_CURIE_RE = re.compile(r"CL:\d{7}$")
+
+# A general ontology-term CURIE (e.g. UBERON:0002048), used to sanity-check
+# tissue_ontology_term_id tokens (split on "|").
+ONTOLOGY_CURIE_RE = re.compile(r"[A-Za-z]+:\d+$")
 
 # OBO PURL → CURIE, mirroring TupleWriterUtilities.purl_to_curie.
 _OBO_PURL_RE = re.compile(r"https?://purl\.obolibrary\.org/obo/(\w+?)_(\d+)$")

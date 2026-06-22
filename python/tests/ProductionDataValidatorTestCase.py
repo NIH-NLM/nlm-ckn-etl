@@ -184,6 +184,114 @@ class ValidatorFixtureTestCase(unittest.TestCase):
             report = v.validate(root)
             self.assertTrue(any(f.check == "mapping-cl-curie" for f in report.warnings()))
 
+    # --- P1: value-format checks -------------------------------------------
+
+    def test_gene_list_unparseable(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            name, stem, ds = self._good_tree(root)
+            rp = ds / name
+            df = pd.read_csv(rp)
+            df.loc[0, "NSForest_markers"] = "not-a-list"
+            df.to_csv(rp, index=False)
+            report = v.validate(root)
+            self.assertTrue(
+                any(f.check == "gene-list-unparseable" for f in report.errors())
+            )
+
+    def test_clustersize_nonnumeric(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            name, stem, ds = self._good_tree(root)
+            rp = ds / name
+            df = pd.read_csv(rp)
+            df["clusterSize"] = df["clusterSize"].astype(object)
+            df.loc[0, "clusterSize"] = "big"
+            df.to_csv(rp, index=False)
+            report = v.validate(root)
+            self.assertTrue(
+                any(f.check == "clustersize-nonnumeric" for f in report.errors())
+            )
+
+    def test_small_cluster_bad_gene_list_ignored(self):
+        """A malformed gene list on a SMALL cluster is not parsed downstream."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            name, stem, ds = self._good_tree(root)
+            rp = ds / name
+            df = pd.read_csv(rp)
+            df.loc[0, "clusterSize"] = 1  # below MIN_CLUSTER_SIZE
+            df.loc[0, "NSForest_markers"] = "not-a-list"
+            df.to_csv(rp, index=False)
+            report = v.validate(root)
+            self.assertFalse(
+                any(f.check == "gene-list-unparseable" for f in report.errors())
+            )
+
+    # --- P1: cross-file referential integrity ------------------------------
+
+    def test_tissue_curie_warns(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            _, stem, ds = self._good_tree(root)
+            sp = ds / f"master_dataset_summary_{stem}.csv"
+            df = pd.read_csv(sp)
+            df["tissue_ontology_term_id"] = ["liver"]  # not a CURIE
+            df.to_csv(sp, index=False)
+            report = v.validate(root)
+            self.assertTrue(any(f.check == "tissue-curie" for f in report.warnings()))
+
+    def test_harvester_dvid_missing_warns(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            self._good_tree(root)
+            hp = root / "liver" / "cellxgene-harvester" / "homo_sapiens_liver_harvester_final.csv"
+            pd.DataFrame({"dataset_version_id": ["other-dv"]}).to_csv(hp, index=False)
+            report = v.validate(root)
+            self.assertTrue(
+                any(f.check == "harvester-dvid-missing" for f in report.warnings())
+            )
+
+    def test_mapping_cluster_orphan_warns(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            _, stem, _ = self._good_tree(root)
+            mp = root / "liver" / "reference" / f"cluster_cid_mapping_{stem}.csv"
+            df = pd.read_csv(mp)
+            df.loc[0, "cluster_name"] = "ZZZ-not-in-results"
+            df.to_csv(mp, index=False)
+            report = v.validate(root)
+            self.assertTrue(
+                any(f.check == "mapping-cluster-orphan" for f in report.warnings())
+            )
+
+    def test_mapping_dvid_orphan_warns(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            _, stem, _ = self._good_tree(root)
+            mp = root / "liver" / "reference" / f"cluster_cid_mapping_{stem}.csv"
+            df = pd.read_csv(mp)
+            df["dataset_version_id"] = ["dv-1", "dv-UNKNOWN"]
+            df.to_csv(mp, index=False)
+            report = v.validate(root)
+            self.assertTrue(
+                any(f.check == "mapping-dvid-orphan" for f in report.warnings())
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

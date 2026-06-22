@@ -17,10 +17,13 @@ The canonical patterns and column lists come from :mod:`ProductionDataSpecificat
 shared with ``LoaderUtilities`` so the validator cannot drift from the
 readers.
 
-Scope (P0): structural checks (discovery, companion pairing, post-flatten
-uniqueness, manifest membership) and the high-value silent-failure content
-checks (required columns, cluster_header⇔silhouette pairing, silhouette
-join-column name, dataset_version_id presence, CL-CURIE conformance).
+Scope: structural checks (discovery, companion pairing, post-flatten
+uniqueness, manifest membership); silent-failure content checks (required
+columns, cluster_header⇔silhouette pairing, silhouette join-column name,
+dataset_version_id presence, CL-CURIE conformance); value-format checks
+(numeric clusterSize, parseable gene-list columns); and cross-file
+referential integrity (mapping↔results clusters, harvester/mapping dvid
+coverage, tissue CURIE tokens).
 
 Usage
 -----
@@ -35,6 +38,7 @@ is found.
 """
 
 import argparse
+import ast
 import json
 import sys
 from dataclasses import dataclass, field
@@ -112,6 +116,19 @@ def _rel(report, path):
         return str(Path(path).relative_to(report.data_dir))
     except ValueError:
         return str(path)
+
+
+def _companions(data_dir, nsforest_name, prefix):
+    """Return paths of the named companion for an NSForest results file."""
+    return list(data_dir.glob(f"**/{spec.companion_basename(nsforest_name, prefix)}"))
+
+
+def _is_string_list(value):
+    """True if *value* parses as a Python list literal (mirrors parse_string_list)."""
+    try:
+        return isinstance(ast.literal_eval(str(value)), list)
+    except (ValueError, SyntaxError):
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -377,16 +394,171 @@ def check_content(report, nsforest_paths):
 
 
 # ---------------------------------------------------------------------------
+# Value-format checks (P1)
+# ---------------------------------------------------------------------------
+
+
+def check_value_formats(report, nsforest_paths):
+    """Per-row value-format checks on results files.
+
+    These guard the *crash* paths: ``collect_unique_gene_names``
+    ast.literal_evals the gene-list columns without a guard, and the
+    cluster-size filter compares ``clusterSize`` numerically — a malformed
+    value in either raises during the run, so both are ERROR.
+    """
+    for p in nsforest_paths:
+        try:
+            df = pd.read_csv(p)
+        except Exception:
+            continue  # unreadable already reported by check_content
+
+        if "clusterSize" not in df.columns:
+            continue  # missing-column already reported
+
+        sizes = pd.to_numeric(df["clusterSize"], errors="coerce")
+        nonnumeric = int((sizes.isna() & df["clusterSize"].notna()).sum())
+        if nonnumeric:
+            report.add(
+                ERROR,
+                "clustersize-nonnumeric",
+                f"{nonnumeric} row(s) have a non-numeric clusterSize "
+                "(the cluster-size filter would raise).",
+                _rel(report, p),
+            )
+
+        # Only large clusters are parsed downstream, so only they can crash.
+        large = (sizes >= spec.MIN_CLUSTER_SIZE).fillna(False)
+        for col in spec.GENE_LIST_COLUMNS:
+            if col not in df.columns:
+                continue
+            bad = sum(1 for v in df.loc[large, col] if not _is_string_list(v))
+            if bad:
+                report.add(
+                    ERROR,
+                    "gene-list-unparseable",
+                    f"{bad} large-cluster row(s) have an unparseable {col} "
+                    "(not a Python list literal); gene collection would raise.",
+                    _rel(report, p),
+                )
+
+
+# ---------------------------------------------------------------------------
+# Cross-file referential integrity (P1)
+# ---------------------------------------------------------------------------
+
+
+def _harvester_dvids(data_dir):
+    """Union of dataset_version_id across all harvester files (reader
+    concatenates them all)."""
+    dvids = set()
+    for hp in data_dir.rglob("*_harvester_final.csv"):
+        try:
+            h = pd.read_csv(hp, usecols=["dataset_version_id"])
+        except Exception:
+            continue
+        dvids |= set(h["dataset_version_id"].dropna().astype(str))
+    return dvids
+
+
+def check_referential(report, nsforest_paths):
+    """Cross-file checks: mapping↔results clusters, dvid coverage, tissue CURIEs.
+
+    These are silent-degradation paths (dropped merge rows, lost metadata),
+    so they are WARN rather than ERROR.
+    """
+    data_dir = report.data_dir
+    harvester_dvids = _harvester_dvids(data_dir)
+
+    for p in nsforest_paths:
+        try:
+            rdf = pd.read_csv(p)
+        except Exception:
+            continue
+        results_clusters = (
+            set(rdf["clusterName"].dropna().astype(str))
+            if "clusterName" in rdf.columns
+            else set()
+        )
+
+        # Summary: collect dvids and sanity-check tissue CURIE tokens.
+        summary_dvids = set()
+        for sp in _companions(data_dir, p.name, spec.SUMMARY_PREFIX):
+            try:
+                sdf = pd.read_csv(sp)
+            except Exception:
+                continue
+            if "dataset_version_id" in sdf.columns:
+                summary_dvids |= set(sdf["dataset_version_id"].dropna().astype(str))
+            if "tissue_ontology_term_id" in sdf.columns:
+                bad = set()
+                for raw in sdf["tissue_ontology_term_id"].dropna().astype(str):
+                    for tok in (t.strip() for t in raw.split("|")):
+                        if tok and not spec.ONTOLOGY_CURIE_RE.match(tok):
+                            bad.add(tok)
+                if bad:
+                    report.add(
+                        WARN,
+                        "tissue-curie",
+                        f"tissue_ontology_term_id has non-CURIE token(s): "
+                        f"{sorted(bad)}",
+                        _rel(report, sp),
+                    )
+
+        # Harvester enrichment: every summary dvid should have a harvester row.
+        missing_h = summary_dvids - harvester_dvids
+        if missing_h:
+            report.add(
+                WARN,
+                "harvester-dvid-missing",
+                f"{len(missing_h)} summary dataset_version_id(s) have no harvester "
+                f"row; CSD metadata enrichment is lost: {sorted(missing_h)}",
+                _rel(report, p),
+            )
+
+        # Mapping: cluster names must be a subset of results clusters (the
+        # inner merge silently drops the rest); mapping dvids ⊆ summary dvids.
+        for mp in _companions(data_dir, p.name, spec.MAPPING_PREFIX):
+            try:
+                mdf = pd.read_csv(mp)
+            except Exception:
+                continue
+            if "cluster_name" in mdf.columns and results_clusters:
+                orphan = set(mdf["cluster_name"].dropna().astype(str)) - results_clusters
+                if orphan:
+                    report.add(
+                        WARN,
+                        "mapping-cluster-orphan",
+                        f"{len(orphan)} mapping cluster_name(s) not in results "
+                        "clusterName; the inner merge drops these rows.",
+                        _rel(report, mp),
+                    )
+            if "dataset_version_id" in mdf.columns and summary_dvids:
+                orphan_dv = (
+                    set(mdf["dataset_version_id"].dropna().astype(str)) - summary_dvids
+                )
+                if orphan_dv:
+                    report.add(
+                        WARN,
+                        "mapping-dvid-orphan",
+                        f"{len(orphan_dv)} mapping dataset_version_id(s) not in the "
+                        f"summary; their CSDs lack summary metadata: {sorted(orphan_dv)}",
+                        _rel(report, mp),
+                    )
+
+
+# ---------------------------------------------------------------------------
 # Driver / reporting
 # ---------------------------------------------------------------------------
 
 
 def validate(data_dir):
-    """Run all P0 checks against *data_dir* and return a :class:`Report`."""
+    """Run all checks against *data_dir* and return a :class:`Report`."""
     report = Report(data_dir=Path(data_dir))
     nsforest_paths = check_structure(report)
     check_manifest(report)
     check_content(report, nsforest_paths)
+    check_value_formats(report, nsforest_paths)
+    check_referential(report, nsforest_paths)
     return report
 
 

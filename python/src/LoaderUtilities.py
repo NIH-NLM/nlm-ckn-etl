@@ -959,7 +959,7 @@ def collect_unique_gene_names(nsforest_results):
     """
     gene_names = set()
 
-    for column in ["NSForest_markers", "binary_genes"]:
+    for column in spec.GENE_LIST_COLUMNS:
         for gene_list_str in nsforest_results.loc[
             nsforest_results["clusterSize"] >= MIN_CLUSTER_SIZE, column
         ]:
