@@ -135,7 +135,7 @@ def create_tuples(
                 predicate="nlm-ckn:is_about",
                 object=anat,
             )
-            tuples.extend(association_to_tuples(assoc, source="NSForest"))
+            tuples.extend(association_to_tuples(assoc, source="CELLxGENE"))
         if citation:
             tuples.append(
                 (
@@ -198,7 +198,7 @@ def create_tuples(
             )
             tuples.extend(
                 association_to_tuples(
-                    assoc, ctx, source="NSForest", annotated_terms=annotated
+                    assoc, ctx, source="CELLxGENE", annotated_terms=annotated
                 )
             )
 
@@ -210,7 +210,7 @@ def create_tuples(
         )
         tuples.extend(
             association_to_tuples(
-                assoc, ctx, source="NSForest", annotated_terms=annotated
+                assoc, ctx, source="CELLxGENE", annotated_terms=annotated
             )
         )
 
@@ -284,7 +284,9 @@ def create_tuples(
         else:
             member_dvids = list(csd_by_dvid.keys())
         for dvid in member_dvids:
-            csd, _ = csd_by_dvid[dvid]  # (CellSetDataset, citation); citation unused here
+            csd, _ = csd_by_dvid[
+                dvid
+            ]  # (CellSetDataset, citation); citation unused here
             assoc = ASSOCIATION_CLASSES["CellSetMemberOfCellSetDataset"](
                 subject=cell_set,
                 predicate="nlm-ckn:member_of",
@@ -292,7 +294,7 @@ def create_tuples(
             )
             tuples.extend(
                 association_to_tuples(
-                    assoc, ctx, source="NSForest", annotated_terms=annotated
+                    assoc, ctx, source="CELLxGENE", annotated_terms=annotated
                 )
             )
 
