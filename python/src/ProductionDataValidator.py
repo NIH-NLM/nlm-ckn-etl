@@ -600,6 +600,15 @@ def check_multidataset_mapping(report, nsforest_paths):
                 _rel(report, mappings[0]),
             )
             continue
+        if "cluster_name" not in mdf.columns:
+            report.add(
+                ERROR,
+                "multidataset-mapping-no-cluster-name",
+                "cluster_cid_mapping for a multi-dataset results file has no "
+                "cluster_name column.",
+                _rel(report, mappings[0]),
+            )
+            continue
 
         cmap = dict(
             zip(mdf["cluster_name"].astype(str), mdf["dataset_version_id"].astype(str))

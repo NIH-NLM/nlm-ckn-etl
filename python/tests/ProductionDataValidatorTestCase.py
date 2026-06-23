@@ -401,6 +401,22 @@ class ValidatorFixtureTestCase(unittest.TestCase):
                 any(f.check == "multidataset-mapping-no-dvid" for f in report.errors())
             )
 
+    def test_multidataset_mapping_no_cluster_name_column(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            stem, _ = self._multi_dataset_tree(root)
+            mp = root / "neocortex" / "reference" / f"cluster_cid_mapping_{stem}.csv"
+            pd.read_csv(mp).drop(columns=["cluster_name"]).to_csv(mp, index=False)
+            report = v.validate(root)
+            self.assertTrue(
+                any(
+                    f.check == "multidataset-mapping-no-cluster-name"
+                    for f in report.errors()
+                )
+            )
+
     def test_multidataset_cluster_unresolved(self):
         import tempfile
 

@@ -282,6 +282,11 @@ def create_tuples(
                 )
             member_dvids = [member_dvid]
         else:
+            if len(csd_by_dvid) > 1:
+                raise Exception(
+                    "Multi-dataset results require cluster_dvid_map to resolve "
+                    "per-cluster member_of edges"
+                )
             member_dvids = list(csd_by_dvid.keys())
         for dvid in member_dvids:
             csd, _ = csd_by_dvid[
@@ -385,6 +390,11 @@ def main():
             if "dataset_version_id" not in mapping_df.columns:
                 raise Exception(
                     f"{mapping_path[0].name} has no dataset_version_id column to "
+                    f"resolve per-cluster membership for {nsforest_path.name}"
+                )
+            if "cluster_name" not in mapping_df.columns:
+                raise Exception(
+                    f"{mapping_path[0].name} has no cluster_name column to "
                     f"resolve per-cluster membership for {nsforest_path.name}"
                 )
             cluster_dvid_map = dict(
