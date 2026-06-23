@@ -224,7 +224,7 @@ def create_tuples(
             )
             tuples.extend(
                 association_to_tuples(
-                    assoc, ctx, source="NSForest", annotated_terms=annotated
+                    assoc, ctx, source="NS-Forest", annotated_terms=annotated
                 )
             )
 
@@ -238,7 +238,7 @@ def create_tuples(
         )
         tuples.extend(
             association_to_tuples(
-                assoc, ctx, source="NSForest", annotated_terms=annotated
+                assoc, ctx, source="NS-Forest", annotated_terms=annotated
             )
         )
 
@@ -308,7 +308,7 @@ def create_tuples(
             )
             tuples.extend(
                 association_to_tuples(
-                    assoc, ctx, source="NSForest", annotated_terms=annotated
+                    assoc, ctx, source="NS-Forest", annotated_terms=annotated
                 )
             )
 
@@ -320,7 +320,7 @@ def create_tuples(
         )
         tuples.extend(
             association_to_tuples(
-                assoc, ctx, source="NSForest", annotated_terms=annotated
+                assoc, ctx, source="NS-Forest", annotated_terms=annotated
             )
         )
 
