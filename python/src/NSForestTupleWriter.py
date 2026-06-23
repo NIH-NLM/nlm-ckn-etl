@@ -210,7 +210,7 @@ def create_tuples(
         )
         tuples.extend(
             association_to_tuples(
-                assoc, ctx, source="CELLxGENE", annotated_terms=annotated
+                assoc, ctx, source="NS-Forest", annotated_terms=annotated
             )
         )
 
