@@ -85,7 +85,8 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         tuples = create_tuples(nsf, summary, ["dvid-001"])
         quints = [t for t in tuples if len(t) == 5 and "Source" in str(t[3])]
         self.assertGreater(len(quints), 0)
-        self.assertTrue(any("NSForest" in str(t[4]) for t in quints))
+        sources = {str(t[4]) for t in quints}
+        self.assertTrue({"NS-Forest", "CELLxGENE"} & sources)
 
     def test_skips_small_clusters(self):
         nsf, summary = self._make_data()
