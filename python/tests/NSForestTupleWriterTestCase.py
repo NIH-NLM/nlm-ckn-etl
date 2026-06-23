@@ -85,7 +85,8 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         tuples = create_tuples(nsf, summary, ["dvid-001"])
         quints = [t for t in tuples if len(t) == 5 and "Source" in str(t[3])]
         self.assertGreater(len(quints), 0)
-        self.assertTrue(any("NSForest" in str(t[4]) for t in quints))
+        sources = {str(t[4]) for t in quints}
+        self.assertTrue({"NS-Forest", "CELLxGENE"} & sources)
 
     def test_skips_small_clusters(self):
         nsf, summary = self._make_data()
@@ -104,6 +105,63 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         self.assertIn("Precision", attrs)
         self.assertIn("TP", attrs)
         self.assertIn("FN", attrs)
+
+    # --- member_of dataset_version_id resolution ---------------------------
+
+    @staticmethod
+    def _member_of(tuples):
+        """Return {(CS_term, CSD_term)} for member_of core triples.
+
+        A CellSetDataset term only ever appears as the OBJECT of member_of
+        (is_about has the CSD as subject), so a 3-tuple whose object is a
+        CSD_* term is a member_of edge.
+        """
+        return {
+            (str(t[0]).rsplit("/", 1)[-1], str(t[2]).rsplit("/", 1)[-1])
+            for t in tuples
+            if len(t) == 3 and "/CSD_" in str(t[2])
+        }
+
+    def _multi_dataset_data(self):
+        nsf = pd.DataFrame({
+            "clusterName": ["A", "B"],
+            "clusterSize": [50, 60],
+            "f_score": [0.9, 0.8],
+            "NSForest_markers": ["['TP53']", "['EGFR']"],
+            "binary_genes": ["['TP53']", "['EGFR']"],
+            "uuid": ["ua", "ub"],
+        })
+        summary = pd.DataFrame({"tissue_ontology_term_id": ["UBERON:0000966"]})
+        return nsf, summary
+
+    def test_single_dvid_member_of_unchanged(self):
+        nsf, summary = self._make_data()
+        tuples = create_tuples(nsf, summary, ["dvid-001"])
+        self.assertEqual(self._member_of(tuples), {("CS_abc123", "CSD_dvid-001")})
+
+    def test_multi_dvid_resolves_one_edge_per_cluster(self):
+        nsf, summary = self._multi_dataset_data()
+        cluster_dvid_map = {"A": "dv1", "B": "dv2"}
+        tuples = create_tuples(
+            nsf, summary, ["dv1", "dv2"], None, cluster_dvid_map
+        )
+        # Each cell set is a member of ONLY its mapped dataset — no fan-out.
+        self.assertEqual(
+            self._member_of(tuples),
+            {("CS_ua", "CSD_dv1"), ("CS_ub", "CSD_dv2")},
+        )
+
+    def test_multi_dvid_unresolved_cluster_raises(self):
+        nsf, summary = self._multi_dataset_data()
+        cluster_dvid_map = {"A": "dv1"}  # B unmapped
+        with self.assertRaises(Exception):
+            create_tuples(nsf, summary, ["dv1", "dv2"], None, cluster_dvid_map)
+
+    def test_multi_dvid_unknown_dataset_raises(self):
+        nsf, summary = self._multi_dataset_data()
+        cluster_dvid_map = {"A": "dv1", "B": "dvX"}  # dvX not a known dataset
+        with self.assertRaises(Exception):
+            create_tuples(nsf, summary, ["dv1", "dv2"], None, cluster_dvid_map)
 
 
 if __name__ == "__main__":

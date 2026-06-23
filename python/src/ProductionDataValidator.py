@@ -547,6 +547,93 @@ def check_referential(report, nsforest_paths):
 
 
 # ---------------------------------------------------------------------------
+# Multi-dataset membership invariant (P1)
+# ---------------------------------------------------------------------------
+
+
+def check_multidataset_mapping(report, nsforest_paths):
+    """A results file spanning >1 dataset must resolve every large cluster's
+    membership via its cluster_cid_mapping.
+
+    Mirrors the hard-fail invariant NSForestTupleWriter enforces: a
+    multi-dataset results file (in prod, only Jorstad) carries a reference
+    mapping with a dataset_version_id column that resolves each cluster to one
+    of the summary's datasets, so member_of edges point at a single dataset
+    rather than fanning out to all.  Single-dataset files need no mapping.
+    Surfaced here (ERROR) so the violation is caught at validation time rather
+    than as a mid-run exception.
+    """
+    data_dir = report.data_dir
+    for p in nsforest_paths:
+        summary_dvids = set()
+        for sp in _companions(data_dir, p.name, spec.SUMMARY_PREFIX):
+            try:
+                sdf = pd.read_csv(sp)
+            except Exception:
+                continue
+            if "dataset_version_id" in sdf.columns:
+                summary_dvids |= set(sdf["dataset_version_id"].dropna().astype(str))
+        if len(summary_dvids) <= 1:
+            continue  # single-dataset: the lone dvid is the only member
+
+        mappings = _companions(data_dir, p.name, spec.MAPPING_PREFIX)
+        if not mappings:
+            report.add(
+                ERROR,
+                "multidataset-no-mapping",
+                f"results file spans {len(summary_dvids)} datasets but has no "
+                "cluster_cid_mapping to resolve per-cluster membership.",
+                _rel(report, p),
+            )
+            continue
+        try:
+            mdf = pd.read_csv(mappings[0])
+        except Exception as exc:
+            report.add(ERROR, "unreadable", f"mapping unreadable: {exc}", _rel(report, mappings[0]))
+            continue
+        if "dataset_version_id" not in mdf.columns:
+            report.add(
+                ERROR,
+                "multidataset-mapping-no-dvid",
+                "cluster_cid_mapping for a multi-dataset results file has no "
+                "dataset_version_id column.",
+                _rel(report, mappings[0]),
+            )
+            continue
+        if "cluster_name" not in mdf.columns:
+            report.add(
+                ERROR,
+                "multidataset-mapping-no-cluster-name",
+                "cluster_cid_mapping for a multi-dataset results file has no "
+                "cluster_name column.",
+                _rel(report, mappings[0]),
+            )
+            continue
+
+        cmap = dict(
+            zip(mdf["cluster_name"].astype(str), mdf["dataset_version_id"].astype(str))
+        )
+        try:
+            rdf = pd.read_csv(p)
+        except Exception:
+            continue
+        if not {"clusterName", "clusterSize"} <= set(rdf.columns):
+            continue  # required-column check already reported the gap
+
+        sizes = pd.to_numeric(rdf["clusterSize"], errors="coerce")
+        large = rdf.loc[(sizes >= spec.MIN_CLUSTER_SIZE).fillna(False), "clusterName"]
+        unresolved = [c for c in large.astype(str) if cmap.get(c) not in summary_dvids]
+        if unresolved:
+            report.add(
+                ERROR,
+                "multidataset-cluster-unresolved",
+                f"{len(unresolved)} large cluster(s) are not resolved to a summary "
+                "dataset_version_id by the mapping; member_of would be ambiguous.",
+                _rel(report, p),
+            )
+
+
+# ---------------------------------------------------------------------------
 # Driver / reporting
 # ---------------------------------------------------------------------------
 
@@ -559,6 +646,7 @@ def validate(data_dir):
     check_content(report, nsforest_paths)
     check_value_formats(report, nsforest_paths)
     check_referential(report, nsforest_paths)
+    check_multidataset_mapping(report, nsforest_paths)
     return report
 
 

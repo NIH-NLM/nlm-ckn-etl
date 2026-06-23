@@ -218,7 +218,7 @@ def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
                     association_to_tuples(
                         assoc,
                         ctx,
-                        source="Open Targets and UniProt",
+                        source="Open Targets and Gene",
                         annotated_terms=annotated,
                     )
                 )

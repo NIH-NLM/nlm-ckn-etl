@@ -326,6 +326,112 @@ class ValidatorFixtureTestCase(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].path, self._rel(self.tree.mapping))
 
+    # --- P1: multi-dataset membership invariant ----------------------------
+
+    def _multi_dataset_tree(self, root):
+        """A conformant multi-dataset (Jorstad-like) dataset under *root*:
+        2 datasets, a mapping resolving each cluster to one of them."""
+        stem = "neocortex_Jorstad_2023_X_umap_aa11bb"
+        ds = root / "neocortex" / "results" / "neocortex-Jorstad-2023"
+        self._write(
+            ds / f"results_ensg_{stem}.csv",
+            pd.DataFrame(
+                {
+                    "clusterName": ["A", "B"],
+                    "clusterSize": [50, 60],
+                    "f_score": [0.9, 0.8],
+                    "NSForest_markers": ["['ENSG1']", "['ENSG2']"],
+                    "binary_genes": ["['ENSG1']", "['ENSG2']"],
+                }
+            ),
+        )
+        self._write(
+            ds / f"master_dataset_summary_{stem}.csv",
+            pd.DataFrame({"dataset_version_id": ["dv-1", "dv-2"]}),
+        )
+        self._write(
+            root / "neocortex" / "reference" / f"cluster_cid_mapping_{stem}.csv",
+            pd.DataFrame(
+                {
+                    "dataset_version_id": ["dv-1", "dv-2"],
+                    "cluster_name": ["A", "B"],
+                    "skos": ["exactMatch", "exactMatch"],
+                    "manual_mapped_cid": ["CL:0000235", "CL:0000236"],
+                    "cell_ontology_id": ["CL:0000235", "CL:0000236"],
+                }
+            ),
+        )
+        self._write(
+            root / "neocortex" / "cellxgene-harvester" / "homo_sapiens_neocortex_harvester_final.csv",
+            pd.DataFrame({"dataset_version_id": ["dv-1", "dv-2"]}),
+        )
+        return stem, ds
+
+    def test_multidataset_good_has_no_errors(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            self._multi_dataset_tree(root)
+            report = v.validate(root)
+            self.assertEqual(report.errors(), [], msg=[vars(f) for f in report.errors()])
+
+    def test_multidataset_no_mapping(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            stem, _ = self._multi_dataset_tree(root)
+            (root / "neocortex" / "reference" / f"cluster_cid_mapping_{stem}.csv").unlink()
+            report = v.validate(root)
+            self.assertTrue(
+                any(f.check == "multidataset-no-mapping" for f in report.errors())
+            )
+
+    def test_multidataset_mapping_no_dvid_column(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            stem, _ = self._multi_dataset_tree(root)
+            mp = root / "neocortex" / "reference" / f"cluster_cid_mapping_{stem}.csv"
+            pd.read_csv(mp).drop(columns=["dataset_version_id"]).to_csv(mp, index=False)
+            report = v.validate(root)
+            self.assertTrue(
+                any(f.check == "multidataset-mapping-no-dvid" for f in report.errors())
+            )
+
+    def test_multidataset_mapping_no_cluster_name_column(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            stem, _ = self._multi_dataset_tree(root)
+            mp = root / "neocortex" / "reference" / f"cluster_cid_mapping_{stem}.csv"
+            pd.read_csv(mp).drop(columns=["cluster_name"]).to_csv(mp, index=False)
+            report = v.validate(root)
+            self.assertTrue(
+                any(
+                    f.check == "multidataset-mapping-no-cluster-name"
+                    for f in report.errors()
+                )
+            )
+
+    def test_multidataset_cluster_unresolved(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            stem, _ = self._multi_dataset_tree(root)
+            mp = root / "neocortex" / "reference" / f"cluster_cid_mapping_{stem}.csv"
+            df = pd.read_csv(mp)
+            df.loc[1, "cluster_name"] = "ZZZ"  # cluster B no longer resolved
+            df.to_csv(mp, index=False)
+            report = v.validate(root)
+            self.assertTrue(
+                any(f.check == "multidataset-cluster-unresolved" for f in report.errors())
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
