@@ -1,0 +1,194 @@
+"""Canonical spec for nlm-ckn prod data files.
+
+Single source of truth for the file-naming conventions and column
+expectations that the ETL imposes on the upstream ``data/prod`` tree
+(the ``sc-nsforest-qc-nf`` results plus the CELLxGENE harvester output).
+
+Both the production readers (``LoaderUtilities``) and the standalone
+``ProductionDataValidator`` validator import from here so the two cannot
+drift.  This module is intentionally dependency-light (standard library
+only) so it can be imported without pulling in scanpy/boto3/rdflib.
+
+The assumptions encoded here were compiled from the readers:
+``LoaderUtilities.get_dataset_file_paths`` /
+``get_dataset_version_id_lists`` / ``get_cellxgene_harvester_data``,
+``NSForestTupleWriter``, ``MappingTupleWriter``, and
+``TupleWriterUtilities.build_cell_set_dataset``.
+"""
+
+import re
+
+# ---------------------------------------------------------------------------
+# Filename prefixes / patterns
+# ---------------------------------------------------------------------------
+
+# The NSForest results file is the anchor; every companion file shares the
+# same basename with this prefix substituted (see ``companion_basename``).
+NSFOREST_PREFIX = "results_ensg"
+SUMMARY_PREFIX = "master_dataset_summary"
+SILHOUETTE_PREFIX = "silhouette_fscore_summary"
+MAPPING_PREFIX = "cluster_cid_mapping"
+
+# Companion kinds keyed by a short label, mapped to their filename prefix.
+COMPANION_PREFIXES = {
+    "summary": SUMMARY_PREFIX,
+    "silhouette": SILHOUETTE_PREFIX,
+    "mapping": MAPPING_PREFIX,
+}
+
+# Globs used by the readers (recursive ``**/`` form, matching
+# ``get_dataset_file_paths`` which searches nested release dirs).
+NSFOREST_GLOB = f"**/{NSFOREST_PREFIX}_*.csv"
+HARVESTER_GLOB = "*_harvester_final.csv"
+HARVESTER_GLOB_RECURSIVE = f"**/{HARVESTER_GLOB}"
+MANIFEST_NAME = "master_s3_manifest.csv"
+
+# Clusters smaller than this are dropped by every results-consuming writer.
+MIN_CLUSTER_SIZE = 10
+
+# ---------------------------------------------------------------------------
+# Required / used columns, per file kind
+# ---------------------------------------------------------------------------
+
+# results_ensg_*.csv — columns the NSForest/Mapping writers access by name.
+# ``uuid`` is intentionally NOT required: load_results adds it if absent.
+# ``cluster_header`` is conditionally required (see CLUSTER_HEADER_*).
+NSFOREST_REQUIRED_COLUMNS = [
+    "clusterName",
+    "clusterSize",
+    "f_score",
+    "NSForest_markers",
+    "binary_genes",
+]
+# Columns whose values must be stringified Python lists of gene tokens.
+# collect_unique_gene_names ast.literal_evals these without a guard, so a
+# malformed value raises during gene collection.
+GENE_LIST_COLUMNS = ["NSForest_markers", "binary_genes"]
+# Used opportunistically via as_float/as_int/.get — absence is tolerated.
+NSFOREST_OPTIONAL_COLUMNS = [
+    "precision",
+    "recall",
+    "TP",
+    "FP",
+    "FN",
+    "onTarget",
+    "marker_count",
+    "software_version",
+    "cluster_header",
+]
+
+# master_dataset_summary_*.csv — only dataset_version_id is load-bearing
+# (an empty/all-null column raises in get_dataset_version_id_lists).  The
+# rest feed build_cell_set_dataset via .get() and are optional.
+SUMMARY_REQUIRED_COLUMNS = ["dataset_version_id"]
+SUMMARY_OPTIONAL_COLUMNS = [
+    "dataset_title",
+    "collection_name",
+    "organ",
+    "collection_url",
+    "explorer_url",
+    "n_cells",
+    "embedding",
+    "cluster_header",
+    "mean_silhouette",
+    "std_silhouette",
+    "mean_fscore",
+    "median_fscore",
+    "first_author",
+    "year",
+    "journal",
+    "doi",
+    "tissue_ontology_term_id",
+]
+
+# silhouette_fscore_summary_*.csv — the five stat columns merged into the
+# NSForest frame, PLUS a join column whose NAME equals the value of the
+# results file's cluster_header (validated cross-file, not listed here).
+SILHOUETTE_REQUIRED_COLUMNS = ["median", "mean", "std", "q1", "q3"]
+
+# cluster_cid_mapping_*.csv — author-to-CL mapping consumed by MappingTupleWriter.
+MAPPING_REQUIRED_COLUMNS = [
+    "cluster_name",
+    "skos",
+    "manual_mapped_cid",
+    "cell_ontology_id",
+]
+MAPPING_OPTIONAL_COLUMNS = ["dataset_version_id"]
+
+# *_harvester_final.csv — joined to summaries on dataset_version_id.
+HARVESTER_REQUIRED_COLUMNS = ["dataset_version_id"]
+
+# master_s3_manifest.csv — unioned at extraction; integrity cross-check.
+MANIFEST_REQUIRED_COLUMNS = ["filename", "s3_path"]
+
+# Basenames that legitimately repeat across datasets and so must be EXCLUDED
+# from the post-flatten uniqueness check (extract_release_tarball unions them).
+FLATTEN_COLLISION_ALLOWED = {MANIFEST_NAME}
+
+# File-kind prefixes whose post-flatten basename collisions actually corrupt
+# the pipeline (consumed files).  Other repeated basenames in the prod tree
+# (e.g. cluster_stats.log) are flattened last-writer-wins but unconsumed.
+CONSUMED_PREFIXES = [
+    NSFOREST_PREFIX,
+    SUMMARY_PREFIX,
+    SILHOUETTE_PREFIX,
+    MAPPING_PREFIX,
+]
+
+# ---------------------------------------------------------------------------
+# Value-format patterns
+# ---------------------------------------------------------------------------
+
+# A valid Cell Ontology CURIE after purl_to_curie normalization.
+CL_CURIE_RE = re.compile(r"CL:\d{7}$")
+
+# A general ontology-term CURIE (e.g. UBERON:0002048), used to sanity-check
+# tissue_ontology_term_id tokens (split on "|").
+ONTOLOGY_CURIE_RE = re.compile(r"[A-Za-z]+:\d+$")
+
+# OBO PURL → CURIE, mirroring TupleWriterUtilities.purl_to_curie.
+_OBO_PURL_RE = re.compile(r"https?://purl\.obolibrary\.org/obo/(\w+?)_(\d+)$")
+
+
+def obo_purl_to_curie(purl: str) -> str:
+    """Convert an OBO PURL to a CURIE, else return the input unchanged.
+
+    Mirrors ``TupleWriterUtilities.purl_to_curie`` without importing it
+    (that module pulls in the ckn_schema dependency).
+
+    Parameters
+    ----------
+    purl : str
+        An OBO PURL or CURIE string.
+
+    Returns
+    -------
+    str
+        A CURIE (e.g. ``"CL:0000235"``), or the input unchanged if it does
+        not match the OBO PURL pattern.
+    """
+    m = _OBO_PURL_RE.match(purl)
+    if m:
+        return f"{m.group(1)}:{m.group(2)}"
+    return purl
+
+
+def companion_basename(nsforest_basename: str, companion_prefix: str) -> str:
+    """Return the expected companion filename for an NSForest results file.
+
+    Mirrors the prefix-substitution that ``get_dataset_file_paths`` uses to
+    locate companion files (summary / silhouette / mapping).
+
+    Parameters
+    ----------
+    nsforest_basename : str
+        Basename of a ``results_ensg_*.csv`` file.
+    companion_prefix : str
+        One of the prefixes in :data:`COMPANION_PREFIXES`.
+
+    Returns
+    -------
+    str
+        The companion basename with the NSForest prefix substituted.
+    """
+    return nsforest_basename.replace(NSFOREST_PREFIX, companion_prefix)
