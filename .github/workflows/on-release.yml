@@ -26,6 +26,7 @@ jobs:
     name: Run tests
     uses: ./.github/workflows/ci.yml
     permissions:
+      id-token: write      # ci.yml's build-fetcher job declares id-token: write
       contents: read
       checks: write
       pull-requests: write
