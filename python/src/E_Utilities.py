@@ -5,14 +5,56 @@ import re
 from time import sleep
 from urllib import parse
 
-import bs4
 import requests
+from lxml import etree
 
 EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 NCBI_EMAIL = os.environ.get("NCBI_EMAIL")
 NCBI_API_KEY = os.environ.get("NCBI_API_KEY")
 NCBI_API_SLEEP = 0.2
 REQUEST_TIMEOUT = 30  # seconds
+
+
+def parse_xml(xml_data):
+    """Parse XML text or bytes into an lxml element.
+
+    Encodes ``str`` input to bytes so lxml honors any XML encoding
+    declaration (e.g. ``<?xml ... encoding="UTF-8"?>``), which lxml
+    rejects when handed a ``str``.
+
+    Parameters
+    ----------
+    xml_data : str or bytes
+        Raw XML response text
+
+    Returns
+    -------
+    lxml.etree._Element
+        The root element of the parsed document
+    """
+    if isinstance(xml_data, str):
+        xml_data = xml_data.encode("utf-8")
+    return etree.fromstring(xml_data)
+
+
+def element_text(element):
+    """Return the concatenated text of an element and its descendants.
+
+    Mirrors BeautifulSoup's ``Tag.text``: lxml's ``Element.text`` yields
+    only the leading text node, so descendant and tail text (e.g. inline
+    markup inside a title) must be joined explicitly.
+
+    Parameters
+    ----------
+    element : lxml.etree._Element
+        Any parsed element
+
+    Returns
+    -------
+    str
+        All descendant text in document order
+    """
+    return "".join(element.itertext())
 
 
 def extract_uniprot_name(xml_data):
@@ -36,22 +78,23 @@ def extract_uniprot_name(xml_data):
         UniProt accession, or None if no uniprot.org URL is present
     """
     link = None
-    for child in bs4.BeautifulSoup(xml_data, "xml").find_all("Other-source_url"):
-        if "www.uniprot.org" in child.text:
-            link = child.text
+    for child in parse_xml(xml_data).iter("Other-source_url"):
+        text = element_text(child)
+        if "www.uniprot.org" in text:
+            link = text
     if link is None:
         return None
     return Path(parse.urlparse(link).path).stem
 
 
-def find_names_or_none(soup, names, attribute=None):
+def find_names_or_none(root, names, attribute=None):
     """Find the text, or specified attribute, in the last named tag,
     if all previously named tags are found.
 
     Parameters
     ----------
-    soup : bs4.element.Tag
-        Any soup returned by BeautifulSoup
+    root : lxml.etree._Element
+        Any parsed element
     names : list(str)
         List of tag names to find in order
     attribute : str
@@ -62,17 +105,21 @@ def find_names_or_none(soup, names, attribute=None):
     str
         text, or attribute, in the last named tag, or None
     """
-    soup = soup.find(names[0])
+    # lxml elements are falsy when they have no children, so identity
+    # checks against None are required rather than truthiness tests. Each
+    # name is searched on the descendant axis (".//") to match the
+    # recursive lookup BeautifulSoup's Tag.find performs.
+    element = root.find(f".//{names[0]}")
     for name in names[1:]:
-        if soup:
-            soup = soup.find(name)
-    if soup:
+        if element is not None:
+            element = element.find(f".//{name}")
+    if element is not None:
         if attribute:
-            return soup.get(attribute)
+            return element.get(attribute)
         else:
-            return soup.text
+            return element_text(element)
     else:
-        return soup
+        return None
 
 
 def get_data_for_pmid(pmid, do_write=False):
@@ -114,11 +161,15 @@ def get_data_for_pmid(pmid, do_write=False):
         xml_data = response.text
         if do_write:
             with open(f"{pmid}.xml", "w") as fp:
-                fp.write(bs4.BeautifulSoup(xml_data, "xml").prettify())
+                fp.write(
+                    etree.tostring(parse_xml(xml_data), pretty_print=True).decode(
+                        "utf-8"
+                    )
+                )
 
         # Got the page, so parse it, and search for the title
-        root = bs4.BeautifulSoup(xml_data, "xml").find("Article")
-        if root:
+        root = parse_xml(xml_data).find(".//Article")
+        if root is not None:
             data["Author"] = find_names_or_none(
                 root, ["AuthorList", "Author", "LastName"]
             )  # First author
@@ -240,7 +291,7 @@ def parse_xml_for_gene_id(gene_id, xml_data):
     """
     data = {}
 
-    tags = bs4.BeautifulSoup(xml_data, "xml").find_all("Entrezgene")
+    tags = parse_xml(xml_data).xpath("//Entrezgene")
     if len(tags) == 0:
         raise Exception(f"No Entrezgene element found for gene_id={gene_id!r}")
     if len(tags) > 1:
@@ -267,9 +318,10 @@ def parse_xml_for_gene_id(gene_id, xml_data):
     )
     data["Gene_type"] = find_names_or_none(root, ["Entrezgene_type"], attribute="value")
     data["Link_to_UniProt_ID"] = None
-    for child in root.find_all("Other-source_url"):
-        if "www.uniprot.org" in child.text:
-            data["Link_to_UniProt_ID"] = child.text
+    for child in root.iter("Other-source_url"):
+        text = element_text(child)
+        if "www.uniprot.org" in text:
+            data["Link_to_UniProt_ID"] = text
     data["Organism"] = find_names_or_none(
         root,
         [
@@ -281,26 +333,38 @@ def parse_xml_for_gene_id(gene_id, xml_data):
         ],
     )
     data["RefSeq_gene_ID"] = None
-    for child in root.find_all("Gene-commentary_heading"):
-        if "GCF_" in child.text:
-            m = re.search(r":\s*(GCF_.*)", child.text)
+    for child in root.iter("Gene-commentary_heading"):
+        text = element_text(child)
+        if "GCF_" in text:
+            m = re.search(r":\s*(GCF_.*)", text)
             if m:
                 data["RefSeq_gene_ID"] = m.group(1)
     data["Also_known_as"] = []
-    for child in root.find_all("Gene-ref_syn_E"):
-        data["Also_known_as"].append(child.text)
+    for child in root.iter("Gene-ref_syn_E"):
+        data["Also_known_as"].append(element_text(child))
     data["Summary"] = find_names_or_none(root, ["Entrezgene_summary"])
     pr_desc = find_names_or_none(root, ["Entrezgene_prot", "Prot-ref_desc"])
-    data["UniProt_name"] = extract_uniprot_name(xml_data)
-    for product in root.find_all("Gene-commentary_products"):
+    # Derive the UniProt accession from the link already extracted above
+    # rather than re-parsing the XML a second time. extract_uniprot_name
+    # scans the same <Other-source_url> elements and returns the accession
+    # from the last uniprot.org match, which is exactly what
+    # Link_to_UniProt_ID holds here.
+    if data["Link_to_UniProt_ID"] is not None:
+        data["UniProt_name"] = Path(
+            parse.urlparse(data["Link_to_UniProt_ID"]).path
+        ).stem
+    else:
+        data["UniProt_name"] = None
+    for product in root.iter("Gene-commentary_products"):
         if find_names_or_none(product, ["Gene-commentary_type"], "value") == "mRNA":
             nm_id = None
             np_id = None
-            for accession in product.find_all("Gene-commentary_accession"):
-                if "NM_" in accession.text:
-                    nm_id = accession.text
-                elif "NP_" in accession.text:
-                    np_id = accession.text
+            for accession in product.iter("Gene-commentary_accession"):
+                text = element_text(accession)
+                if "NM_" in text:
+                    nm_id = text
+                elif "NP_" in text:
+                    np_id = text
             if nm_id and np_id and pr_desc:
                 data["mRNA_(NM)_and_protein_(NP)_sequences"] = (
                     f"{nm_id} -> {np_id}, {pr_desc}"
@@ -333,7 +397,11 @@ def get_data_for_gene_id(gene_id, do_write=False):
     if xml_data is not None:
         if do_write:
             with open(f"{gene_id}.xml", "w") as fp:
-                fp.write(bs4.BeautifulSoup(xml_data, "xml").prettify())
+                fp.write(
+                    etree.tostring(parse_xml(xml_data), pretty_print=True).decode(
+                        "utf-8"
+                    )
+                )
 
         data = parse_xml_for_gene_id(gene_id, xml_data)
 
