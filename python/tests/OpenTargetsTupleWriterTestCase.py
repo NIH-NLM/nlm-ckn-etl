@@ -202,6 +202,21 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
         all_terms = subjects + objects
         self.assertTrue(any("PR_" in t for t in all_terms))
 
+    def test_drug_synonyms_and_trade_names_labels(self):
+        """Synonyms and trade names arrive as {label: ...} objects and are
+        flattened into comma-joined annotation values."""
+        ot = self._make_ot_base()
+        ot["ENSG00000001626"]["drugs"] = [
+            self._make_drug(
+                synonyms=[{"label": "Foo"}, {"label": "Baz"}],
+                tradeNames=[{"label": "Bar"}, {"label": "Qux"}],
+            )
+        ]
+        tuples = create_tuples(ot, self._make_gene_results())
+        objects = [str(t[2]) for t in tuples if len(t) == 3]
+        self.assertIn("Foo, Baz", objects)
+        self.assertIn("Bar, Qux", objects)
+
     # ----- Pharmacogenetics tests -----
 
     def test_creates_mutation_tuples(self):
