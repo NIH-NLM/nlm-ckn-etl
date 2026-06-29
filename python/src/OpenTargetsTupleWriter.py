@@ -181,8 +181,8 @@ def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
             drug_name = drug["drug"].get("name")
             drug_desc = drug["drug"].get("description")
             drug_type = drug["drug"].get("drugType")
-            synonyms = drug["drug"].get("synonyms", [])
-            trade_names_list = drug["drug"].get("tradeNames", [])
+            synonyms = [s["label"] for s in drug["drug"].get("synonyms", [])]
+            trade_names_list = [n["label"] for n in drug["drug"].get("tradeNames", [])]
 
             mechanism = None
             for moa in drug["drug"].get("mechanismsOfAction", {}).get("rows", []):

@@ -767,8 +767,10 @@ def main():
         try:
             dataset_version_id_lists = get_dataset_version_id_lists(file_paths)
         except Exception as exc:
-            print(f"WARNING: Failed to build dataset version ID lists: {exc}\n"
-                  "Fetchers that depend on dataset version IDs will receive an empty list.")
+            print(
+                f"WARNING: Failed to build dataset version ID lists: {exc}\n"
+                "Fetchers that depend on dataset version IDs will receive an empty list."
+            )
             dataset_version_id_lists = []
     else:
         print(
@@ -830,9 +832,7 @@ def main():
         except (ValueError, KeyError) as exc:
             cached = fetcher._load()
             if cached:
-                print(
-                    f"[{fetcher.name}] {exc}; using cached results"
-                )
+                print(f"[{fetcher.name}] {exc}; using cached results")
                 context[f"{fetcher.name}_results"] = cached
                 status.setdefault(fetcher.name, {})["last_outcome"] = "cached"
                 _save_fetch_status(status_path, status)
