@@ -21,10 +21,10 @@ from LoaderUtilities import (
     PURLBASE,
     RDFSBASE,
     get_cellxgene_harvester_data,
+    get_current_run,
     get_dataset_file_paths,
     get_dataset_version_id_lists,
     get_gene_ensembl_id_to_names_map,
-    get_results_sources,
     hyphenate,
     load_results,
 )
@@ -58,6 +58,7 @@ def create_tuples(
     summary_data: pd.DataFrame,
     dataset_version_ids: list[str],
     harvester_data: pd.DataFrame | None = None,
+    cluster_dvid_map: dict[str, str] | None = None,
 ) -> list[tuple]:
     """Create tuples from NSForest results.
 
@@ -85,6 +86,15 @@ def create_tuples(
     harvester_data : pd.DataFrame, optional
         DataFrame containing CELLxGENE harvester metadata for enriching
         CellSetDataset entities.
+    cluster_dvid_map : dict[str, str], optional
+        Mapping from ``clusterName`` to the single ``dataset_version_id`` the
+        cluster belongs to, used only when ``dataset_version_ids`` spans more
+        than one dataset (in prod, only Jorstad).  When provided, each cell
+        set emits a single ``member_of`` edge to its resolved dataset instead
+        of fanning out to every dataset.  A cluster the map cannot resolve to
+        a known dataset raises (the multi-dataset mapping is incomplete).
+        ``None`` for single-dataset results files, where the lone dataset is
+        the only possible member.
 
     Returns
     -------
@@ -125,7 +135,7 @@ def create_tuples(
                 predicate="nlm-ckn:is_about",
                 object=anat,
             )
-            tuples.extend(association_to_tuples(assoc, source="NSForest"))
+            tuples.extend(association_to_tuples(assoc, source="CELLxGENE"))
         if citation:
             tuples.append(
                 (
@@ -188,7 +198,7 @@ def create_tuples(
             )
             tuples.extend(
                 association_to_tuples(
-                    assoc, ctx, source="NSForest", annotated_terms=annotated
+                    assoc, ctx, source="CELLxGENE", annotated_terms=annotated
                 )
             )
 
@@ -200,7 +210,7 @@ def create_tuples(
         )
         tuples.extend(
             association_to_tuples(
-                assoc, ctx, source="NSForest", annotated_terms=annotated
+                assoc, ctx, source="NS-Forest", annotated_terms=annotated
             )
         )
 
@@ -214,7 +224,7 @@ def create_tuples(
             )
             tuples.extend(
                 association_to_tuples(
-                    assoc, ctx, source="NSForest", annotated_terms=annotated
+                    assoc, ctx, source="NS-Forest", annotated_terms=annotated
                 )
             )
 
@@ -228,7 +238,7 @@ def create_tuples(
         )
         tuples.extend(
             association_to_tuples(
-                assoc, ctx, source="NSForest", annotated_terms=annotated
+                assoc, ctx, source="NS-Forest", annotated_terms=annotated
             )
         )
 
@@ -257,8 +267,31 @@ def create_tuples(
                     )
                 )
 
-        # CellSet member_of CellSetDataset (for each dataset_version_id)
-        for dvid, (csd, _) in csd_by_dvid.items():
+        # CellSet member_of CellSetDataset.  A cell set belongs to exactly one
+        # dataset.  For a single-dataset results file that is the lone dvid;
+        # for a multi-dataset file (Jorstad) the cluster's dataset comes from
+        # cluster_dvid_map.  Fanning out to every dvid would falsely assert the
+        # cell set is a member of datasets it does not belong to.
+        if cluster_dvid_map is not None:
+            member_dvid = cluster_dvid_map.get(str(row["clusterName"]))
+            if member_dvid is None or member_dvid not in csd_by_dvid:
+                raise Exception(
+                    f"No dataset_version_id resolved for cluster "
+                    f"{row['clusterName']!r} in a multi-dataset results file; "
+                    "cluster_cid_mapping is incomplete"
+                )
+            member_dvids = [member_dvid]
+        else:
+            if len(csd_by_dvid) > 1:
+                raise Exception(
+                    "Multi-dataset results require cluster_dvid_map to resolve "
+                    "per-cluster member_of edges"
+                )
+            member_dvids = list(csd_by_dvid.keys())
+        for dvid in member_dvids:
+            csd, _ = csd_by_dvid[
+                dvid
+            ]  # (CellSetDataset, citation); citation unused here
             assoc = ASSOCIATION_CLASSES["CellSetMemberOfCellSetDataset"](
                 subject=cell_set,
                 predicate="nlm-ckn:member_of",
@@ -266,7 +299,7 @@ def create_tuples(
             )
             tuples.extend(
                 association_to_tuples(
-                    assoc, ctx, source="NSForest", annotated_terms=annotated
+                    assoc, ctx, source="CELLxGENE", annotated_terms=annotated
                 )
             )
 
@@ -280,7 +313,7 @@ def create_tuples(
             )
             tuples.extend(
                 association_to_tuples(
-                    assoc, ctx, source="NSForest", annotated_terms=annotated
+                    assoc, ctx, source="NS-Forest", annotated_terms=annotated
                 )
             )
 
@@ -292,7 +325,7 @@ def create_tuples(
         )
         tuples.extend(
             association_to_tuples(
-                assoc, ctx, source="NSForest", annotated_terms=annotated
+                assoc, ctx, source="NS-Forest", annotated_terms=annotated
             )
         )
 
@@ -306,15 +339,16 @@ def main():
     for each NSForest results file. Writes one JSON tuple file per
     dataset.
     """
-    results_sources = get_results_sources()
-    harvester_data = get_cellxgene_harvester_data(results_sources)
-    file_paths = get_dataset_file_paths(results_sources)
+    results_dir = get_current_run().results_dir
+    harvester_data = get_cellxgene_harvester_data(results_dir)
+    file_paths = get_dataset_file_paths(results_dir)
     dataset_version_id_lists = get_dataset_version_id_lists(file_paths)
 
-    for nsforest_path, scores_path, summary_path, dvids in zip(
+    for nsforest_path, scores_path, summary_path, mapping_path, dvids in zip(
         file_paths["nsforest_paths"],
         file_paths["scores_paths"],
         file_paths["summary_paths"],
+        file_paths["mapping_paths"],
         dataset_version_id_lists,
     ):
         nsforest_results = load_results(nsforest_path).sort_values(
@@ -335,8 +369,45 @@ def main():
 
         summary_data = load_results(summary_path[0]) if summary_path else pd.DataFrame()
 
+        # When a results file spans more than one dataset (in prod, only
+        # Jorstad), each cell set belongs to exactly one of them; the
+        # per-cluster dataset_version_id lives in the reference
+        # cluster_cid_mapping.  Build the clusterName -> dataset_version_id map
+        # so create_tuples emits a single member_of edge per cell set.  This is
+        # an enforced invariant: a multi-dataset file must carry a mapping with
+        # a dataset_version_id column, else we cannot resolve membership.
+        # Single-dataset files need no mapping (the lone dvid is the member).
+        # (pd.read_csv, not load_results: avoid load_results rewriting the
+        # mapping CSV with a uuid column we do not use here.)
+        cluster_dvid_map = None
+        if len(set(dvids)) > 1:
+            if not mapping_path:
+                raise Exception(
+                    f"{nsforest_path.name} spans {len(set(dvids))} datasets but "
+                    "has no cluster_cid_mapping to resolve per-cluster membership"
+                )
+            mapping_df = pd.read_csv(mapping_path[0])
+            if "dataset_version_id" not in mapping_df.columns:
+                raise Exception(
+                    f"{mapping_path[0].name} has no dataset_version_id column to "
+                    f"resolve per-cluster membership for {nsforest_path.name}"
+                )
+            if "cluster_name" not in mapping_df.columns:
+                raise Exception(
+                    f"{mapping_path[0].name} has no cluster_name column to "
+                    f"resolve per-cluster membership for {nsforest_path.name}"
+                )
+            cluster_dvid_map = dict(
+                zip(
+                    mapping_df["cluster_name"].astype(str),
+                    mapping_df["dataset_version_id"].astype(str),
+                )
+            )
+
         print(f"Creating NSForest tuples from {nsforest_path.name}")
-        tuples = create_tuples(nsforest_results, summary_data, dvids, harvester_data)
+        tuples = create_tuples(
+            nsforest_results, summary_data, dvids, harvester_data, cluster_dvid_map
+        )
         if tuples:
             output_name = nsforest_path.name.replace(".csv", "-nsforest.json")
             write_tuples(tuples, get_tuples_dir() / output_name)

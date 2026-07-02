@@ -5,12 +5,23 @@ import random
 
 from arango import ArangoClient
 
-_ARANGO_HOST = os.getenv("ARANGO_DB_HOST", "localhost")
-_ARANGO_PORT = os.getenv("ARANGO_DB_PORT", "8529")
-ARANGO_URL = f"http://{_ARANGO_HOST}:{_ARANGO_PORT}"
-ARANGO_CLIENT = ArangoClient(hosts=ARANGO_URL)
-ARANGO_ROOT_PASSWORD = os.getenv("ARANGO_DB_PASSWORD", "")
-SYS_DB = ARANGO_CLIENT.db("_system", username="root", password=ARANGO_ROOT_PASSWORD)
+def _client():
+    """Build an ArangoDB client from the environment at call time.
+
+    Connection settings are read from ``ARANGO_DB_HOST``/``ARANGO_DB_PORT``
+    on each call rather than at import, so callers that assign the port
+    dynamically (e.g. the Prefect pipeline) connect to the live endpoint.
+    """
+    host = os.getenv("ARANGO_DB_HOST", "localhost")
+    port = os.getenv("ARANGO_DB_PORT", "8529")
+    return ArangoClient(hosts=f"http://{host}:{port}")
+
+
+def _sys_db():
+    """Return a handle to the ``_system`` database using the current env."""
+    return _client().db(
+        "_system", username="root", password=os.getenv("ARANGO_DB_PASSWORD", "")
+    )
 
 
 def create_or_get_database(database_name):
@@ -27,13 +38,16 @@ def create_or_get_database(database_name):
         Database
     """
     # Create database, if needed
-    if not SYS_DB.has_database(database_name):
+    sys_db = _sys_db()
+    if not sys_db.has_database(database_name):
         print(f"Creating ArangoDB database: {database_name}")
-        SYS_DB.create_database(database_name)
+        sys_db.create_database(database_name)
 
     # Connect to database
     print(f"Getting ArangoDB database: {database_name}")
-    db = ARANGO_CLIENT.db(database_name, username="root", password=ARANGO_ROOT_PASSWORD)
+    db = _client().db(
+        database_name, username="root", password=os.getenv("ARANGO_DB_PASSWORD", "")
+    )
 
     return db
 
@@ -51,9 +65,10 @@ def delete_database(database_name):
     None
     """
     # Delete database, if needed
-    if SYS_DB.has_database(database_name):
+    sys_db = _sys_db()
+    if sys_db.has_database(database_name):
         print(f"Deleting ArangoDB database: {database_name}")
-        SYS_DB.delete_database(database_name)
+        sys_db.delete_database(database_name)
 
 
 def create_or_get_graph(db, graph_name):

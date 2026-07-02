@@ -29,6 +29,7 @@ import tarfile
 import tempfile
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
@@ -49,6 +50,9 @@ CLASSPATH = "target/nlm-ckn-etl-1.0.jar"
 DEFAULT_JAVA_OPTS = "-Xmx32g"
 
 ARANGO_DB_HOST = os.getenv("ARANGO_DB_HOST", "localhost")
+# Loopback is local: the start/dump/restore tasks manage a local Docker
+# container and must run for 127.0.0.1 and ::1, not just the literal "localhost".
+ARANGO_DB_IS_LOCAL = ARANGO_DB_HOST in ("localhost", "127.0.0.1", "::1", "")
 ARANGO_DB_PORT = int(os.getenv("ARANGO_DB_PORT", "8529"))
 ARANGO_DB_HOME = os.getenv("ARANGO_DB_HOME", str(REPO_ROOT / "data" / "arangodb"))
 
@@ -479,7 +483,129 @@ def _jar_key() -> str:
     return h.hexdigest()[:16]
 
 
-def _external_dir(run: str = "") -> Path:
+# Files whose content determines what or how external data is fetched.  A change
+# to any of them invalidates a cached external fetch (see ``should_force_fetch``).
+_FETCH_CODE_FILES = (
+    "python/src/DataFetcher.py",
+    "python/src/DataTransformer.py",
+    "python/src/E_Utilities.py",
+    "python/src/flows/fetch.py",
+)
+
+
+def _fetch_code_hash() -> str:
+    """Return a 16-char SHA-256 prefix over the fetch code files.
+
+    Content-addressed so the key changes whenever the fetcher/transformer logic
+    changes.  Written into ``fetch-info.json`` and compared on later runs to
+    decide whether a cached external fetch is still valid.
+    """
+    h = hashlib.sha256()
+    for rel in _FETCH_CODE_FILES:
+        p = REPO_ROOT / rel
+        h.update(rel.encode())
+        h.update(p.read_bytes() if p.exists() else b"")
+    return h.hexdigest()[:16]
+
+
+def should_force_fetch(
+    run_name: str = "", max_fetch_age_hours: float = 672.0, log=None
+) -> bool:
+    """Decide whether the external fetch should force a full re-fetch.
+
+    Returns ``True`` only when the cached fetch is genuinely untrustworthy: it
+    was produced by different fetch code (``fetch_code_hash`` no longer matches)
+    or is older than ``max_fetch_age_hours``.  A missing or corrupt marker
+    returns ``False`` (resume) — the per-source caches on disk are reused and
+    only missing/failed entries are re-fetched — so a run that fetched data but
+    failed validation (or was interrupted before recording a marker) is not
+    discarded and re-fetched from scratch on the next attempt.
+
+    Reads ``fetch-info.json`` from S3 (when ``S3_BUCKET`` is set) or from the
+    local ``data/external-<name>/`` directory.
+
+    Parameters
+    ----------
+    run_name:
+        Run name (selects ``data/external-<name>/`` in local mode).
+    max_fetch_age_hours:
+        Maximum acceptable cache age in hours before forcing a re-fetch.
+        Defaults to 672 (four weeks).
+    log:
+        Optional ``callable(str)`` for progress messages (defaults to the
+        module logger so this works outside a Prefect run context).
+    """
+    log = log or _log.info
+    fetch_info = None
+
+    if S3_BUCKET:
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+            boto3.client("s3").download_file(
+                S3_BUCKET, "external/fetch-info.json", str(tmp_path)
+            )
+            fetch_info = json.loads(tmp_path.read_text())
+        except Exception as exc:
+            log(f"Could not read fetch-info.json from S3: {exc}")
+        finally:
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
+    else:
+        info_path = _external_dir(run_name) / "fetch-info.json"
+        if info_path.exists():
+            try:
+                fetch_info = json.loads(info_path.read_text())
+            except Exception as exc:
+                log(f"Could not parse fetch-info.json: {exc}")
+
+    if fetch_info is None:
+        # No marker (first-ever fetch, or a prior run failed / was interrupted
+        # before recording one).  Resume rather than wipe: the per-source caches
+        # on disk are reused and only missing/failed entries are re-fetched (an
+        # empty cache simply fetches everything).
+        log("No fetch-info.json found — resuming from on-disk cache")
+        return False
+
+    # Force if the fetch code changed since this cache was produced — even a
+    # fresh cache is invalid if the fetcher/transformer logic has changed.
+    cached_hash = fetch_info.get("fetch_code_hash")
+    current_hash = _fetch_code_hash()
+    if cached_hash != current_hash:
+        log(
+            f"Fetch code changed since cache was written "
+            f"(cached={cached_hash}, current={current_hash}) — forcing full re-fetch"
+        )
+        return True
+
+    try:
+        fetched_at = datetime.fromisoformat(fetch_info["fetched_at"])
+    except (KeyError, TypeError, ValueError) as exc:
+        log(
+            f"Missing/invalid fetched_at in fetch-info.json ({exc!r}) — "
+            "resuming from on-disk cache"
+        )
+        return False
+    if fetched_at.tzinfo is None:  # tolerate naive timestamps
+        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+    age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
+
+    if age_hours > max_fetch_age_hours:
+        log(
+            f"External cache is {age_hours:.1f}h old "
+            f"(threshold: {max_fetch_age_hours}h) — forcing full re-fetch"
+        )
+        return True
+
+    log(
+        f"External cache is {age_hours:.1f}h old (threshold: {max_fetch_age_hours}h)"
+        " — reusing cache, retrying any previous failures"
+    )
+    return False
+
+
+def _external_dir(run_name: str = "") -> Path:
     """Return the run-specific external cache directory.
 
     Mirrors ``RunConfig.external_dir`` (``data/external-{run_name}``) without
@@ -487,15 +613,15 @@ def _external_dir(run: str = "") -> Path:
     """
     import os as _os
 
-    run_name = run or _os.getenv("CKN_RUN", "full")
+    run_name = run_name or _os.getenv("CKN_RUN", "full")
     return REPO_ROOT / "data" / f"external-{run_name}"
 
 
 @task(name="clean-empty-external-files", log_prints=True)
-def clean_empty_external_files(run: str = "") -> None:
-    """Remove corrupt or structurally invalid files from ``data/external-<run>/``.
+def clean_empty_external_files(run_name: str = "") -> None:
+    """Remove corrupt or structurally invalid files from ``data/external-<name>/``.
 
-    ``DataFetcher.py`` uses cache files in ``data/external-<run>/``
+    ``DataFetcher.py`` uses cache files in ``data/external-<name>/``
     to resume interrupted runs.  Two classes of bad files are cleaned here:
 
     1. **Zero-byte files** — causes ``JSONDecodeError`` on next load.
@@ -510,12 +636,12 @@ def clean_empty_external_files(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/external-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
-    external_dir = _external_dir(run)
+    external_dir = _external_dir(run_name)
     external_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Remove zero-byte files
@@ -551,7 +677,7 @@ def clean_empty_external_files(run: str = "") -> None:
 
 
 @task(name="validate-external-files", log_prints=True)
-def validate_external_files(run: str = "") -> None:
+def validate_external_files(run_name: str = "") -> None:
     """Verify that all required external cache files exist and contain valid JSON.
 
     Called by the fetch flow after fetching+transforming and by the pipeline
@@ -565,18 +691,17 @@ def validate_external_files(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/``).  Defaults to
+    run_name:
+        Run name (selects ``data/external-<name>/``).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
-    external_dir = _external_dir(run)
+    external_dir = _external_dir(run_name)
     raw_required = [
         "cellxgene.json",
         "opentargets.json",
         "gene.json",
         "uniprot.json",
-        "pubmed.json",
     ]
     transformed_required = [
         "cellxgene_transformed.json",
@@ -584,9 +709,6 @@ def validate_external_files(run: str = "") -> None:
         "gene_transformed.json",
         "uniprot_transformed.json",
     ]
-
-    # pubmed.json is legitimately empty when no author-to-CL mapping files exist
-    may_be_empty = {"pubmed.json"}
 
     errors = []
     for filename in raw_required + transformed_required:
@@ -598,7 +720,7 @@ def validate_external_files(run: str = "") -> None:
         else:
             try:
                 data = json.loads(path.read_text())
-                if not data and filename not in may_be_empty:
+                if not data:
                     logger.warning(
                         f"{external_dir.name}/{filename} is valid JSON but contains no entries "
                         f"— annotations from this source will be skipped. "
@@ -620,8 +742,8 @@ def validate_external_files(run: str = "") -> None:
 
 
 @task(name="sync-external-from-s3", log_prints=True)
-def sync_external_from_s3(run: str = "") -> None:
-    """Restore the external API cache from S3 to ``data/external-<run>/``.
+def sync_external_from_s3(run_name: str = "") -> None:
+    """Restore the external API cache from S3 to ``data/external-<name>/``.
 
     No-op when ``S3_BUCKET`` is empty (local-only mode).  Used by both the
     fetch flow (to resume an interrupted run) and the pipeline flow (to pull
@@ -629,15 +751,16 @@ def sync_external_from_s3(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/`` and S3 prefix
-        ``external-<run>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
+    run_name:
+        Run name (selects ``data/external-<name>/`` locally; the S3 cache
+        prefix is the live, shared ``external/``).  Defaults to ``$CKN_RUN``
+        or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping S3 sync (local mode)")
         return
-    external_dir = _external_dir(run)
+    external_dir = _external_dir(run_name)
     external_dir.mkdir(parents=True, exist_ok=True)
     s3_prefix = f"s3://{S3_BUCKET}/external/"
     logger.info(f"Syncing {s3_prefix} → {external_dir.name}/")
@@ -646,22 +769,23 @@ def sync_external_from_s3(run: str = "") -> None:
 
 
 @task(name="sync-external-to-s3", log_prints=True)
-def sync_external_to_s3(run: str = "") -> None:
-    """Push the external API cache from ``data/external-<run>/`` to S3.
+def sync_external_to_s3(run_name: str = "") -> None:
+    """Push the external API cache from ``data/external-<name>/`` to S3.
 
     No-op when ``S3_BUCKET`` is empty (local-only mode).
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/`` and S3 prefix
-        ``external-<run>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
+    run_name:
+        Run name (selects ``data/external-<name>/`` locally; the S3 cache
+        prefix is the live, shared ``external/``).  Defaults to ``$CKN_RUN``
+        or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping S3 sync (local mode)")
         return
-    external_dir = _external_dir(run)
+    external_dir = _external_dir(run_name)
     s3_prefix = f"s3://{S3_BUCKET}/external/"
     logger.info(f"Syncing {external_dir.name}/ → {s3_prefix}")
     _s3_sync(str(external_dir), s3_prefix)
@@ -669,10 +793,10 @@ def sync_external_to_s3(run: str = "") -> None:
 
 
 @task(name="sync-external-to-s3-staging", log_prints=True)
-def sync_external_to_s3_staging(run: str = "") -> None:
+def sync_external_to_s3_staging(run_name: str = "") -> None:
     """Push the external API cache to the run-scoped staging prefix.
 
-    Writes to ``s3://{S3_BUCKET}/runs/{run}/external-staging/`` rather than
+    Writes to ``s3://{S3_BUCKET}/runs/<name>/external-staging/`` rather than
     the live ``external/`` prefix so that a concurrent ``pipeline.py`` reading
     from ``external/`` sees only complete, validated snapshots.  Call
     ``promote_external_staging`` after validation to atomically swap the
@@ -685,17 +809,17 @@ def sync_external_to_s3_staging(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
-        Run name (selects ``data/external-<run>/`` locally and
-        ``runs/<run>/external-staging/`` in S3).  Defaults to
+    run_name:
+        Run name (selects ``data/external-<name>/`` locally and
+        ``runs/<name>/external-staging/`` in S3).  Defaults to
         ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping S3 sync (local mode)")
         return
-    run_name = run or os.getenv("CKN_RUN", "full")
-    external_dir = _external_dir(run)
+    run_name = run_name or os.getenv("CKN_RUN", "full")
+    external_dir = _external_dir(run_name)
     s3_staging = f"s3://{S3_BUCKET}/runs/{run_name}/external-staging/"
     logger.info(f"Syncing {external_dir.name}/ → {s3_staging} (staging)")
     _s3_sync(str(external_dir), s3_staging)
@@ -703,8 +827,8 @@ def sync_external_to_s3_staging(run: str = "") -> None:
 
 
 @task(name="promote-external-staging", log_prints=True)
-def promote_external_staging(run: str = "") -> None:
-    """Server-side copy ``runs/{run}/external-staging/`` → ``external/`` in S3.
+def promote_external_staging(run_name: str = "") -> None:
+    """Server-side copy ``runs/<name>/external-staging/`` → ``external/`` in S3.
 
     Called after the fetch flow has validated its output.  Uses S3
     ``CopyObject`` so no data travels through the client and the promotion
@@ -716,7 +840,7 @@ def promote_external_staging(run: str = "") -> None:
 
     Parameters
     ----------
-    run:
+    run_name:
         Run name (must match the value passed to ``sync_external_to_s3_staging``).
         Defaults to ``$CKN_RUN`` or ``'full'``.
     """
@@ -724,7 +848,7 @@ def promote_external_staging(run: str = "") -> None:
     if not S3_BUCKET:
         logger.info("S3_BUCKET not set — skipping staging promotion (local mode)")
         return
-    run_name = run or os.getenv("CKN_RUN", "full")
+    run_name = run_name or os.getenv("CKN_RUN", "full")
     src_prefix = f"runs/{run_name}/external-staging/"
     logger.info(
         f"Promoting s3://{S3_BUCKET}/{src_prefix} → s3://{S3_BUCKET}/external/"

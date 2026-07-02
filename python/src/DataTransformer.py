@@ -427,13 +427,13 @@ def main():
         help="re-run transformers even if output is up to date",
     )
     parser.add_argument(
-        "--run",
+        "--run-name",
         default=None,
-        help="run name (selects data/run-<name>.json; defaults to $CKN_RUN or 'full')",
+        help="run name (selects data/results-<name>/; defaults to $CKN_RUN or 'full')",
     )
     args = parser.parse_args()
 
-    set_current_run(args.run)
+    set_current_run(args.run_name)
 
     source_names = args.sources or [t.name for t in TRANSFORMER_REGISTRY]
 

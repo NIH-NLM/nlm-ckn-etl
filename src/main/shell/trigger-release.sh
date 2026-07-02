@@ -6,12 +6,12 @@
 # AWS Batch console.
 #
 # Config files loaded automatically (in order, later values win):
-#   release.json  — checked-in defaults (cell_kn_tag, tar_source, hubmap_urls, …)
+#   release.json  — checked-in defaults (nlm_ckn_tag, tar_source, hubmap_urls, …)
 #   .env          — local secrets, gitignored (S3_BUCKET, AWS creds, …)
 #
 # Required (one of):
-#   --tag TAG        nlm-ckn release tag, e.g. v2026-04
-#   cell_kn_tag      set in release.json (used when --tag is omitted)
+#   --nlm-ckn-tag TAG        nlm-ckn release tag, e.g. v2026-04
+#   nlm_ckn_tag      set in release.json (used when --nlm-ckn-tag is omitted)
 #
 # Optional:
 #   --tar-source PATH_OR_URL
@@ -19,9 +19,7 @@
 #       Local paths and HTTPS URLs are downloaded/staged to S3 before submission
 #       so the Batch container reads from S3 only.  Set GITHUB_TOKEN to
 #       authenticate HTTPS downloads from private GitHub releases.
-#       Default: tar_source from release.json, or derived from --tag.
-#   --skip-ontology
-#       Skip Phase 1 and reuse the existing baseline dump for this run.
+#       Default: tar_source from release.json, or derived from --nlm-ckn-tag.
 #   --run-name NAME
 #       ETL run name (default: tag with leading 'v' stripped).
 #   --max-fetch-age-hours N
@@ -39,9 +37,8 @@
 #
 # Usage:
 #   bash src/main/shell/trigger-release.sh
-#   bash src/main/shell/trigger-release.sh --tag v2026-04
-#   bash src/main/shell/trigger-release.sh --tag v2026-04 --tar-source /path/to/prod-data-v2026-04.tar.gz
-#   bash src/main/shell/trigger-release.sh --tag v2026-04 --skip-ontology
+#   bash src/main/shell/trigger-release.sh --nlm-ckn-tag v2026-04
+#   bash src/main/shell/trigger-release.sh --nlm-ckn-tag v2026-04 --tar-source /path/to/prod-data-v2026-04.tar.gz
 
 set -euo pipefail
 
@@ -78,9 +75,8 @@ if [[ -f "${ENV_FILE}" ]]; then
 fi
 
 # ── Defaults from release.json (CLI flags override below) ────────────────────
-TAG="$(_from_json cell_kn_tag)"
+TAG="$(_from_json nlm_ckn_tag)"
 TAR_SOURCE="$(_from_json tar_source)"
-SKIP_ONTOLOGY="$(_from_json skip_ontology false)"
 MAX_FETCH_AGE_HOURS="$(_from_json max_fetch_age_hours)"
 RUN_NAME=""
 JAVA_OPTS=""
@@ -101,9 +97,8 @@ _require_arg() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --tag)                  _require_arg "$1" "${2-}"; TAG="${2-}";                  shift 2 ;;
+    --nlm-ckn-tag)          _require_arg "$1" "${2-}"; TAG="${2-}";                  shift 2 ;;
     --tar-source)           _require_arg "$1" "${2-}"; TAR_SOURCE="${2-}";           shift 2 ;;
-    --skip-ontology)        SKIP_ONTOLOGY="true";                                    shift   ;;
     --run-name)             _require_arg "$1" "${2-}"; RUN_NAME="${2-}";             shift 2 ;;
     --max-fetch-age-hours)  _require_arg "$1" "${2-}"; MAX_FETCH_AGE_HOURS="${2-}";  shift 2 ;;
     --java-opts)            [[ -z "${2-}" ]] && { echo "ERROR: $1 requires a value" >&2; usage; }; JAVA_OPTS="${2-}"; shift 2 ;;
@@ -114,7 +109,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "${TAG}" ]] && { echo "ERROR: --tag is required (or set cell_kn_tag in release.json)" >&2; usage; }
+[[ -z "${TAG}" ]] && { echo "ERROR: --nlm-ckn-tag is required (or set nlm_ckn_tag in release.json)" >&2; usage; }
 
 # Derive the run name the same way release.py does: strip a leading 'v' from
 # the tag, unless --run-name was given explicitly.
@@ -233,13 +228,13 @@ PYEOF
 fi
 
 # ── Build container environment overrides ────────────────────────────────────
-# CELL_KN_TAG and RELEASE_CONFIG are always set. The rest are only included
+# NLM_CKN_TAG and RELEASE_CONFIG are always set. The rest are only included
 # when non-empty so the job definition defaults remain in effect otherwise.
 # Use Python json.dumps for safe JSON building to handle special characters.
 # GITHUB_TOKEN is intentionally omitted here — it is injected by the Batch
 # job definition via Secrets Manager (see cloudformation/batch.yaml).
 env_json=$(
-  CELL_KN_TAG="${TAG}" \
+  NLM_CKN_TAG="${TAG}" \
   RELEASE_CONFIG_S3="${RELEASE_CONFIG_S3}" \
   TAR_SOURCE="${TAR_SOURCE}" \
   RUN_NAME="${RUN_NAME}" \
@@ -247,13 +242,11 @@ env_json=$(
   JAVA_OPTS="${JAVA_OPTS}" \
   GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-}" \
   GITHUB_DEPLOYMENT_ID="${GITHUB_DEPLOYMENT_ID}" \
-  SKIP_ONTOLOGY="${SKIP_ONTOLOGY}" \
   python3 - <<'PYEOF'
 import json, os
 env = [
-    {"name": "CELL_KN_TAG",      "value": os.environ["CELL_KN_TAG"]},
+    {"name": "NLM_CKN_TAG",      "value": os.environ["NLM_CKN_TAG"]},
     {"name": "RELEASE_CONFIG",   "value": os.environ["RELEASE_CONFIG_S3"]},
-    {"name": "SKIP_ONTOLOGY",    "value": os.environ["SKIP_ONTOLOGY"]},
 ]
 for key, envvar in [
     ("TAR_SOURCE",          "TAR_SOURCE"),

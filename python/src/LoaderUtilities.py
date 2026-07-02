@@ -24,6 +24,8 @@ from UniProtIdMapper import (
     get_id_mapping_results_search,
 )
 
+import ProductionDataSpecification as spec
+
 ALPHABET = string.ascii_lowercase + string.digits
 
 OPENTARGETS_RESOURCES = [
@@ -117,7 +119,9 @@ def get_current_run():
 with open(DATA_DIRPATH / "obo" / "deprecated_terms.txt", "r") as fp:
     DEPRECATED_TERMS = fp.read().splitlines()
 
-MIN_CLUSTER_SIZE = 10
+# Re-exported from ProductionDataSpecification so the naming/column spec and the readers
+# share one definition (see ProductionDataValidator).
+MIN_CLUSTER_SIZE = spec.MIN_CLUSTER_SIZE
 
 URIREF_PATTERN = re.compile(r"/obo/([A-Za-z]*)_([A-Za-z0-9-+]*)")
 
@@ -186,11 +190,6 @@ def parse_term(term, ro=None):
         return None, None, None, Path(path).stem, "literal"
 
 
-def get_results_sources():
-    """Return the results directory for the current run."""
-    return get_current_run().results_dir
-
-
 def get_cellxgene_harvester_data(results_dir=None):
     """Get and concatenate cellxgene-harvester data from the flat results dir.
 
@@ -209,7 +208,7 @@ def get_cellxgene_harvester_data(results_dir=None):
         results_dir = get_current_run().results_dir
 
     results_dir = Path(results_dir)
-    harvester_paths = sorted(results_dir.glob("*_harvester_final.csv"))
+    harvester_paths = sorted(results_dir.glob(spec.HARVESTER_GLOB))
 
     if harvester_paths:
         return pd.concat([pd.read_csv(p) for p in harvester_paths])
@@ -221,12 +220,13 @@ def get_dataset_file_paths(results_dir=None):
     the flat release zip directory.
 
     The release zip stores all files at the top level using a stable naming
-    convention.  For each ``*_results.csv`` file the companion files are
-    located by substituting the ``_results.csv`` suffix:
+    convention.  For each ``results_ensg_*.csv`` file the companion files are
+    located by substituting the ``results_ensg`` prefix:
 
-    - mapping:  ``_results.csv`` → ``_mapping.csv``
-    - scores:   ``_results.csv`` → ``_silhouette_fscore_summary.csv``
-    - summary:  ``_results.csv`` → ``_*_master_dataset_summary.csv`` (glob)
+    - mapping:  ``results_ensg`` → ``cluster_cid_mapping`` (sparse — only the
+      reference dataset per organ has one, so most results sets have none)
+    - scores:   ``results_ensg`` → ``silhouette_fscore_summary``
+    - summary:  ``results_ensg`` → ``master_dataset_summary``
 
     Parameters
     ----------
@@ -246,51 +246,58 @@ def get_dataset_file_paths(results_dir=None):
         results_dir = get_current_run().results_dir
 
     results_dir = Path(results_dir)
-    nsforest_paths = sorted(results_dir.glob("*_results.csv"))
+    nsforest_paths = sorted(results_dir.glob(spec.NSFOREST_GLOB))
 
     mapping_paths = []
     scores_paths = []
     summary_paths = []
 
     for p in nsforest_paths:
-        stem = p.name
         mapping_paths.append(
-            list(results_dir.glob(stem.replace("_results.csv", "_mapping.csv")))
+            list(
+                results_dir.glob(
+                    "**/" + spec.companion_basename(p.name, spec.MAPPING_PREFIX)
+                )
+            )
         )
         scores_paths.append(
             list(
                 results_dir.glob(
-                    stem.replace("_results.csv", "_silhouette_fscore_summary.csv")
+                    "**/" + spec.companion_basename(p.name, spec.SILHOUETTE_PREFIX)
                 )
             )
         )
         summary_paths.append(
             list(
                 results_dir.glob(
-                    stem.replace("_results.csv", "*_master_dataset_summary.csv")
+                    "**/" + spec.companion_basename(p.name, spec.SUMMARY_PREFIX)
                 )
             )
         )
 
-    # Warn for any results file whose companion files were not found — these will
-    # fail later in get_dataset_version_id_lists with a confusing traceback.
-    for p, mp, sp in zip(nsforest_paths, mapping_paths, summary_paths):
-        if not mp and not sp:
+    # Warn for any results file missing its summary — get_dataset_version_id_lists
+    # reads the dataset_version_id column from the summary, so its absence fails
+    # later with a confusing traceback.  A missing cluster_cid_mapping is NOT an
+    # error: it is sparse (only the reference dataset per organ has one), and
+    # MappingTupleWriter simply skips results sets without a mapping.
+    for p, sp in zip(nsforest_paths, summary_paths):
+        if not sp:
             print(
-                f"WARNING: No companion files (mapping or master_dataset_summary) "
-                f"found for {p.name} — dataset version id lookup will fail."
+                f"WARNING: No master_dataset_summary found for {p.name} — "
+                f"dataset version id lookup will fail."
             )
 
     # Cross-check against the manifest so missing results files are caught at
     # extraction time rather than discovered implicitly through absent output.
-    manifest_path = results_dir / "master_s3_manifest.csv"
+    manifest_path = results_dir / spec.MANIFEST_NAME
     if manifest_path.exists():
         try:
             manifest = pd.read_csv(manifest_path)
             expected = {
                 row["filename"]
                 for _, row in manifest.iterrows()
-                if str(row["filename"]).endswith("_results.csv")
+                if str(row["filename"]).startswith(f"{spec.NSFOREST_PREFIX}_")
+                and str(row["filename"]).endswith(".csv")
             }
             found = {p.name for p in nsforest_paths}
             missing = expected - found
@@ -311,10 +318,12 @@ def get_dataset_file_paths(results_dir=None):
 
 
 def get_dataset_version_id_lists(file_paths):
-    """Get dataset version id lists for each results source, first from the
-    dataset summary file, or if not available, from the author to CL mapping
-    file, or if not available, from the NSForest file name. Discovery of a
-    dataset version id is not assured.
+    """Get dataset version id lists for each results source from the dataset
+    summary file's ``dataset_version_id`` column.
+
+    A single results set can correspond to multiple datasets (e.g. Jorstad,
+    whose summary has one row per dataset), so every row of every summary file
+    paired with the results set contributes a dataset version id.
 
     Parameters
     ----------
@@ -329,37 +338,20 @@ def get_dataset_version_id_lists(file_paths):
     """
     dataset_version_id_lists = []
 
-    for summary_path, mapping_path, nsforest_path in zip(
+    for summary_path, nsforest_path in zip(
         file_paths["summary_paths"],
-        file_paths["mapping_paths"],
         file_paths["nsforest_paths"],
     ):
-        # Summary files are checked first because a single results file can
-        # correspond to multiple datasets (one summary per dataset), whereas
-        # mapping files encode all dataset IDs as a "--"-delimited string in a
-        # single row and cannot represent multiple summaries independently.
-        if len(summary_path) >= 1:
-            dataset_version_ids = [
-                pd.read_csv(p)["h5ad_url"][0].split("/")[-1].split(".")[0]
-                for p in summary_path
-            ]
+        dataset_version_ids = []
+        for p in summary_path:
+            summary_data = pd.read_csv(p)
+            if "dataset_version_id" in summary_data.columns:
+                dataset_version_ids.extend(
+                    summary_data["dataset_version_id"].dropna().astype(str).tolist()
+                )
 
-        elif len(mapping_path) == 1:
-            dataset_version_ids = (
-                pd.read_csv(mapping_path[0]).loc[0, "dataset_version_id"].split("--")
-            )
-
-        else:
+        if not dataset_version_ids:
             raise Exception(f"No dataset version id found for {nsforest_path}")
-            # TODO: Resore if needed to process older production delivery
-            # match = re.search(
-            #     r"_([0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12})_",
-            #     nsforest_path.name,
-            # )
-            # if match:
-            #     dataset_version_ids = [match.group(1)]
-            # else:
-            #     dataset_version_ids = []
 
         dataset_version_id_lists.append(dataset_version_ids)
 
@@ -967,7 +959,7 @@ def collect_unique_gene_names(nsforest_results):
     """
     gene_names = set()
 
-    for column in ["NSForest_markers", "binary_genes"]:
+    for column in spec.GENE_LIST_COLUMNS:
         for gene_list_str in nsforest_results.loc[
             nsforest_results["clusterSize"] >= MIN_CLUSTER_SIZE, column
         ]:

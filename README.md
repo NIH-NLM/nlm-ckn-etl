@@ -35,11 +35,20 @@ This is a unified repository that combines the previously separate
 `nlm-ckn-mvp-etl-ontologies` and `nlm-ckn-mvp-etl-results` repositories,
 eliminating the need for git submodules and system-scoped JAR dependencies.
 
+The pipeline produces an ArangoDB archive from single cell genomics results
+and source ontologies, as shown below:
+
+![NLM-CKN ETL pipeline: a Data Processing Pipeline (DataFetcher → DataTransformer → TupleWriters → ResultsGraphBuilder) and an Ontology Processing Pipeline (OntologyDownloader → OntologyGraphBuilder) feeding ArangoDB graph storage, from which InducedSubgraphBuilder selects a relevant subgraph](docs/images/NLM-CKN-ETL.png)
+
 ## Project Structure
 
 ```
 nlm-ckn-etl/
 ├── pom.xml                          # Maven POM (all Java dependencies)
+├── Dockerfile                       # Multi-stage build (Java + Python images)
+├── compose.yaml                     # Local Docker Compose services
+├── release.json                     # Release settings (tag, tar source, etc.)
+├── cloudformation/                  # AWS infrastructure templates (Batch, ECR, OIDC)
 ├── src/
 │   ├── main/
 │   │   ├── java/gov/nih/nlm/        # Java classes
@@ -47,14 +56,15 @@ nlm-ckn-etl/
 │   └── test/
 │       ├── java/gov/nih/nlm/        # Java test classes
 │       └── data/
-│           ├── results-2026-01-06/  # Manually curated data
-│           └── results-sample/      # Sample of pipeline data
+│           ├── obo/                 # Sample ontology files
+│           ├── summaries/           # Sample summary inputs
+│           └── tuples/              # Sample tuple inputs
 ├── python/
 │   ├── pyproject.toml               # Poetry configuration
 │   ├── src/                         # Python modules
 │   └── tests/                       # Python test files
 └── docs/
-    ├── java/                        # Javadoc output
+    ├── java/                        # Generated Javadoc output (gitignored)
     └── python/                      # Sphinx documentation
 ```
 
@@ -82,13 +92,29 @@ Data can be fetched from the following external sources:
 
 - [Open Targets](https://www.opentargets.org/): Includes diseases,
   drugs, interactions, pharmacogenetics, tractability, expression, and
-  depmap resources
+  depmap resources. Released as discrete batches on a roughly **quarterly**
+  cycle, versioned `YY.MM` (e.g. 26.03); pin to a specific release. The
+  cadence is not perfectly clockwork — quarters are occasionally skipped.
 - [Gene](https://www.ncbi.nlm.nih.gov/gene/): Records include
   nomenclature, Reference Sequences (RefSeqs), maps, pathways,
   variations, phenotypes, and links to genome-, phenotype-, and
-  locus-specific resources
+  locus-specific resources. Continuously updated (nomenclature **daily**,
+  most GeneRIFs **weekly**, ~2 days to propagate) with **no discrete version**.
+  The NCBI Datasets gene package inherits this rolling behavior, so for a
+  reproducible checkpoint pin to the underlying **RefSeq release number**
+  (bi-monthly, odd months) or the per-organism **genome annotation
+  release / assembly accession**, and capture per-record modification dates
+  for live lookups.
 - [UniProt](https://www.uniprot.org/): Includes protein sequence, and
-  functional information resources
+  functional information resources. Released on a fixed **8-week** cycle
+  (~6–7/year), versioned `YYYY_XX` (e.g. 2026_01); each release is a clean,
+  citable snapshot to pin to.
+
+For reproducibility, align re-syncs to the slowest meaningful cadence (the
+Open Targets quarterly release) and record the exact version identifier for
+each source at every sync. See
+[`data-source-update-cadences.md`](docs/data-source-update-cadences.md) for the
+full breakdown and sources.
 
 ## Dependencies
 
@@ -160,11 +186,15 @@ $ mvn javadoc:javadoc
 $ mvn test
 $ mvn clean package -DskipTests
 ```
+The Javadoc output is written to `docs/java/` (gitignored), as configured by
+the `maven-javadoc-plugin` in `pom.xml`.
 
 ### Data
 
 The Python and Java classes require the ontology files to reside in
-`data/obo`. From the repository root directory you can populate this directory
+`data/obo`. The [`pipeline.py`](#usage) flow does this automatically in
+Phase 1, so this step is only needed for standalone Java- or Python-only
+development. From the repository root directory you can populate this directory
 as follows:
 ```
 $ export CP="target/nlm-ckn-etl-1.0.jar"
@@ -220,11 +250,23 @@ The `.github/workflows/` directory contains the following GitHub Actions workflo
 
 Triggered on `push` and `pull_request` for source and build file changes. Runs three jobs in parallel:
 
-- **Java tests** — Maven test suite
-- **Python lint and tests** — ruff + pytest (with ArangoDB started via Docker)
-- **Pipeline image smoke test** — builds the pipeline Docker image locally (no ECR push) and verifies that the production Python modules import successfully, catching missing dependencies or Dockerfile regressions
+- **Java tests** — delegates to the reusable `java-build.yml` workflow (Maven test suite)
+- **Python lint and tests** — delegates to the reusable `python-lint.yml` workflow (ruff + pytest, with ArangoDB started via Docker)
+- **Pipeline image smoke test** — an inline job that builds the pipeline Docker image locally (no ECR push) and verifies that the production Python modules import successfully, catching missing dependencies or Dockerfile regressions
 
 Also callable as a reusable workflow (`workflow_call`) by `on-release.yml`.
+
+### `java-build.yml` — Java Build (reusable)
+
+Reusable (`workflow_call`) workflow that runs the Maven test suite for fast PR
+feedback. Invoked by `ci.yml`. The JAR is no longer stored as a GitHub Actions
+artifact — it is compiled inside Docker by the `java-build` stage of the
+`Dockerfile` and baked into the pipeline image (see `build-image.yml`).
+
+### `python-lint.yml` — Python Lint and Test (reusable)
+
+Reusable (`workflow_call`) workflow that runs ruff and pytest against the Python
+sources (with ArangoDB started via Docker). Invoked by `ci.yml`.
 
 ### `build-image.yml` — Build and Push Docker Images
 
@@ -246,9 +288,13 @@ test (ci.yml) → build (build-image.yml) → submit Batch job
 
 The Batch job runs `release.py` end-to-end (fetch + full ETL) on EC2 and returns immediately. Progress is tracked via a [GitHub Deployment](https://docs.github.com/en/rest/deployments) — the Batch container posts `success` or `failure` to the deployment status when the pipeline finishes, which triggers a notification in any Slack channel subscribed to the GitHub app's deployment events.
 
-Release settings (`cell_kn_tag`, `tar_source`, `skip_ontology`, etc.) come from `release.json` at the repo root, not from this repo's release tag.
+Release settings (`nlm_ckn_tag`, `tar_source`, etc.) come from `release.json` at the repo root, not from this repo's release tag.
 
 Required secrets: `AWS_RELEASE_ROLE_ARN`, `AWS_REGION`, `S3_BUCKET`, `DEPLOYMENTS_TOKEN` (classic PAT with `repo:deployments` scope).
+
+### `on-release-deactivate.yml` — On Release Removed: Delete Deployment
+
+Triggered when a GitHub Release is `deleted` or `unpublished`. Finds any GitHub deployment for the release's tag/ref in the `production` environment, marks it inactive (GitHub requires no active status before deletion), then deletes it so the deployments page stays clean. Requires `DEPLOYMENTS_TOKEN` (PAT with `deployments:write` scope).
 
 ### `trigger-release.yml` — Manual Release Trigger
 
@@ -262,69 +308,91 @@ Promotes a completed ETL run to the upstream `nlm-ckn` repository.
 
 ```
 push/PR
-  └── ci.yml (Java tests + Python lint/tests)
+  └── ci.yml
+        ├── java-build.yml  (Java tests)
+        ├── python-lint.yml (Python lint/tests)
+        └── smoke-test      (pipeline image import check)
 
 GitHub Release published
   └── on-release.yml
-        ├── ci.yml          (tests)
+        ├── ci.yml          (tests → java-build.yml + python-lint.yml)
         ├── build-image.yml (image build, needs: test)
         └── submit Batch job (needs: build)
               └── Batch container → posts deployment status to GitHub
+
+GitHub Release deleted/unpublished
+  └── on-release-deactivate.yml (mark deployment inactive → delete)
 ```
 
 ## Usage
 
-### ETL Pipeline Execution Order
+The pipeline is orchestrated by three Prefect flows in `python/src/flows/`,
+which wrap the individual Java and Python programs shown in the diagram above.
+Each flow can run standalone or as part of a full release. See
+[`python/src/flows/README.md`](python/src/flows/README.md) for the S3 layout,
+lifecycle, and per-phase read/write details.
 
-Each step assumes you are starting from the repository root directory.
+| Flow | Role |
+|------|------|
+| `fetch.py` | Download raw data from CELLxGENE, Open Targets, NCBI Gene, UniProt, and HuBMAP into a local cache (and optionally S3) |
+| `pipeline.py` | Three-phase ETL: build the ontology graph (Phase 1), write tuples and build the results graph (Phase 2), and dump the golden archive (Phase 3) |
+| `release.py` | End-to-end release from an nlm-ckn GitHub tag: extract results, refresh the cache via `fetch.py`, then run the full `pipeline.py` |
 
-0. **Export environment variables**
+### Prerequisites
 
-   Ensure the ArangoDB environment variables from the
-   [ArangoDB](#arangodb) section above are still exported in the current
-   shell, then export the additional variables below:
-   ```
-   $ export CP="target/nlm-ckn-etl-1.0.jar"
-   $ export NCBI_EMAIL="<some-email>"
-   $ export NCBI_API_KEY="<some-api-key>"
-   ```
+Run the flows from the `python/` directory with ArangoDB running and the
+Python environment activated:
+```
+$ docker compose up -d                  # start ArangoDB (from the repo root)
+$ cd python
+$ source .venv/bin/activate
+```
+Ensure the ArangoDB environment variables from the [ArangoDB](#arangodb)
+section above are exported, and provide NCBI E-Utilities credentials either as
+environment variables or via the `--ncbi-email` / `--ncbi-api-key` flags:
+```
+$ export NCBI_EMAIL="<some-email>"
+$ export NCBI_API_KEY="<some-api-key>"
+```
+`S3_BUCKET` is optional — omit it to work entirely on local disk.
 
-1. **Download ontologies (Java):**
-   ```
-   $ java -cp $CP gov.nih.nlm.OntologyDownloader
-   $ java -cp $CP gov.nih.nlm.OntologySlimmer
-   ```
+### Running the flows
 
-2. **Load ontologies into ArangoDB (Java):**
-   ```
-   $ java -cp $CP gov.nih.nlm.OntologyGraphBuilder
-   ```
+**Full release** (extract results → fetch → three-phase ETL) from an nlm-ckn tag:
+```
+$ poetry run src/flows/release.py \
+    --nlm-ckn-tag v0.0.2 \
+    --ncbi-email "$NCBI_EMAIL" \
+    --ncbi-api-key "$NCBI_API_KEY"
+```
+By default `release.py` reuses a warm external cache when it is younger than
+`--max-fetch-age-hours` (default 672 h = four weeks) and only forces a full
+re-fetch when the cache is missing, stale, or produced by changed fetch code.
 
-3. **Fetch and transform external data (Python):**
-   ```
-   $ cd python/src
-   $ python DataFetcher.py
-   $ python DataTransformer.py
-   ```
+**Fetch only** (refresh the external cache without a full release):
+```
+$ poetry run src/flows/fetch.py \
+    --ncbi-email "$NCBI_EMAIL" \
+    --ncbi-api-key "$NCBI_API_KEY"
+```
+Add `--force` to ignore the cache and re-fetch every source from scratch, or
+`--retry-empty` to retry only previously-failed entries.
 
-4. **Create result tuples (Python):**
-   ```
-   $ cd python/src
-   $ python TupleWriterPipeline.py
-   ```
+**Pipeline only** (external cache and results already present locally or in S3).
+The phase flags are independent, so you can run any subset:
+```
+# Phase 2 only — reuses the existing Phase 1 baseline dump
+$ poetry run src/flows/pipeline.py --run-results --run-name 2026-04
 
-5. **Load results into ArangoDB (Java):**
-   ```
-   $ java -cp $CP gov.nih.nlm.ResultsGraphBuilder
-   ```
+# All three phases
+$ poetry run src/flows/pipeline.py \
+    --run-ontology --run-results --run-archive --run-name 2026-04
+```
+| `pipeline.py` flag | Phase | Effect |
+|--------------------|-------|--------|
+| `-o` / `--run-ontology` | 1 | Build the ontology graph and save a baseline dump (skipped if the dump exists) |
+| `-r` / `--run-results` | 2 | Restore the baseline, write tuples, build the results graph, create analyzers/views, dump results |
+| `-a` / `--run-archive` | 3 | Build the induced phenotype subgraph, create phenotype analyzers/views, dump the golden artifact, promote to S3 |
 
-6. **Select a relevant sub-graph (Java):**
-   ```
-   $ java -cp $CP gov.nih.nlm.InducedSubgraphBuilder
-   ```
-
-7. **Create ArangoDB analyzers/views:**
-   ```
-   $ cd python/src
-   $ python CellKnSchemaUtilities.py
-   ```
+Each phase is skipped automatically when its output already exists; the
+uppercase variants (`-O` / `-R` / `-A`) force the phase to re-run regardless.

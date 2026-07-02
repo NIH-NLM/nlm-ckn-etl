@@ -39,8 +39,12 @@ query target($ensemblId: String!) {
           name
           description
           maximumClinicalStage
-          synonyms
-          tradeNames
+          synonyms {
+            label
+          }
+          tradeNames {
+            label
+          }
           indications {
             count
             rows {
