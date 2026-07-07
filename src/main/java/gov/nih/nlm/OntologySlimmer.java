@@ -33,10 +33,10 @@ import static gov.nih.nlm.PathUtilities.OBO_DIR;
  *
  * <p>Two complementary filters are provided:
  * <ul>
- *   <li><b>Inclusion</b> ({@link #slimOntology}) — retain only classes positively asserted to be in the target taxon
+ *   <li><b>Inclusion</b> ({@link #slimOntologyByTaxonInclusion}) — retain only classes positively asserted to be in the target taxon
  *   via an {@code owl:someValuesFrom} restriction. Correct for ontologies whose classes are species-specific by design
  *   (e.g. the Protein Ontology, where every class is {@code only_in_taxon} some organism).</li>
- *   <li><b>Exclusion</b> ({@link #slimByTaxonExclusion}) — retain every class except those whose taxon constraints rule
+ *   <li><b>Exclusion</b> ({@link #slimOntologyByTaxonExclusion}) — retain every class except those whose taxon constraints rule
  *   the target taxon out. Correct for ontologies that are predominantly pan-taxonomic (e.g. Uberon, where most
  *   anatomical classes carry no taxon constraint and apply across species).</li>
  * </ul>
@@ -90,7 +90,7 @@ public class OntologySlimmer {
      * @throws IOException        if an I/O error occurs
      * @throws XMLStreamException if an XML parsing error occurs
      */
-    public static int slimOntology(Path inputFile, Path outputFile, String taxonId) throws IOException, XMLStreamException {
+    public static int slimOntologyByTaxonInclusion(Path inputFile, Path outputFile, String taxonId) throws IOException, XMLStreamException {
         String taxonURI = NCBITAXON_PREFIX + taxonId;
         return filterClasses(inputFile, outputFile, events -> hasSomeValuesFrom(events, taxonURI));
     }
@@ -116,7 +116,7 @@ public class OntologySlimmer {
      * @throws IOException        if an I/O error occurs
      * @throws XMLStreamException if an XML parsing error occurs
      */
-    public static int slimByTaxonExclusion(Path inputFile, Path outputFile, Set<String> targetLineage) throws IOException, XMLStreamException {
+    public static int slimOntologyByTaxonExclusion(Path inputFile, Path outputFile, Set<String> targetLineage) throws IOException, XMLStreamException {
         return filterClasses(inputFile, outputFile, events -> !isExcludedForTaxon(events, targetLineage));
     }
 
@@ -427,7 +427,7 @@ public class OntologySlimmer {
             }
             System.out.println("Slimming " + prFull + " to taxon 9606 (inclusion)");
             long startTime = System.nanoTime();
-            slimOntology(prFull, prSlim, "9606");
+            slimOntologyByTaxonInclusion(prFull, prSlim, "9606");
             System.out.println("Slimmed in " + (System.nanoTime() - startTime) / 1e9 + " s");
             Files.createDirectories(archiveDir);
             Path prArchive = archiveDir.resolve("pr.owl");
@@ -449,7 +449,7 @@ public class OntologySlimmer {
             System.out.println("Human lineage spans " + humanLineage.size() + " taxa");
             System.out.println("Slimming " + uberonFull + " to taxon 9606 (exclusion)");
             startTime = System.nanoTime();
-            int kept = slimByTaxonExclusion(uberonFull, uberonSlim, humanLineage);
+            int kept = slimOntologyByTaxonExclusion(uberonFull, uberonSlim, humanLineage);
             System.out.println("Kept " + kept + " UBERON classes; slimmed in " + (System.nanoTime() - startTime) / 1e9 + " s");
             Path uberonArchive = archiveDir.resolve("uberon-base.owl");
             System.out.println("Moving " + uberonFull + " to " + uberonArchive);

@@ -24,7 +24,7 @@ class OntologySlimmerTest {
         Path input = testOboDir.resolve("pr-test.owl");
         Path output = tempDir.resolve("pr-slim.owl");
 
-        int count = OntologySlimmer.slimOntology(input, output, "9606");
+        int count = OntologySlimmer.slimOntologyByTaxonInclusion(input, output, "9606");
 
         assertEquals(2, count);
     }
@@ -34,7 +34,7 @@ class OntologySlimmerTest {
         Path input = testOboDir.resolve("pr-test.owl");
         Path output = tempDir.resolve("pr-slim.owl");
 
-        OntologySlimmer.slimOntology(input, output, "9606");
+        OntologySlimmer.slimOntologyByTaxonInclusion(input, output, "9606");
 
         String content = Files.readString(output);
         assertTrue(content.contains("PR_000000001"), "Should contain human class PR_000000001");
@@ -46,7 +46,7 @@ class OntologySlimmerTest {
         Path input = testOboDir.resolve("pr-test.owl");
         Path output = tempDir.resolve("pr-slim.owl");
 
-        OntologySlimmer.slimOntology(input, output, "9606");
+        OntologySlimmer.slimOntologyByTaxonInclusion(input, output, "9606");
 
         String content = Files.readString(output);
         assertFalse(content.contains("PR_000000002"), "Should not contain mouse class PR_000000002");
@@ -58,7 +58,7 @@ class OntologySlimmerTest {
         Path input = testOboDir.resolve("pr-test.owl");
         Path output = tempDir.resolve("pr-slim.owl");
 
-        OntologySlimmer.slimOntology(input, output, "9606");
+        OntologySlimmer.slimOntologyByTaxonInclusion(input, output, "9606");
 
         String content = Files.readString(output);
         assertFalse(content.contains("owl:Axiom"), "Should not contain any owl:Axiom elements");
@@ -69,7 +69,7 @@ class OntologySlimmerTest {
         Path input = testOboDir.resolve("pr-test.owl");
         Path output = tempDir.resolve("pr-slim.owl");
 
-        OntologySlimmer.slimOntology(input, output, "9606");
+        OntologySlimmer.slimOntologyByTaxonInclusion(input, output, "9606");
 
         String content = Files.readString(output);
         assertTrue(content.contains("owl:Ontology"), "Should contain ontology header");
@@ -82,7 +82,7 @@ class OntologySlimmerTest {
         Path input = testOboDir.resolve("pr-test.owl");
         Path output = tempDir.resolve("pr-slim.owl");
 
-        OntologySlimmer.slimOntology(input, output, "9606");
+        OntologySlimmer.slimOntologyByTaxonInclusion(input, output, "9606");
 
         String content = Files.readString(output);
         assertTrue(content.contains("<?xml"), "Should have XML declaration");
@@ -94,7 +94,7 @@ class OntologySlimmerTest {
         Path input = testOboDir.resolve("pr-test.owl");
         Path output = tempDir.resolve("pr-slim.owl");
 
-        int count = OntologySlimmer.slimOntology(input, output, "10090");
+        int count = OntologySlimmer.slimOntologyByTaxonInclusion(input, output, "10090");
 
         assertEquals(1, count);
         String content = Files.readString(output);
@@ -133,7 +133,7 @@ class OntologySlimmerTest {
         Path output = tempDir.resolve("uberon-human.owl");
         Set<String> lineage = OntologySlimmer.buildTaxonLineage(taxslim, "9606");
 
-        int count = OntologySlimmer.slimByTaxonExclusion(input, output, lineage);
+        int count = OntologySlimmer.slimOntologyByTaxonExclusion(input, output, lineage);
 
         // heart (no constraint) and mammary gland (never_in_taxon Aves) are kept
         assertEquals(2, count);
@@ -150,7 +150,7 @@ class OntologySlimmerTest {
         Path output = tempDir.resolve("uberon-human.owl");
         Set<String> lineage = OntologySlimmer.buildTaxonLineage(taxslim, "9606");
 
-        OntologySlimmer.slimByTaxonExclusion(input, output, lineage);
+        OntologySlimmer.slimOntologyByTaxonExclusion(input, output, lineage);
 
         String content = Files.readString(output);
         assertFalse(content.contains("UBERON_0000001"), "Should drop feather (never_in_taxon Mammalia, annotation form)");
@@ -166,7 +166,7 @@ class OntologySlimmerTest {
         Path output = tempDir.resolve("uberon-human.owl");
         Set<String> lineage = OntologySlimmer.buildTaxonLineage(taxslim, "9606");
 
-        OntologySlimmer.slimByTaxonExclusion(input, output, lineage);
+        OntologySlimmer.slimOntologyByTaxonExclusion(input, output, lineage);
 
         String content = Files.readString(output);
         assertFalse(content.contains("owl:Axiom"), "Should not contain any owl:Axiom elements");
