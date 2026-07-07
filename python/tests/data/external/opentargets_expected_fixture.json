@@ -925,146 +925,29 @@
       "approvedSymbol": "FYN",
       "approvedName": "FYN proto-oncogene, Src family tyrosine kinase"
     },
-    "tractability": [
+    "diseases": [
       {
-        "label": "Approved Drug",
-        "modality": "SM",
-        "value": true
+        "score": 0.82,
+        "disease": {
+          "id": "EFO_0000305",
+          "description": "A carcinoma that arises from breast tissue.",
+          "dbXRefs": [
+            "MONDO:0007254",
+            "UMLS:C0006142"
+          ],
+          "name": "breast carcinoma"
+        }
       },
       {
-        "label": "Advanced Clinical",
-        "modality": "SM",
-        "value": false
-      },
-      {
-        "label": "Phase 1 Clinical",
-        "modality": "SM",
-        "value": false
-      },
-      {
-        "label": "Structure with Ligand",
-        "modality": "SM",
-        "value": true
-      },
-      {
-        "label": "High-Quality Ligand",
-        "modality": "SM",
-        "value": true
-      },
-      {
-        "label": "High-Quality Pocket",
-        "modality": "SM",
-        "value": false
-      },
-      {
-        "label": "Med-Quality Pocket",
-        "modality": "SM",
-        "value": true
-      },
-      {
-        "label": "Druggable Family",
-        "modality": "SM",
-        "value": true
-      },
-      {
-        "label": "Approved Drug",
-        "modality": "AB",
-        "value": false
-      },
-      {
-        "label": "Advanced Clinical",
-        "modality": "AB",
-        "value": false
-      },
-      {
-        "label": "Phase 1 Clinical",
-        "modality": "AB",
-        "value": false
-      },
-      {
-        "label": "UniProt loc high conf",
-        "modality": "AB",
-        "value": true
-      },
-      {
-        "label": "GO CC high conf",
-        "modality": "AB",
-        "value": true
-      },
-      {
-        "label": "UniProt loc med conf",
-        "modality": "AB",
-        "value": false
-      },
-      {
-        "label": "UniProt SigP or TMHMM",
-        "modality": "AB",
-        "value": false
-      },
-      {
-        "label": "GO CC med conf",
-        "modality": "AB",
-        "value": false
-      },
-      {
-        "label": "Human Protein Atlas loc",
-        "modality": "AB",
-        "value": true
-      },
-      {
-        "label": "Approved Drug",
-        "modality": "PR",
-        "value": false
-      },
-      {
-        "label": "Advanced Clinical",
-        "modality": "PR",
-        "value": false
-      },
-      {
-        "label": "Phase 1 Clinical",
-        "modality": "PR",
-        "value": false
-      },
-      {
-        "label": "Literature",
-        "modality": "PR",
-        "value": true
-      },
-      {
-        "label": "UniProt Ubiquitination",
-        "modality": "PR",
-        "value": false
-      },
-      {
-        "label": "Database Ubiquitination",
-        "modality": "PR",
-        "value": true
-      },
-      {
-        "label": "Half-life Data",
-        "modality": "PR",
-        "value": true
-      },
-      {
-        "label": "Small Molecule Binder",
-        "modality": "PR",
-        "value": true
-      },
-      {
-        "label": "Approved Drug",
-        "modality": "OC",
-        "value": false
-      },
-      {
-        "label": "Advanced Clinical",
-        "modality": "OC",
-        "value": false
-      },
-      {
-        "label": "Phase 1 Clinical",
-        "modality": "OC",
-        "value": false
+        "score": 0.41,
+        "disease": {
+          "id": "MONDO_0004992",
+          "description": "A malignant neoplasm involving the ovary.",
+          "dbXRefs": [
+            "UMLS:C0919267"
+          ],
+          "name": "ovarian cancer"
+        }
       }
     ]
   }

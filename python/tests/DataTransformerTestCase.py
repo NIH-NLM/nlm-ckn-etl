@@ -103,18 +103,18 @@ class OpenTargetsTransformerTestCase(unittest.TestCase):
         for field in ["id", "approvedSymbol", "approvedName"]:
             self.assertIn(field, entry["target"])
 
-    def test_transform_maps_tractability(self):
-        """Tractability resource is mapped from GraphQL response."""
+    def test_transform_maps_diseases(self):
+        """Diseases resource is mapped from GraphQL response."""
         transformer = OpenTargetsTransformer()
         result = transformer.transform(self.raw)
 
         key = [k for k in result if k != "gene_ensembl_ids"][0]
         expected_key = [k for k in self.expected][0]
 
-        self.assertIn("tractability", result[key])
+        self.assertIn("diseases", result[key])
         self.assertEqual(
-            result[key]["tractability"],
-            self.expected[expected_key]["tractability"],
+            result[key]["diseases"],
+            self.expected[expected_key]["diseases"],
         )
 
     def test_transform_passes_through_metadata(self):

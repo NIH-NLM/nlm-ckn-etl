@@ -31,11 +31,7 @@ ALPHABET = string.ascii_lowercase + string.digits
 OPENTARGETS_RESOURCES = [
     "diseases",
     "drugs",
-    "interactions",
     "pharmacogenetics",
-    "tractability",
-    "expression",
-    "depmap",
 ]
 PURLBASE = "http://purl.obolibrary.org/obo"
 RDFSBASE = "http://www.w3.org/1999/02/22-rdf-syntax-ns"

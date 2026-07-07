@@ -29,11 +29,7 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
             "ENSG00000001626": {
                 "diseases": [],
                 "drugs": [],
-                "interactions": [],
                 "pharmacogenetics": [],
-                "tractability": [],
-                "expression": [],
-                "depmap": [],
             },
         }
 
