@@ -439,11 +439,12 @@ def slim_ontologies(
 
     OntologySlimmer reduces two ontologies to human-only (NCBITaxon:9606):
     ``pr.owl`` -> ``pr-slim.owl`` keeps only protein classes asserted to be in
-    human (inclusion), and ``uberon-base.owl`` -> ``uberon-human.owl`` keeps all
-    anatomy except classes a taxon constraint excludes from human (exclusion,
-    using the NCBITaxon hierarchy in ``taxslim.owl``).  Without this step
-    OntologyGraphBuilder processes the full unfiltered ontologies, which are
-    extremely large and degrade performance.  Must run after
+    human (inclusion), and ``uberon-base.owl`` -> ``uberon-human.owl`` keeps
+    all anatomy except classes a taxon constraint excludes from human
+    (exclusion, using the NCBITaxon hierarchy in ``taxslim.owl``).  Without
+    this step OntologyGraphBuilder processes the full unfiltered ontologies,
+    which are either extremely large and so degrade performance, in the case of
+    PR, or include irrelevant terms, in the case of UBERON.  Must run after
     ``download_ontologies`` and before ``build_ontology_graph``.
     """
     logger = get_run_logger()
