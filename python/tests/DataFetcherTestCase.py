@@ -355,10 +355,7 @@ class OpenTargetsFetcherTestCase(unittest.TestCase):
 
         self.assertIn("target", result)
         self.assertEqual(result["target"], {})
-        for resource in [
-            "diseases", "drugs", "interactions", "pharmacogenetics",
-            "tractability", "expression", "depmap",
-        ]:
+        for resource in ["diseases", "drugs", "pharmacogenetics"]:
             self.assertIn(resource, result)
 
     def test_before_dump_stores_ids(self):

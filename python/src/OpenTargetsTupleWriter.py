@@ -82,8 +82,8 @@ def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
     ----------
     opentargets_results : dict
         Dictionary containing Open Targets results keyed by gene
-        Ensembl id, with sub-keys for diseases, drugs, interactions,
-        pharmacogenetics, tractability, expression, and depmap.
+        Ensembl id, with sub-keys for diseases, drugs, and
+        pharmacogenetics.
     gene_results : dict
         Dictionary containing NCBI Gene results keyed by gene Entrez
         id. Used to look up UniProt names for protein associations.
@@ -367,8 +367,8 @@ def main():
     """Run Open Targets tuple writer.
 
     Loads transformed Open Targets and Gene results and creates tuples
-    for each target, disease, drug, interaction, and pharmacogenetic
-    resource. Writes output to a single JSON tuple file.
+    for each target, disease, drug, and pharmacogenetic resource.
+    Writes output to a single JSON tuple file.
     """
     external_dir = get_current_run().external_dir
     opentargets_path = external_dir / "opentargets_transformed.json"

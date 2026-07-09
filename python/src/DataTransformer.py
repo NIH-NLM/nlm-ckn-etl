@@ -212,17 +212,13 @@ class CellxGeneTransformer(BaseTransformer):
 _RESOURCE_PATHS = {
     "diseases": ("associatedDiseases", "rows"),
     "drugs": ("drugAndClinicalCandidates", "rows"),
-    "interactions": ("interactions", "rows"),
     "pharmacogenetics": ("pharmacogenomics", None),
-    "tractability": ("tractability", None),
-    "expression": ("expressions", None),
-    "depmap": ("depMapEssentiality", None),
 }
 
 
 class OpenTargetsTransformer(BaseTransformer):
     """Maps nested GraphQL response to flat resource keys (diseases,
-    drugs, interactions, etc.)."""
+    drugs, pharmacogenetics)."""
 
     name = "opentargets"
 

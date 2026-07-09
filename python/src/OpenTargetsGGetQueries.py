@@ -81,41 +81,6 @@ query target($ensemblId: String!) {
         }
       }
     }
-    interactions {
-      count
-      rows {
-        count
-        score
-        sourceDatabase
-        targetA {
-          proteinIds {
-            id
-          }
-          id
-          approvedSymbol
-        }
-        intABiologicalRole
-        speciesA {
-          taxonId
-        }
-
-        targetB {
-          proteinIds {
-            id
-          }
-          id
-          approvedSymbol
-        }
-        intBBiologicalRole
-        speciesB {
-          taxonId
-        }
-        evidences {
-          pubmedId
-          evidenceScore
-        }
-      }
-    }
     pharmacogenomics {
       variantRsId
       genotypeId
@@ -145,38 +110,6 @@ query target($ensemblId: String!) {
       phenotypeFromSourceId
       variantId
       haplotypeId
-    }
-    tractability {
-      label
-      modality
-      value
-    }
-    expressions {
-      tissue {
-        id
-        label
-        anatomicalSystems
-        organs
-      }
-      rna {
-        zscore
-        value
-        unit
-        level
-      }
-    }
-    depMapEssentiality {
-      screens {
-        depmapId
-        expression
-        geneEffect
-        cellLineName
-        diseaseCellLineId
-        diseaseFromSource
-        mutation
-      }
-      tissueId
-      tissueName
     }
   }
 }
@@ -256,54 +189,6 @@ query diseases($ensemblId: String!) {
 }
 """,
     },
-    "interactions": {
-        "purpose": "Duplicate and extend gget opentagets -r interactions command",
-        "variables": {
-            "ensemblId": "ENSG00000169252",
-        },
-        "query_string": """
-query interactions($ensemblId: String!) {
-  target(ensemblId: $ensemblId) {
-    id
-    interactions {
-      count
-      rows {
-        count
-        score
-        sourceDatabase
-        targetA {
-          proteinIds {
-            id
-          }
-          id
-          approvedSymbol
-        }
-        intABiologicalRole
-        speciesA {
-          taxonId
-        }
-
-        targetB {
-          proteinIds {
-            id
-          }
-          id
-          approvedSymbol
-        }
-        intBBiologicalRole
-        speciesB {
-          taxonId
-        }
-        evidences {
-          pubmedId
-          evidenceScore
-        }
-      }
-    }
-  }
-}
-""",
-    },
     "pharmacogenetics": {
         "purpose": "Duplicate and extend gget opentagets -r pharmacogenetics command",
         "variables": {
@@ -342,77 +227,6 @@ query pharmacogenetics($ensemblId: String!) {
       phenotypeFromSourceId
       variantId
       haplotypeId
-    }
-  }
-}
-""",
-    },
-    "tractability": {
-        "purpose": "Duplicate and extend gget opentagets -r tractability command",
-        "variables": {
-            "ensemblId": "ENSG00000169252",
-        },
-        "query_string": """
-query tractability($ensemblId: String!) {
-  target(ensemblId: $ensemblId) {
-    id
-    tractability {
-      label
-      modality
-      value
-    }
-  }
-}
-""",
-    },
-    "expression": {
-        "purpose": "Duplicate and extend gget opentagets -r expression command",
-        "variables": {
-            "ensemblId": "ENSG00000169252",
-        },
-        "query_string": """
-query expression($ensemblId: String!) {
-  target(ensemblId: $ensemblId) {
-    id
-    expressions {
-      tissue {
-        id
-        label
-        anatomicalSystems
-        organs
-      }
-      rna {
-        zscore
-        value
-        unit
-        level
-      }
-    }
-  }
-}
-""",
-    },
-    "depmap": {
-        "purpose": "Duplicate and extend gget opentagets -r depmap command",
-        "variables": {
-            "ensemblId": "ENSG00000169252",
-        },
-        "query_string": """
-query depmap($ensemblId: String!) {
-  target(ensemblId: $ensemblId) {
-    id
-    depMapEssentiality {
-      screens {
-        depmapId
-        expression
-        geneEffect
-        cellLineName
-        diseaseCellLineId
-        diseaseFromSource
-        mutation
-      }
-      tissueId
-      tissueName
     }
   }
 }
