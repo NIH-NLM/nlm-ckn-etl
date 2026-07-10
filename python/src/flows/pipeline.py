@@ -1384,6 +1384,12 @@ def nlm_ckn_etl(
             if baseline_dump_dir.is_dir():
                 shutil.rmtree(baseline_dump_dir)
             dump_arangodb(baseline_dump_dir, arango_db_password, label="baseline")
+            # Capture the ontology named-graph (and analyzer) definitions next to
+            # the dump.  arangodump excludes the _graphs system collection, so
+            # without this sidecar the KN-Ontologies-v2.0 edge definitions are
+            # lost on restore and Phase 2 would rebuild the graph from results
+            # edges only — starving InducedSubgraphBuilder of the ontology edges.
+            export_graphs_and_analyzers(baseline_dump_dir, arango_db_password)
             sync_baseline_dump_to_s3(baseline_dump_dir, jar_key)
             logger.info(
                 f"Phase 1 complete — baseline dump: {baseline_dump_dir.name}/ "
@@ -1465,6 +1471,13 @@ def nlm_ckn_etl(
         # Restore the baseline so this phase is fully repeatable.
         # Any data written by a previous Phase 2 run is discarded here.
         restore_arangodb(baseline_dump_dir, arango_db_password)
+
+        # Recreate the ontology named graph from the baseline sidecar (the dump
+        # excludes _graphs).  Must run before build_results_graph so
+        # ResultsGraphBuilder.createOrGetGraph extends the full KN-Ontologies-v2.0
+        # definition instead of creating a results-only one.  Whether Phase 1 ran
+        # in this invocation or not, the graph definition is now complete.
+        import_graphs_from_sidecar(baseline_dump_dir, arango_db_password)
 
         # Clear the tuples directory before writing fresh output
         tuples_dir = REPO_ROOT / "data" / f"tuples-{run_name}"
