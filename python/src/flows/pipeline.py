@@ -167,7 +167,9 @@ def _wipe_arangodb_data(arango_db_home: str, logger) -> None:
                 vol.remove(force=True)
                 logger.info(f"Removed named ArangoDB volume: {volume_source}")
             except docker_sdk.errors.NotFound:
-                logger.info(f"Named ArangoDB volume not found, nothing to remove: {volume_source}")
+                logger.info(
+                    f"Named ArangoDB volume not found, nothing to remove: {volume_source}"
+                )
         except docker_sdk.errors.DockerException as e:
             logger.warning(f"Could not remove named volume {volume_source}: {e}")
     else:
@@ -435,10 +437,23 @@ def slim_ontologies(
 ) -> None:
     """Run OntologySlimmer to filter downloaded OWL files before graph loading.
 
-    OntologySlimmer reduces ``pr.owl`` to human-only (NCBITaxon:9606) protein
-    classes.  Without this step OntologyGraphBuilder processes the full
-    unfiltered PR ontology, which is extremely large and degrades performance.
-    Must run after ``download_ontologies`` and before ``build_ontology_graph``.
+    OntologySlimmer reduces two ontologies to the permitted taxa (currently
+    human only, NCBITaxon:9606; see TaxonConfig.PERMITTED_TAXA):
+    ``pr.owl`` -> ``pr-slim.owl`` keeps only protein classes asserted to be in
+    a permitted taxon (inclusion), and ``uberon-base.owl`` ->
+    ``uberon-human.owl`` keeps all anatomy except classes whose taxon
+    constraints -- ``never_in_taxon``, ``only_in_taxon``, or ``in_taxon`` --
+    rule out every permitted taxon (exclusion, using the NCBITaxon hierarchy in
+    ``taxslim.owl``).  Without this step OntologyGraphBuilder processes the full
+    unfiltered ontologies, which are either extremely large and so degrade
+    performance, in the case of PR, or include irrelevant terms, in the case of
+    UBERON.  Must run after ``download_ontologies`` and before
+    ``build_ontology_graph``.
+
+    Taxon references that survive on kept classes are handled downstream by
+    OntologyGraphBuilder, which loads a vertex only for the permitted taxa and
+    drops taxon-constraint relations, so non-human taxa and those relations do
+    not reach the graph.
     """
     logger = get_run_logger()
     logger.info(f"Slimming ontologies (gov.nih.nlm.OntologySlimmer, {java_opts})")
@@ -579,8 +594,7 @@ def export_graphs_and_analyzers(
             return json.loads(resp.read())
 
     databases = [
-        d.name for d in dump_dir.iterdir()
-        if d.is_dir() and not d.name.startswith("_")
+        d.name for d in dump_dir.iterdir() if d.is_dir() and not d.name.startswith("_")
     ]
 
     for db in sorted(databases):
@@ -601,15 +615,14 @@ def export_graphs_and_analyzers(
 
         try:
             data = _get(f"/_db/{db}/_api/analyzer")
-            analyzers = [
-                a for a in data.get("result", [])
-                if "::" in a.get("name", "")
-            ]
+            analyzers = [a for a in data.get("result", []) if "::" in a.get("name", "")]
             # True NDJSON: one compact object per line (empty list → empty file).
             (db_dir / "ckn-analyzers.ndjson").write_text(
                 "".join(json.dumps(a) + "\n" for a in analyzers)
             )
-            logger.info(f"Exported {len(analyzers)} analyzer(s) → {db}/ckn-analyzers.ndjson")
+            logger.info(
+                f"Exported {len(analyzers)} analyzer(s) → {db}/ckn-analyzers.ndjson"
+            )
         except Exception as exc:
             logger.warning(f"Could not export analyzers for {db}: {exc}")
 
@@ -686,7 +699,9 @@ def import_graphs_from_sidecar(dump_dir: Path, arango_db_password: str) -> None:
                     logger.info(f"Graph {db}/{name} already exists — skipping")
                 else:
                     detail = exc.read().decode(errors="ignore")
-                    logger.warning(f"Could not recreate graph {db}/{name}: {exc} {detail}")
+                    logger.warning(
+                        f"Could not recreate graph {db}/{name}: {exc} {detail}"
+                    )
     logger.info("Graph sidecar import complete")
 
 
@@ -1038,7 +1053,6 @@ def build_induced_subgraph(
     logger.info("Induced subgraph built")
 
 
-
 @task(name="create-analyzers-and-views", log_prints=True)
 def create_analyzers_and_views(arango_db_password: str, database: str) -> None:
     """Create ArangoDB analyzers and a search view in the named database.
@@ -1164,11 +1178,11 @@ def promote_to_production(
         f"JAR key:  {jar_key or 'unknown'}",
     ]
 
-    gh_server   = os.getenv("GITHUB_SERVER_URL")
-    gh_repo     = os.getenv("GITHUB_REPOSITORY")
-    gh_run_id   = os.getenv("GITHUB_RUN_ID")
+    gh_server = os.getenv("GITHUB_SERVER_URL")
+    gh_repo = os.getenv("GITHUB_REPOSITORY")
+    gh_run_id = os.getenv("GITHUB_RUN_ID")
     gh_workflow = os.getenv("GITHUB_WORKFLOW")
-    gh_actor    = os.getenv("GITHUB_ACTOR")
+    gh_actor = os.getenv("GITHUB_ACTOR")
     if gh_server and gh_repo and gh_run_id:
         build_info_lines += [
             f"GHA workflow: {gh_workflow or 'unknown'}",
@@ -1217,7 +1231,9 @@ def promote_to_production(
             else {"ServerSideEncryption": "AES256"}
         )
         boto3.client("s3").upload_file(
-            str(build_info_path), bucket, key,
+            str(build_info_path),
+            bucket,
+            key,
             ExtraArgs={"ACL": "private", **sse_args},
         )
 

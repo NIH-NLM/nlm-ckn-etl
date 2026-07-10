@@ -1,0 +1,100 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://purl.obolibrary.org/obo/uberon.owl#"
+     xml:base="http://purl.obolibrary.org/obo/uberon.owl"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:oboInOwl="http://www.geneontology.org/formats/oboInOwl#"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:obo="http://purl.obolibrary.org/obo/">
+    <owl:Ontology rdf:about="http://purl.obolibrary.org/obo/uberon.owl">
+        <owl:versionIRI rdf:resource="http://purl.obolibrary.org/obo/uberon/releases/2024-01-01/uberon-base.owl"/>
+    </owl:Ontology>
+
+    <owl:AnnotationProperty rdf:about="http://purl.obolibrary.org/obo/IAO_0000115">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">definition</rdfs:label>
+    </owl:AnnotationProperty>
+
+    <owl:AnnotationProperty rdf:about="http://purl.obolibrary.org/obo/RO_0002161">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">never_in_taxon</rdfs:label>
+    </owl:AnnotationProperty>
+
+    <owl:ObjectProperty rdf:about="http://purl.obolibrary.org/obo/RO_0002160">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">only in taxon</rdfs:label>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://purl.obolibrary.org/obo/RO_0002162">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">in taxon</rdfs:label>
+    </owl:ObjectProperty>
+
+    <!-- Pan-taxonomic class, no taxon constraint: KEEP -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000004">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">heart</rdfs:label>
+        <obo:IAO_0000115 rdf:datatype="http://www.w3.org/2001/XMLSchema#string">A hollow muscular organ.</obo:IAO_0000115>
+    </owl:Class>
+
+    <!-- never_in_taxon Mammalia (annotation form); human is a mammal: EXCLUDE -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000001">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">feather</rdfs:label>
+        <obo:RO_0002161 rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_40674"/>
+    </owl:Class>
+
+    <!-- never_in_taxon Aves (annotation form); human is not a bird: KEEP -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000002">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">mammary gland</rdfs:label>
+        <obo:RO_0002161 rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_8782"/>
+    </owl:Class>
+
+    <!-- only_in_taxon Insecta (logical restriction form); human is not an insect: EXCLUDE -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000003">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">insect wing</rdfs:label>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://purl.obolibrary.org/obo/RO_0002160"/>
+                <owl:someValuesFrom rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_7147"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+    </owl:Class>
+
+    <!-- only_in_taxon Insecta (annotation form); human is not an insect: EXCLUDE -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000006">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">insect cuticle</rdfs:label>
+        <obo:RO_0002160 rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_7147"/>
+    </owl:Class>
+
+    <!-- never_in_taxon Mammalia (logical restriction form); human is a mammal: EXCLUDE -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000005">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">swim bladder</rdfs:label>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://purl.obolibrary.org/obo/RO_0002161"/>
+                <owl:someValuesFrom rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_40674"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+    </owl:Class>
+
+    <!-- in_taxon Aves (annotation form); human is not a bird: EXCLUDE (positive restriction off human lineage) -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000007">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">beak</rdfs:label>
+        <obo:RO_0002162 rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_8782"/>
+    </owl:Class>
+
+    <!-- in_taxon Mammalia (logical restriction form); human is a mammal: KEEP (positive restriction covers human) -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000008">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">mammary tissue</rdfs:label>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://purl.obolibrary.org/obo/RO_0002162"/>
+                <owl:someValuesFrom rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_40674"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+    </owl:Class>
+
+    <!-- Axiom that should be dropped -->
+    <owl:Axiom>
+        <owl:annotatedSource rdf:resource="http://purl.obolibrary.org/obo/UBERON_0000001"/>
+        <owl:annotatedProperty rdf:resource="http://purl.obolibrary.org/obo/RO_0002161"/>
+        <owl:annotatedTarget rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_40674"/>
+        <oboInOwl:hasDbXref rdf:datatype="http://www.w3.org/2001/XMLSchema#string">PMID:00000000</oboInOwl:hasDbXref>
+    </owl:Axiom>
+</rdf:RDF>
