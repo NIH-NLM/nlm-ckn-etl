@@ -463,7 +463,7 @@ def nlm_ckn_release(
     try:
         nlm_ckn_etl(
             run_ontology=True,
-            force_ontology=False,
+            force_ontology=True,
             run_results=True,
             force_results=True,
             run_archive=True,
