@@ -31,14 +31,14 @@ import static gov.nih.nlm.PathUtilities.OBO_DIR;
 /**
  * Filters large OWL ontology files by taxon using StAX streaming, so the files can be processed with minimal memory.
  *
- * <p>Two complementary filters are provided:
+ * <p>Two complementary filters are provided, each restricting to the taxa in {@link TaxonConfig#PERMITTED_TAXA}:
  * <ul>
- *   <li><b>Inclusion</b> ({@link #slimOntologyByTaxonInclusion}) — retain only classes positively asserted to be in the target taxon
- *   via an {@code owl:someValuesFrom} restriction. Correct for ontologies whose classes are species-specific by design
- *   (e.g. the Protein Ontology, where every class is {@code only_in_taxon} some organism).</li>
- *   <li><b>Exclusion</b> ({@link #slimOntologyByTaxonExclusion}) — retain every class except those whose taxon constraints rule
- *   the target taxon out. Correct for ontologies that are predominantly pan-taxonomic (e.g. Uberon, where most
- *   anatomical classes carry no taxon constraint and apply across species).</li>
+ *   <li><b>Inclusion</b> ({@link #slimOntologyByTaxonInclusion}) — retain only classes positively asserted to be in a
+ *   permitted taxon via an {@code owl:someValuesFrom} restriction. Correct for ontologies whose classes are
+ *   species-specific by design (e.g. the Protein Ontology, where every class is {@code only_in_taxon} some organism).</li>
+ *   <li><b>Exclusion</b> ({@link #slimOntologyByTaxonExclusion}) — retain every class except those whose taxon
+ *   constraints rule out every permitted taxon. Correct for ontologies that are predominantly pan-taxonomic (e.g.
+ *   Uberon, where most anatomical classes carry no taxon constraint and apply across species).</li>
  * </ul>
  */
 public class OntologySlimmer {
@@ -51,10 +51,13 @@ public class OntologySlimmer {
     private static final String NCBITAXON_PREFIX = OBO_NS + "NCBITaxon_";
 
     // RO taxon-constraint properties (used both as restriction onProperty URIs and as direct annotation local names).
+    // never_in_taxon is an exclusion; only_in_taxon and in_taxon are positive assertions of taxon membership.
     private static final String NEVER_IN_TAXON_URI = OBO_NS + "RO_0002161"; // never_in_taxon
     private static final String ONLY_IN_TAXON_URI = OBO_NS + "RO_0002160";  // only_in_taxon
+    private static final String IN_TAXON_URI = OBO_NS + "RO_0002162";       // in_taxon
     private static final String NEVER_IN_TAXON_LOCAL = "RO_0002161";
     private static final String ONLY_IN_TAXON_LOCAL = "RO_0002160";
+    private static final String IN_TAXON_LOCAL = "RO_0002162";
 
     /**
      * Decides whether a fully-buffered top-level {@code owl:Class} should be written to the output.
@@ -85,14 +88,18 @@ public class OntologySlimmer {
      *
      * @param inputFile  Path to the full OWL file
      * @param outputFile Path to write the filtered OWL file
-     * @param taxonId    NCBI taxon ID to filter on (e.g., "9606" for human)
+     * @param taxonIds   NCBI taxon IDs to filter on (e.g., {@code {"9606"}} for human); a class is retained when it is
+     *                   asserted to be in any of them
      * @return The number of classes written
      * @throws IOException        if an I/O error occurs
      * @throws XMLStreamException if an XML parsing error occurs
      */
-    public static int slimOntologyByTaxonInclusion(Path inputFile, Path outputFile, String taxonId) throws IOException, XMLStreamException {
-        String taxonURI = NCBITAXON_PREFIX + taxonId;
-        return filterClasses(inputFile, outputFile, events -> hasSomeValuesFrom(events, taxonURI));
+    public static int slimOntologyByTaxonInclusion(Path inputFile, Path outputFile, Set<String> taxonIds) throws IOException, XMLStreamException {
+        Set<String> taxonURIs = new HashSet<>();
+        for (String taxonId : taxonIds) {
+            taxonURIs.add(NCBITAXON_PREFIX + taxonId);
+        }
+        return filterClasses(inputFile, outputFile, events -> hasSomeValuesFrom(events, taxonURIs));
     }
 
     /**
@@ -100,24 +107,37 @@ public class OntologySlimmer {
      * ontology header, all annotation and object property declarations, and every {@code owl:Class} element that is not
      * excluded. Drops all {@code owl:Axiom} elements.
      *
-     * <p>A class is excluded when it asserts either:
+     * <p>A class is excluded for a single target taxon when it asserts either:
      * <ul>
      *   <li>{@code never_in_taxon} (RO:0002161) {@code T} where the target taxon is {@code T} or a descendant of
-     *   {@code T} (i.e. {@code T} is in {@code targetLineage}); or</li>
-     *   <li>{@code only_in_taxon} (RO:0002160) restricted to taxa none of which cover the target taxon.</li>
+     *   {@code T} (i.e. {@code T} is in the target's lineage); or</li>
+     *   <li>a positive taxon restriction — {@code only_in_taxon} (RO:0002160) or {@code in_taxon} (RO:0002162) —
+     *   restricted to taxa none of which cover the target taxon.</li>
      * </ul>
      * Both the direct annotation form (e.g. {@code <obo:RO_0002161 rdf:resource="NCBITaxon_..."/>}) and the logical
      * restriction form ({@code owl:onProperty} + {@code owl:someValuesFrom}) are recognized.
      *
-     * @param inputFile     Path to the full OWL file
-     * @param outputFile    Path to write the filtered OWL file
-     * @param targetLineage The target taxon together with all of its ancestors (see {@link #buildTaxonLineage})
+     * <p>When more than one taxon is permitted, a class is written if it is <em>not</em> excluded for at least one of
+     * them (i.e. it is relevant to some permitted taxon), and dropped only when excluded for every permitted taxon.
+     *
+     * @param inputFile      Path to the full OWL file
+     * @param outputFile     Path to write the filtered OWL file
+     * @param targetLineages One lineage per permitted taxon, each the taxon together with all of its ancestors (see
+     *                       {@link #buildTaxonLineages})
      * @return The number of classes written
      * @throws IOException        if an I/O error occurs
      * @throws XMLStreamException if an XML parsing error occurs
      */
-    public static int slimOntologyByTaxonExclusion(Path inputFile, Path outputFile, Set<String> targetLineage) throws IOException, XMLStreamException {
-        return filterClasses(inputFile, outputFile, events -> !isExcludedForTaxon(events, targetLineage));
+    public static int slimOntologyByTaxonExclusion(Path inputFile, Path outputFile, List<Set<String>> targetLineages) throws IOException, XMLStreamException {
+        return filterClasses(inputFile, outputFile, events -> {
+            TaxonConstraints constraints = extractTaxonConstraints(events);
+            for (Set<String> lineage : targetLineages) {
+                if (!isExcludedForLineage(constraints, lineage)) {
+                    return true; // relevant to at least one permitted taxon: keep
+                }
+            }
+            return false; // excluded for every permitted taxon: drop
+        });
     }
 
     /**
@@ -237,19 +257,19 @@ public class OntologySlimmer {
     }
 
     /**
-     * Whether the buffered class contains an {@code owl:someValuesFrom} restriction referencing the target URI.
+     * Whether the buffered class contains an {@code owl:someValuesFrom} restriction referencing any of the target URIs.
      *
      * @param classEvents Buffered events for a single class
-     * @param targetURI   The taxon URI to match
+     * @param targetURIs  The taxon URIs to match
      * @return {@code true} if a matching restriction is present
      */
-    private static boolean hasSomeValuesFrom(List<XMLEvent> classEvents, String targetURI) {
+    private static boolean hasSomeValuesFrom(List<XMLEvent> classEvents, Set<String> targetURIs) {
         for (XMLEvent e : classEvents) {
             if (e.isStartElement()) {
                 StartElement se = e.asStartElement();
                 if (OWL_NS.equals(se.getName().getNamespaceURI())
                         && "someValuesFrom".equals(se.getName().getLocalPart())
-                        && targetURI.equals(getResource(se))) {
+                        && targetURIs.contains(getResource(se))) {
                     return true;
                 }
             }
@@ -258,17 +278,27 @@ public class OntologySlimmer {
     }
 
     /**
-     * Whether the buffered class is excluded for the target taxon, given the target's lineage (the taxon and all of its
-     * ancestors). Recognizes {@code never_in_taxon} and {@code only_in_taxon} constraints in both the direct annotation
-     * form and the logical {@code owl:onProperty}/{@code owl:someValuesFrom} restriction form.
+     * The taxon constraints asserted by a single class, split by polarity: {@code neverInTaxon} taxa exclude the class
+     * from a taxon and its descendants, while {@code positiveInTaxon} taxa (from {@code only_in_taxon} and
+     * {@code in_taxon}) assert the class is found only within the named taxa (and their descendants).
      *
-     * @param classEvents   Buffered events for a single class
-     * @param targetLineage The target taxon together with all of its ancestors
-     * @return {@code true} if the class should be excluded
+     * @param neverInTaxon    Taxa named by {@code never_in_taxon} constraints
+     * @param positiveInTaxon Taxa named by {@code only_in_taxon} or {@code in_taxon} constraints
      */
-    static boolean isExcludedForTaxon(List<XMLEvent> classEvents, Set<String> targetLineage) {
+    record TaxonConstraints(Set<String> neverInTaxon, Set<String> positiveInTaxon) {
+    }
+
+    /**
+     * Extract the taxon constraints asserted by a buffered class. Recognizes {@code never_in_taxon} (RO:0002161),
+     * {@code only_in_taxon} (RO:0002160), and {@code in_taxon} (RO:0002162) in both the direct annotation form and the
+     * logical {@code owl:onProperty}/{@code owl:someValuesFrom} restriction form.
+     *
+     * @param classEvents Buffered events for a single class
+     * @return The taxon constraints the class asserts
+     */
+    static TaxonConstraints extractTaxonConstraints(List<XMLEvent> classEvents) {
         Set<String> neverInTaxon = new HashSet<>();
-        Set<String> onlyInTaxon = new HashSet<>();
+        Set<String> positiveInTaxon = new HashSet<>();
         String restrictionProperty = null; // RO property of the enclosing owl:Restriction, if relevant
 
         for (XMLEvent e : classEvents) {
@@ -281,23 +311,23 @@ public class OntologySlimmer {
                     restrictionProperty = null;
                 } else if (OWL_NS.equals(ns) && "onProperty".equals(ln)) {
                     String p = getResource(se);
-                    if (NEVER_IN_TAXON_URI.equals(p) || ONLY_IN_TAXON_URI.equals(p)) {
+                    if (NEVER_IN_TAXON_URI.equals(p) || ONLY_IN_TAXON_URI.equals(p) || IN_TAXON_URI.equals(p)) {
                         restrictionProperty = p;
                     }
                 } else if (OWL_NS.equals(ns) && "someValuesFrom".equals(ln)) {
                     String t = getResource(se);
                     if (t != null && restrictionProperty != null) {
-                        (NEVER_IN_TAXON_URI.equals(restrictionProperty) ? neverInTaxon : onlyInTaxon).add(t);
+                        (NEVER_IN_TAXON_URI.equals(restrictionProperty) ? neverInTaxon : positiveInTaxon).add(t);
                     }
                 } else if (OBO_NS.equals(ns) && NEVER_IN_TAXON_LOCAL.equals(ln)) {
                     String t = getResource(se);
                     if (t != null) {
                         neverInTaxon.add(t);
                     }
-                } else if (OBO_NS.equals(ns) && ONLY_IN_TAXON_LOCAL.equals(ln)) {
+                } else if (OBO_NS.equals(ns) && (ONLY_IN_TAXON_LOCAL.equals(ln) || IN_TAXON_LOCAL.equals(ln))) {
                     String t = getResource(se);
                     if (t != null) {
-                        onlyInTaxon.add(t);
+                        positiveInTaxon.add(t);
                     }
                 }
             } else if (e.isEndElement()) {
@@ -308,15 +338,27 @@ public class OntologySlimmer {
             }
         }
 
+        return new TaxonConstraints(neverInTaxon, positiveInTaxon);
+    }
+
+    /**
+     * Whether a class with the given taxon constraints is excluded for a target taxon, described by its lineage (the
+     * taxon and all of its ancestors).
+     *
+     * @param constraints   The taxon constraints asserted by the class
+     * @param targetLineage The target taxon together with all of its ancestors
+     * @return {@code true} if the class should be excluded for that target taxon
+     */
+    static boolean isExcludedForLineage(TaxonConstraints constraints, Set<String> targetLineage) {
         // never_in_taxon T excludes the target when the target is T or a descendant of T (T in the target lineage).
-        for (String t : neverInTaxon) {
+        for (String t : constraints.neverInTaxon()) {
             if (targetLineage.contains(t)) {
                 return true;
             }
         }
-        // only_in_taxon excludes the target when none of the named taxa cover it.
-        if (!onlyInTaxon.isEmpty()) {
-            for (String t : onlyInTaxon) {
+        // A positive taxon restriction excludes the target when none of the named taxa cover it.
+        if (!constraints.positiveInTaxon().isEmpty()) {
+            for (String t : constraints.positiveInTaxon()) {
                 if (targetLineage.contains(t)) {
                     return false;
                 }
@@ -338,6 +380,38 @@ public class OntologySlimmer {
      * @throws XMLStreamException if an XML parsing error occurs
      */
     public static Set<String> buildTaxonLineage(Path taxslimFile, String taxonId) throws IOException, XMLStreamException {
+        return walkLineage(readChildToParents(taxslimFile), taxonId);
+    }
+
+    /**
+     * Build one lineage per taxon (see {@link #buildTaxonLineage}), reading the NCBITaxon hierarchy from
+     * {@code taxslimFile} once and walking it from each taxon.
+     *
+     * @param taxslimFile Path to an NCBITaxon OWL file containing the taxon hierarchy
+     * @param taxonIds    NCBI taxon IDs whose lineages to build (e.g., {@code {"9606"}} for human)
+     * @return One lineage (taxon plus all ancestors) per taxon id
+     * @throws IOException        if an I/O error occurs
+     * @throws XMLStreamException if an XML parsing error occurs
+     */
+    public static List<Set<String>> buildTaxonLineages(Path taxslimFile, Set<String> taxonIds) throws IOException, XMLStreamException {
+        Map<String, Set<String>> childToParents = readChildToParents(taxslimFile);
+        List<Set<String>> lineages = new ArrayList<>();
+        for (String taxonId : taxonIds) {
+            lineages.add(walkLineage(childToParents, taxonId));
+        }
+        return lineages;
+    }
+
+    /**
+     * Read the child → parents map from the {@code rdfs:subClassOf} edges among NCBITaxon classes in an NCBITaxon
+     * ontology file (e.g. taxslim.owl).
+     *
+     * @param taxslimFile Path to an NCBITaxon OWL file containing the taxon hierarchy
+     * @return A map from each NCBITaxon URI to the set of its parent NCBITaxon URIs
+     * @throws IOException        if an I/O error occurs
+     * @throws XMLStreamException if an XML parsing error occurs
+     */
+    private static Map<String, Set<String>> readChildToParents(Path taxslimFile) throws IOException, XMLStreamException {
         Map<String, Set<String>> childToParents = new HashMap<>();
         XMLInputFactory inputFactory = hardenedInputFactory();
 
@@ -377,8 +451,17 @@ public class OntologySlimmer {
             }
             reader.close();
         }
+        return childToParents;
+    }
 
-        // Walk up from the target taxon, collecting it and all of its ancestors
+    /**
+     * Walk up from the target taxon, collecting it and all of its ancestors.
+     *
+     * @param childToParents A map from each NCBITaxon URI to its parent NCBITaxon URIs
+     * @param taxonId        NCBI taxon ID whose lineage to build
+     * @return The taxon URI together with all ancestor taxon URIs
+     */
+    private static Set<String> walkLineage(Map<String, Set<String>> childToParents, String taxonId) {
         Set<String> lineage = new HashSet<>();
         Deque<String> stack = new ArrayDeque<>();
         stack.push(NCBITAXON_PREFIX + taxonId);
@@ -425,9 +508,9 @@ public class OntologySlimmer {
             if (!Files.exists(prFull)) {
                 throw new RuntimeException("pr.owl not found in " + OBO_DIR);
             }
-            System.out.println("Slimming " + prFull + " to taxon 9606 (inclusion)");
+            System.out.println("Slimming " + prFull + " to taxa " + TaxonConfig.PERMITTED_TAXA + " (inclusion)");
             long startTime = System.nanoTime();
-            slimOntologyByTaxonInclusion(prFull, prSlim, "9606");
+            slimOntologyByTaxonInclusion(prFull, prSlim, TaxonConfig.PERMITTED_TAXA);
             System.out.println("Slimmed in " + (System.nanoTime() - startTime) / 1e9 + " s");
             Files.createDirectories(archiveDir);
             Path prArchive = archiveDir.resolve("pr.owl");
@@ -444,12 +527,13 @@ public class OntologySlimmer {
             if (!Files.exists(taxslimFile)) {
                 throw new RuntimeException("taxslim.owl not found in " + OBO_DIR);
             }
-            System.out.println("Building human (NCBITaxon 9606) lineage from " + taxslimFile);
-            Set<String> humanLineage = buildTaxonLineage(taxslimFile, "9606");
-            System.out.println("Human lineage spans " + humanLineage.size() + " taxa");
-            System.out.println("Slimming " + uberonFull + " to taxon 9606 (exclusion)");
+            System.out.println("Building lineages for taxa " + TaxonConfig.PERMITTED_TAXA + " from " + taxslimFile);
+            List<Set<String>> lineages = buildTaxonLineages(taxslimFile, TaxonConfig.PERMITTED_TAXA);
+            int lineageTaxa = lineages.stream().mapToInt(Set::size).sum();
+            System.out.println("Lineages span " + lineageTaxa + " taxa across " + lineages.size() + " permitted taxon(s)");
+            System.out.println("Slimming " + uberonFull + " to taxa " + TaxonConfig.PERMITTED_TAXA + " (exclusion)");
             startTime = System.nanoTime();
-            int kept = slimOntologyByTaxonExclusion(uberonFull, uberonSlim, humanLineage);
+            int kept = slimOntologyByTaxonExclusion(uberonFull, uberonSlim, lineages);
             System.out.println("Kept " + kept + " UBERON classes; slimmed in " + (System.nanoTime() - startTime) / 1e9 + " s");
             Path uberonArchive = archiveDir.resolve("uberon-base.owl");
             System.out.println("Moving " + uberonFull + " to " + uberonArchive);

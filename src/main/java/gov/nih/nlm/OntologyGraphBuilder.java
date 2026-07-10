@@ -60,6 +60,13 @@ public class OntologyGraphBuilder {
             "PUB",
             "UBERON"));
 
+    // RO taxon-constraint predicates (only_in_taxon, never_in_taxon, in_taxon). These relate a class to a taxon as
+    // ontology metadata, not biology, and are excluded from the graph even when they reference a permitted taxon
+    // (e.g. protein | ONLY_IN_TAXON | homo sapiens).
+    private static final Set<String> TAXON_CONSTRAINT_PREDICATES = new HashSet<>(Arrays.asList("RO_0002160",
+            "RO_0002161",
+            "RO_0002162"));
+
     /**
      * Parse a URI to find an ontology term, ID, and number, and test if the ID is a valid vertex.
      *
@@ -94,8 +101,23 @@ public class OntologyGraphBuilder {
         } else {
             return vtuple;
         }
-        boolean isValidVertex = VALID_VERTICES.contains(id);
+        // The graph is restricted to a fixed set of organisms, so only the permitted NCBITaxon nodes are valid
+        // vertices; references to any other taxon (e.g. an Uberon class in_taxon an elephant) are left off the graph.
+        boolean isValidVertex = VALID_VERTICES.contains(id)
+                && !("NCBITaxon".equals(id) && !TaxonConfig.PERMITTED_TAXA.contains(number));
         return new VTuple(term, id, number, isValidVertex);
+    }
+
+    /**
+     * Whether the given predicate term names a taxon-constraint relation (only_in_taxon, never_in_taxon, or in_taxon).
+     * Such relations are ontology metadata, not biology, and are excluded from the graph even when they reference a
+     * permitted taxon.
+     *
+     * @param predicateTerm The predicate term (e.g. {@code "RO_0002160"})
+     * @return {@code true} if the predicate is a taxon-constraint relation
+     */
+    static boolean isTaxonConstraintPredicate(String predicateTerm) {
+        return TAXON_CONSTRAINT_PREDICATES.contains(predicateTerm);
     }
 
     /**
@@ -381,6 +403,11 @@ public class OntologyGraphBuilder {
             // Parse the predicate and collect unique labels
             PTuple pTuple = parsePredicate(ontologyElementMaps, triple.getPredicate());
             if (pTuple.label() == null) {
+                continue;
+            }
+
+            // Drop taxon-constraint relations; they are ontology metadata, not biology, and must not appear in the graph
+            if (isTaxonConstraintPredicate(pTuple.term())) {
                 continue;
             }
             edgeLabels.add(pTuple.label());

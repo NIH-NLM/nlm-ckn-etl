@@ -23,6 +23,10 @@
         <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">only in taxon</rdfs:label>
     </owl:ObjectProperty>
 
+    <owl:ObjectProperty rdf:about="http://purl.obolibrary.org/obo/RO_0002162">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">in taxon</rdfs:label>
+    </owl:ObjectProperty>
+
     <!-- Pan-taxonomic class, no taxon constraint: KEEP -->
     <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000004">
         <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">heart</rdfs:label>
@@ -64,6 +68,23 @@
         <rdfs:subClassOf>
             <owl:Restriction>
                 <owl:onProperty rdf:resource="http://purl.obolibrary.org/obo/RO_0002161"/>
+                <owl:someValuesFrom rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_40674"/>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+    </owl:Class>
+
+    <!-- in_taxon Aves (annotation form); human is not a bird: EXCLUDE (positive restriction off human lineage) -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000007">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">beak</rdfs:label>
+        <obo:RO_0002162 rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_8782"/>
+    </owl:Class>
+
+    <!-- in_taxon Mammalia (logical restriction form); human is a mammal: KEEP (positive restriction covers human) -->
+    <owl:Class rdf:about="http://purl.obolibrary.org/obo/UBERON_0000008">
+        <rdfs:label rdf:datatype="http://www.w3.org/2001/XMLSchema#string">mammary tissue</rdfs:label>
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://purl.obolibrary.org/obo/RO_0002162"/>
                 <owl:someValuesFrom rdf:resource="http://purl.obolibrary.org/obo/NCBITaxon_40674"/>
             </owl:Restriction>
         </rdfs:subClassOf>

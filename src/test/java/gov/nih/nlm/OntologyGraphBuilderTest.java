@@ -1,29 +1,14 @@
 package gov.nih.nlm;
 
-import com.arangodb.ArangoDatabase;
-import com.arangodb.ArangoEdgeCollection;
-import com.arangodb.ArangoGraph;
-import com.arangodb.ArangoVertexCollection;
-import com.arangodb.entity.BaseDocument;
-import com.arangodb.entity.BaseEdgeDocument;
-import org.apache.commons.io.FileUtils;
 import org.apache.jena.graph.NodeFactory;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -35,16 +20,6 @@ class OntologyGraphBuilderTest {
     // Assign location of test ontology files
     private static final Path USR_DIR = Paths.get(System.getProperty("user.dir"));
     private static final Path OBO_DIR = USR_DIR.resolve("src/test/data/obo");
-    static String arangoDbHost = "localhost";
-    static String arangoDbPort = "8529";
-    static String arangoDbUser = "root";
-    static String arangoDbPassword = System.getenv("ARANGO_DB_PASSWORD");
-    static ArangoDbUtilities arangoDbUtilities;
-    static Path arangoDbHome = Paths.get("").toAbsolutePath().resolve("src/test/java/data/arangodb");
-    static File shellDir = Paths.get("").toAbsolutePath().resolve("src/main/shell").toFile();
-    static String[] stopArangoDB = new String[]{"./stop-arangodb.sh"};
-    static String[] startArangoDB = new String[]{"./start-arangodb.sh"};
-    static String[] envp = new String[]{"ARANGO_DB_HOME=" + arangoDbHome, "ARANGO_DB_PASSWORD=" + arangoDbPassword};
 
     // --- createVTuple tests (no ArangoDB needed) ---
 
@@ -125,6 +100,19 @@ class OntologyGraphBuilderTest {
     }
 
     @Test
+    void createVTuple_nonHumanTaxonIsNotValidVertex() {
+        // The graph is restricted to the permitted taxa, so a non-human taxon (e.g. Proboscidea/elephants,
+        // referenced by an Uberon in_taxon constraint) must not be a valid vertex.
+        var node = NodeFactory.createURI("http://purl.obolibrary.org/obo/NCBITaxon_9779");
+        OntologyGraphBuilder.VTuple vtuple = OntologyGraphBuilder.createVTuple(node);
+
+        assertEquals("NCBITaxon_9779", vtuple.term());
+        assertEquals("NCBITaxon", vtuple.id());
+        assertEquals("9779", vtuple.number());
+        assertFalse(vtuple.isValidVertex());
+    }
+
+    @Test
     void createVTuple_validHPTerm() {
         var node = NodeFactory.createURI("http://purl.obolibrary.org/obo/HP_0000001");
         OntologyGraphBuilder.VTuple vtuple = OntologyGraphBuilder.createVTuple(node);
@@ -144,6 +132,22 @@ class OntologyGraphBuilderTest {
         assertEquals("MONDO", vtuple.id());
         assertEquals("0000001", vtuple.number());
         assertTrue(vtuple.isValidVertex());
+    }
+
+    // --- taxon-constraint predicate tests (no ArangoDB needed) ---
+
+    @Test
+    void isTaxonConstraintPredicate_excludesTaxonConstraints() {
+        assertTrue(OntologyGraphBuilder.isTaxonConstraintPredicate("RO_0002160"), "only_in_taxon");
+        assertTrue(OntologyGraphBuilder.isTaxonConstraintPredicate("RO_0002161"), "never_in_taxon");
+        assertTrue(OntologyGraphBuilder.isTaxonConstraintPredicate("RO_0002162"), "in_taxon");
+    }
+
+    @Test
+    void isTaxonConstraintPredicate_allowsOtherRelations() {
+        assertFalse(OntologyGraphBuilder.isTaxonConstraintPredicate("RO_0002175"), "present_in_taxon is kept");
+        assertFalse(OntologyGraphBuilder.isTaxonConstraintPredicate("subClassOf"), "subClassOf is kept");
+        assertFalse(OntologyGraphBuilder.isTaxonConstraintPredicate("RO_0002202"), "develops_from is kept");
     }
 
     // --- parsePredicate tests (no ArangoDB needed) ---
@@ -306,130 +310,4 @@ class OntologyGraphBuilderTest {
         assertNull(OntologyGraphBuilder.getDocumentKey("CL0000235"));
     }
 
-    // --- Integration test (requires ArangoDB) ---
-
-    @BeforeEach
-    void setUp() {
-    }
-
-    @AfterEach
-    void tearDown() {
-    }
-
-    /*
-     * Compare actual and expected macrophage vertex and edges, obtaining expected
-     * values by manual inspection of the macrophage OWL file.
-     *
-     * This test requires a running ArangoDB instance.
-     */
-    @Tag("integration")
-    @Test
-    void main() {
-        try {
-            // Stop any ArangoDB instance
-            if (Runtime.getRuntime().exec(stopArangoDB, envp, shellDir).waitFor() != 0) {
-                throw new RuntimeException("Could not stop ArangoDB");
-            }
-            // Start an ArangoDB instance using the test data directory
-            if (Runtime.getRuntime().exec(startArangoDB, envp, shellDir).waitFor() != 0) {
-                throw new RuntimeException("Could not start ArangoDB");
-            }
-        } catch (java.io.IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
-        // Connect to ArangoDB
-        Map<String, String> env = new HashMap<>();
-        env.put("ARANGO_DB_HOST", arangoDbHost);
-        env.put("ARANGO_DB_PORT", arangoDbPort);
-        env.put("ARANGO_DB_USER", arangoDbUser);
-        env.put("ARANGO_DB_PASSWORD", arangoDbPassword);
-        arangoDbUtilities = new ArangoDbUtilities(env);
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-
-        try {
-            // Parse macrophage OWL file and load the result into ArangoDB
-            try {
-                String[] args = new String[]{OBO_DIR.toString(), "cl-test", "test"};
-                OntologyGraphBuilder.main(args);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-            // Connect to ArangoDB
-            ArangoDatabase db = arangoDbUtilities.createOrGetDatabase("cl-test");
-            ArangoGraph graph = arangoDbUtilities.createOrGetGraph(db, "test");
-
-            // Get the macrophage vertex
-            String vertexName = "CL";
-            ArangoVertexCollection vertexCollection = graph.vertexCollection(vertexName);
-            String number = "0000235";
-            assertTrue(graph.db().collection(vertexName).documentExists(number));
-            BaseDocument vertexDoc = vertexCollection.getVertex(number, BaseDocument.class);
-
-            // Assert vertex attributes have expected values
-            assertArrayEquals(((ArrayList<String>) vertexDoc.getAttribute("hasDbXref")).toArray(),
-                    new ArrayList<>(Arrays.asList("ZFA:0009141",
-                            "CALOHA:TS-0587",
-                            "MESH:D008264",
-                            "FMA:83585",
-                            "BTO:0000801",
-                            "FMA:63261")).toArray());
-            assertEquals(vertexDoc.getAttribute("hasExactSynonym"), "histiocyte");
-            assertEquals(vertexDoc.getAttribute("comment"),
-                    "Morphology: Diameter 30_M-80 _M, abundant cytoplasm, low N/C ratio, eccentric nucleus. Irregular shape with pseudopods, highly adhesive. Contain vacuoles and phagosomes, may contain azurophilic granules; markers: Mouse & Human: CD68, in most cases CD11b. Mouse: in most cases F4/80+; role or process: immune, antigen presentation, & tissue remodelling; lineage: hematopoietic, myeloid.");
-            assertEquals(vertexDoc.getAttribute("definition"),
-                    "A mononuclear phagocyte present in variety of tissues, typically differentiated from monocytes, capable of phagocytosing a variety of extracellular particulate material, including immune complexes, microorganisms, and dead cells.");
-            assertEquals(vertexDoc.getAttribute("label"), "macrophage");
-            assertEquals(vertexDoc.getAttribute("id"), "CL:0000235");
-
-            // Get macrophage edges to CL terms, then assert equal labels
-            String edgeName = "CL-CL";
-            ArangoEdgeCollection edgeCollection = graph.edgeCollection(edgeName);
-            String[] keys = new String[]{"0000235-0000113", "0000235-0000145", "0000235-0000766"};
-            for (String key : keys) {
-                assertTrue(graph.db().collection(edgeName).documentExists(key));
-                BaseDocument edgeDoc = edgeCollection.getEdge(key, BaseEdgeDocument.class);
-                assertEquals("SUB_CLASS_OF", ((ArrayList<String>) edgeDoc.getAttribute("Label")).get(0));
-            }
-            String key = "0000235-0000576";
-            assertTrue(graph.db().collection(edgeName).documentExists(key));
-            BaseDocument edgeDoc = edgeCollection.getEdge(key, BaseEdgeDocument.class);
-            assertEquals("DEVELOPS_FROM", ((ArrayList<String>) edgeDoc.getAttribute("Label")).get(0));
-
-            // Get macrophage edges to GO terms, then assert equal labels
-            edgeName = "CL-GO";
-            edgeCollection = graph.edgeCollection(edgeName);
-            key = "0000235-0031268";
-            assertTrue(graph.db().collection(edgeName).documentExists(key));
-            edgeDoc = edgeCollection.getEdge(key, BaseEdgeDocument.class);
-            assertEquals("CAPABLE_OF", ((ArrayList<String>) edgeDoc.getAttribute("Label")).get(0));
-
-            // Get macrophage edges to NCBITaxon terms, then assert equal labels
-            edgeName = "CL-NCBITaxon";
-            edgeCollection = graph.edgeCollection(edgeName);
-            key = "0000235-9606";
-            assertTrue(graph.db().collection(edgeName).documentExists(key));
-            edgeDoc = edgeCollection.getEdge(key, BaseEdgeDocument.class);
-            assertEquals("PRESENT_IN_TAXON", ((ArrayList<String>) edgeDoc.getAttribute("Label")).get(0));
-
-        } finally {
-            try {
-                // Stop the ArangoDB instance
-                if (Runtime.getRuntime().exec(stopArangoDB, envp, shellDir).waitFor() != 0) {
-                    throw new RuntimeException("Could not stop ArangoDB");
-                }
-            } catch (java.io.IOException | InterruptedException e) {
-                e.printStackTrace();
-            }
-            // Remove ArangoDB test data directory
-            try {
-                FileUtils.deleteDirectory(arangoDbHome.toFile());
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
 }

@@ -437,15 +437,23 @@ def slim_ontologies(
 ) -> None:
     """Run OntologySlimmer to filter downloaded OWL files before graph loading.
 
-    OntologySlimmer reduces two ontologies to human-only (NCBITaxon:9606):
+    OntologySlimmer reduces two ontologies to the permitted taxa (currently
+    human only, NCBITaxon:9606; see TaxonConfig.PERMITTED_TAXA):
     ``pr.owl`` -> ``pr-slim.owl`` keeps only protein classes asserted to be in
-    human (inclusion), and ``uberon-base.owl`` -> ``uberon-human.owl`` keeps
-    all anatomy except classes a taxon constraint excludes from human
-    (exclusion, using the NCBITaxon hierarchy in ``taxslim.owl``).  Without
-    this step OntologyGraphBuilder processes the full unfiltered ontologies,
-    which are either extremely large and so degrade performance, in the case of
-    PR, or include irrelevant terms, in the case of UBERON.  Must run after
-    ``download_ontologies`` and before ``build_ontology_graph``.
+    a permitted taxon (inclusion), and ``uberon-base.owl`` ->
+    ``uberon-human.owl`` keeps all anatomy except classes whose taxon
+    constraints -- ``never_in_taxon``, ``only_in_taxon``, or ``in_taxon`` --
+    rule out every permitted taxon (exclusion, using the NCBITaxon hierarchy in
+    ``taxslim.owl``).  Without this step OntologyGraphBuilder processes the full
+    unfiltered ontologies, which are either extremely large and so degrade
+    performance, in the case of PR, or include irrelevant terms, in the case of
+    UBERON.  Must run after ``download_ontologies`` and before
+    ``build_ontology_graph``.
+
+    Taxon references that survive on kept classes are handled downstream by
+    OntologyGraphBuilder, which loads a vertex only for the permitted taxa and
+    drops taxon-constraint relations, so non-human taxa and those relations do
+    not reach the graph.
     """
     logger = get_run_logger()
     logger.info(f"Slimming ontologies (gov.nih.nlm.OntologySlimmer, {java_opts})")
