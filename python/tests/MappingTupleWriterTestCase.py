@@ -87,6 +87,41 @@ class MappingTupleWriterTestCase(unittest.TestCase):
         tuples = create_tuples(data, self._make_summary())
         self.assertEqual(len(tuples), 0)
 
+    @staticmethod
+    def _anatomical_structure(tuples):
+        """Return the CellSet's anatomical_structure vertex annotation values."""
+        return {
+            str(t[2])
+            for t in tuples
+            if len(t) == 3
+            and "/CS_" in str(t[0])
+            and str(t[1]).endswith("#anatomical_structure")
+        }
+
+    def _heart_summary(self):
+        return pd.DataFrame({
+            "dataset_version_id": ["dv-001"],
+            "organ": ["heart_plus_pericardium"],
+            "tissue_ontology_term_id": ["UBERON:0006566 | UBERON:0002084"],
+            "doi": ["doi.org/10.1101/2023.11.07.566105"],
+        })
+
+    def test_cell_set_anatomical_structure_is_the_root_term(self):
+        root_map = {
+            "heart_plus_pericardium": {
+                "roots": [("UBERON:0015410", "heart plus pericardium")],
+                "terms": {"UBERON:0015410", "UBERON:0006566", "UBERON:0002084"},
+            }
+        }
+        tuples = create_tuples(
+            self._make_data(), self._heart_summary(), None, root_map
+        )
+        self.assertEqual(self._anatomical_structure(tuples), {"UBERON:0015410"})
+
+    def test_falls_back_to_the_first_tissue_term_without_a_root(self):
+        tuples = create_tuples(self._make_data(), self._heart_summary(), None, {})
+        self.assertEqual(self._anatomical_structure(tuples), {"UBERON:0006566"})
+
     def test_merge_uuid_collision_resolved(self):
         # Mirrors main(): load_results adds a uuid to BOTH the mapping and the
         # NSForest frames; the mapping's must be dropped so the merged uuid (the

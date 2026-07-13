@@ -16,6 +16,7 @@ The assumptions encoded here were compiled from the readers:
 ``TupleWriterUtilities.build_cell_set_dataset``.
 """
 
+from pathlib import Path
 import re
 
 # ---------------------------------------------------------------------------
@@ -41,6 +42,9 @@ COMPANION_PREFIXES = {
 NSFOREST_GLOB = f"**/{NSFOREST_PREFIX}_*.csv"
 HARVESTER_GLOB = "*_harvester_final.csv"
 HARVESTER_GLOB_RECURSIVE = f"**/{HARVESTER_GLOB}"
+UBERON_PREFIX = "uberon"
+UBERON_GLOB = f"{UBERON_PREFIX}_*.csv"
+UBERON_GLOB_RECURSIVE = f"**/{UBERON_GLOB}"
 MANIFEST_NAME = "master_s3_manifest.csv"
 
 # Clusters smaller than this are dropped by every results-consuming writer.
@@ -118,6 +122,17 @@ MAPPING_OPTIONAL_COLUMNS = ["dataset_version_id"]
 # *_harvester_final.csv — joined to summaries on dataset_version_id.
 HARVESTER_REQUIRED_COLUMNS = ["dataset_version_id"]
 
+# uberon_<organ>.csv — the harvester's root/descendant table for an organ,
+# keyed to a summary by its ``organ`` column.  Rows with level == root name
+# the anatomical structure every cell set of that organ is rolled up to.
+UBERON_REQUIRED_COLUMNS = ["obo_id", "label", "level"]
+UBERON_ROOT_LEVEL = "root"
+
+# Organs the harvester ships no uberon_<organ>.csv for, with the root term
+# supplied here instead (NIH-NLM/nlm-ckn#171 names brain as one of the roots).
+# Drop an entry once the harvester ships the corresponding file.
+ORGAN_ROOT_OVERRIDES = {"neocortex": "UBERON:0000955"}
+
 # master_s3_manifest.csv — unioned at extraction; integrity cross-check.
 MANIFEST_REQUIRED_COLUMNS = ["filename", "s3_path"]
 
@@ -171,6 +186,30 @@ def obo_purl_to_curie(purl: str) -> str:
     if m:
         return f"{m.group(1)}:{m.group(2)}"
     return purl
+
+
+def normalize_organ(organ: str) -> str:
+    """Normalize an organ name to the form used in ``uberon_<organ>.csv``.
+
+    Parameters
+    ----------
+    organ : str
+        An organ name, as it appears in a summary's ``organ`` column, in a
+        ``uberon_<organ>.csv`` filename, or as an UBERON root term's label.
+
+    Returns
+    -------
+    str
+        The organ name lowercased with whitespace and hyphens replaced by
+        underscores (e.g. ``"heart plus pericardium"`` →
+        ``"heart_plus_pericardium"``).
+    """
+    return re.sub(r"[\s-]+", "_", str(organ).strip().lower())
+
+
+def organ_of_uberon_path(path) -> str:
+    """Return the organ named by a ``uberon_<organ>.csv`` filename."""
+    return normalize_organ(Path(path).stem[len(UBERON_PREFIX) + 1 :])
 
 
 def companion_basename(nsforest_basename: str, companion_prefix: str) -> str:

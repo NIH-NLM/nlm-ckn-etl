@@ -25,8 +25,10 @@ from LoaderUtilities import (
     get_dataset_file_paths,
     get_dataset_version_id_lists,
     get_gene_ensembl_id_to_names_map,
+    get_uberon_root_map,
     hyphenate,
     load_results,
+    resolve_summary_root_uberon_term,
 )
 
 from TupleWriterUtilities import (
@@ -35,6 +37,7 @@ from TupleWriterUtilities import (
     as_int,
     association_to_tuples,
     build_cell_set_dataset,
+    get_predicate_uri,
     get_tuples_dir,
     parse_string_list,
     resolve_gene_names,
@@ -53,12 +56,38 @@ CS_BMC_EDGE_COLUMNS = [
 ]
 
 
+def sampled_tissue_annotation(
+    subject_term: str,
+    association,
+    object_term: str,
+    sampled_tissue: str,
+) -> list[tuple]:
+    """Annotate an anatomical structure edge with the tissue terms sampled.
+
+    Cell sets and cell set datasets connect to the root term of the organ
+    they were sampled from, so the descendant terms the dataset summary
+    lists are carried on the edge rather than lost.
+    """
+    if not sampled_tissue:
+        return []
+    return [
+        (
+            URIRef(f"{PURLBASE}/{subject_term}"),
+            get_predicate_uri(association),
+            URIRef(f"{PURLBASE}/{object_term}"),
+            URIRef(f"{RDFSBASE}#Sampled_tissue"),
+            Literal(sampled_tissue),
+        )
+    ]
+
+
 def create_tuples(
     nsforest_results: pd.DataFrame,
     summary_data: pd.DataFrame,
     dataset_version_ids: list[str],
     harvester_data: pd.DataFrame | None = None,
     cluster_dvid_map: dict[str, str] | None = None,
+    root_uberon_term: str | None = None,
 ) -> list[tuple]:
     """Create tuples from NSForest results.
 
@@ -95,6 +124,12 @@ def create_tuples(
         a known dataset raises (the multi-dataset mapping is incomplete).
         ``None`` for single-dataset results files, where the lone dataset is
         the only possible member.
+    root_uberon_term : str, optional
+        The root UBERON CURIE of the organ the dataset was sampled from, as
+        resolved by ``LoaderUtilities.resolve_summary_root_uberon_term``.  Cell
+        sets and the dataset connect to it alone, and the summary's descendant
+        tissue terms become an edge annotation.  ``None`` for an organ with no
+        root term, where the descendant terms are connected as before.
 
     Returns
     -------
@@ -109,12 +144,22 @@ def create_tuples(
         return tuples
 
     if summary_data.empty:
-        uberon_terms = []
+        sampled_terms = []
     else:
-        uberon_terms = [
+        sampled_terms = [
             t.replace(":", "_").strip()
             for t in str(summary_data.iloc[0]["tissue_ontology_term_id"]).split("|")
         ]
+
+    # A dataset is sampled from one organ, so its cell sets connect to that
+    # organ's root term rather than to each descendant term the summary lists.
+    # The sampled terms survive as an edge annotation.  A dataset whose organ
+    # has no root term keeps its descendant terms.
+    if root_uberon_term:
+        uberon_terms = [root_uberon_term.replace(":", "_")]
+    else:
+        uberon_terms = sampled_terms
+    sampled_tissue = "|".join(t.replace("_", ":") for t in sampled_terms)
 
     # Build CellSetDataset entities once per dvid (reused across clusters).
     csd_by_dvid: dict[str, tuple] = {}
@@ -136,6 +181,11 @@ def create_tuples(
                 object=anat,
             )
             tuples.extend(association_to_tuples(assoc, source="CELLxGENE"))
+            tuples.extend(
+                sampled_tissue_annotation(
+                    f"CSD_{dvid}", assoc, uberon_term, sampled_tissue
+                )
+            )
         if citation:
             tuples.append(
                 (
@@ -199,6 +249,11 @@ def create_tuples(
             tuples.extend(
                 association_to_tuples(
                     assoc, ctx, source="CELLxGENE", annotated_terms=annotated
+                )
+            )
+            tuples.extend(
+                sampled_tissue_annotation(
+                    f"CS_{uuid}", assoc, uberon_term, sampled_tissue
                 )
             )
 
@@ -341,6 +396,7 @@ def main():
     """
     results_dir = get_current_run().results_dir
     harvester_data = get_cellxgene_harvester_data(results_dir)
+    uberon_root_map = get_uberon_root_map(results_dir)
     file_paths = get_dataset_file_paths(results_dir)
     dataset_version_id_lists = get_dataset_version_id_lists(file_paths)
 
@@ -404,9 +460,18 @@ def main():
                 )
             )
 
+        root_uberon_term = resolve_summary_root_uberon_term(
+            summary_data, uberon_root_map
+        )
+
         print(f"Creating NSForest tuples from {nsforest_path.name}")
         tuples = create_tuples(
-            nsforest_results, summary_data, dvids, harvester_data, cluster_dvid_map
+            nsforest_results,
+            summary_data,
+            dvids,
+            harvester_data,
+            cluster_dvid_map,
+            root_uberon_term,
         )
         if tuples:
             output_name = nsforest_path.name.replace(".csv", "-nsforest.json")

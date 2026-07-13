@@ -106,6 +106,62 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         self.assertIn("TP", attrs)
         self.assertIn("FN", attrs)
 
+    # --- root UBERON term rollup -------------------------------------------
+
+    @staticmethod
+    def _anatomical_objects(tuples, predicate):
+        """Return the UBERON terms an edge with this predicate connects to."""
+        return {
+            str(t[2]).rsplit("/", 1)[-1]
+            for t in tuples
+            if len(t) == 3 and predicate in str(t[1]) and "/UBERON_" in str(t[2])
+        }
+
+    def _heart_data(self):
+        nsf, summary = self._make_data()
+        nsf.loc[0, "clusterName"] = "Pericyte"
+        summary.loc[0, "organ"] = "heart_plus_pericardium"
+        summary.loc[0, "tissue_ontology_term_id"] = (
+            "UBERON:0006566 | UBERON:0006567 | UBERON:0002084"
+        )
+        return nsf, summary
+
+    def test_cell_set_derives_from_root_term_alone(self):
+        nsf, summary = self._heart_data()
+        tuples = create_tuples(
+            nsf, summary, ["dvid-001"], root_uberon_term="UBERON:0015410"
+        )
+        # derives_from
+        self.assertEqual(
+            self._anatomical_objects(tuples, "RO_0001000"), {"UBERON_0015410"}
+        )
+        # is_about
+        self.assertEqual(
+            self._anatomical_objects(tuples, "IAO_0000136"), {"UBERON_0015410"}
+        )
+
+    def test_sampled_tissue_annotates_the_root_edge(self):
+        nsf, summary = self._heart_data()
+        tuples = create_tuples(
+            nsf, summary, ["dvid-001"], root_uberon_term="UBERON:0015410"
+        )
+        sampled = {
+            str(t[4])
+            for t in tuples
+            if len(t) == 5 and str(t[3]).endswith("#Sampled_tissue")
+        }
+        self.assertEqual(
+            sampled, {"UBERON:0006566|UBERON:0006567|UBERON:0002084"}
+        )
+
+    def test_without_a_root_term_every_tissue_term_connects(self):
+        nsf, summary = self._heart_data()
+        tuples = create_tuples(nsf, summary, ["dvid-001"])
+        self.assertEqual(
+            self._anatomical_objects(tuples, "RO_0001000"),
+            {"UBERON_0006566", "UBERON_0006567", "UBERON_0002084"},
+        )
+
     # --- member_of dataset_version_id resolution ---------------------------
 
     @staticmethod
