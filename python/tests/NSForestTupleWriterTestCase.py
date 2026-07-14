@@ -220,5 +220,49 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
             create_tuples(nsf, summary, ["dv1", "dv2"], None, cluster_dvid_map)
 
 
+class NSForestDatasetNameTestCase(unittest.TestCase):
+    """Tests for how NSForestTupleWriter names a cell set dataset."""
+
+    def _make_data(self):
+        nsforest = pd.DataFrame({
+            "clusterName": ["T Cell"],
+            "clusterSize": [1718],
+            "f_score": [0.716],
+            "NSForest_markers": ["['TP53']"],
+            "binary_genes": ["['TP53', 'BRCA1']"],
+            "uuid": ["abc123"],
+        })
+        summary = pd.DataFrame({
+            "tissue_ontology_term_id": ["UBERON:0000966"],
+            "first_author": ["Sikkema"],
+            "year": [2023],
+            "journal": ["Nat Med"],
+            "dataset_title": ["Lung, 3' v2"],
+        })
+        return nsforest, summary
+
+    def _annotations(self, tuples, attribute):
+        return [
+            str(t[2])
+            for t in tuples
+            if len(t) == 3 and str(t[1]).endswith(f"#{attribute}")
+        ]
+
+    def test_dataset_named_by_citation_and_dataset_name(self):
+        nsf, summary = self._make_data()
+        tuples = create_tuples(nsf, summary, ["dvid-001"])
+        self.assertEqual(
+            self._annotations(tuples, "Name"),
+            ["Sikkema (2023) Nat Med - Lung, 3' v2"],
+        )
+
+    def test_citation_matches_the_cellxgene_citation(self):
+        # The CELLxGENE writer annotates the same vertex, so both must
+        # spell the citation the same way.
+        nsf, summary = self._make_data()
+        tuples = create_tuples(nsf, summary, ["dvid-001"])
+        self.assertEqual(self._annotations(tuples, "Citation"), ["Sikkema (2023) Nat Med"])
+
+
 if __name__ == "__main__":
     unittest.main()

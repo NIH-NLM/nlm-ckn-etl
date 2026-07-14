@@ -12,12 +12,12 @@ class CellxGeneTupleWriterTestCase(unittest.TestCase):
 
     def _make_dataset(self, dvid, doi):
         return {
-            "Dataset_name": "Test Dataset",
+            "Dataset_name": f"Dataset {dvid}",
             "Organism": "Homo sapiens",
             "Tissue": "brain",
             "Disease_status": "normal",
             "Number_of_cells": 10000,
-            "Citation": "Smith et al. (2024)",
+            "Citation": "Smith (2024) Nature",
             "Link_to_publication": doi,
             "Link_to_CELLxGENE_collection": "https://cellxgene.cziscience.com/collections/abc",
             "Link_to_CELLxGENE_dataset": f"https://cellxgene.cziscience.com/e/{dvid}.cxg/",
@@ -46,6 +46,16 @@ class CellxGeneTupleWriterTestCase(unittest.TestCase):
             if str(t[1]).endswith("wasAttributedTo")
         }
 
+    def _annotations(self, tuples, prefix, attribute):
+        """Return the values of an annotation of the vertices of a collection."""
+        return [
+            str(t[2])
+            for t in tuples
+            if len(t) == 3
+            and str(t[0]).rsplit("/", 1)[-1].startswith(prefix)
+            and str(t[1]).endswith(f"#{attribute}")
+        ]
+
     def test_creates_tuples(self):
         tuples = create_tuples(self._make_data())
         self.assertGreater(len(tuples), 0)
@@ -62,6 +72,40 @@ class CellxGeneTupleWriterTestCase(unittest.TestCase):
             if len(t) == 3 and "CSD_" in str(t[0])
         ]
         self.assertGreater(len(csd_annots), 0)
+
+    def test_dataset_named_by_citation_and_dataset_name(self):
+        tuples = create_tuples(self._make_data())
+        self.assertEqual(
+            self._annotations(tuples, "CSD_", "Name"),
+            ["Smith (2024) Nature - Dataset dvid-001"],
+        )
+
+    def test_datasets_of_one_paper_are_named_distinctly(self):
+        # The three datasets share a citation, so only the dataset name
+        # tells them apart.
+        tuples = create_tuples(self._make_multi_dataset_data())
+        names = self._annotations(tuples, "CSD_", "Name")
+        self.assertEqual(len(names), 3)
+        self.assertEqual(len(set(names)), 3)
+
+    def test_citation_and_dataset_name_are_kept(self):
+        # The name is an additional annotation: the citation still links
+        # to the publication, and the dataset name is still displayed.
+        tuples = create_tuples(self._make_data())
+        self.assertEqual(
+            self._annotations(tuples, "CSD_", "Citation"), ["Smith (2024) Nature"]
+        )
+        self.assertEqual(
+            self._annotations(tuples, "CSD_", "dataset_name"), ["Dataset dvid-001"]
+        )
+        self.assertEqual(
+            self._annotations(tuples, "PUB_", "Citation"), ["Smith (2024) Nature"]
+        )
+
+    def test_publication_is_not_named(self):
+        # Name identifies a dataset, so it belongs on the CSD alone.
+        tuples = create_tuples(self._make_data())
+        self.assertEqual(self._annotations(tuples, "PUB_", "Name"), [])
 
     def test_publication_keyed_by_doi(self):
         tuples = create_tuples(self._make_data())

@@ -34,6 +34,8 @@ from ckn_schema.pydantic.ckn_schema import (
 from LoaderUtilities import (
     PURLBASE,
     RDFSBASE,
+    build_citation,
+    build_dataset_label,
     get_current_run,
     map_gene_ensembl_id_to_names,
 )
@@ -755,13 +757,9 @@ def build_cell_set_dataset(
         kwargs["standard_deviation_of_silhouette"] = as_float(s, "std_silhouette")
         kwargs["mean_f_beta_score"] = as_float(s, "mean_fscore")
         kwargs["median_of_f_beta_scores"] = as_float(s, "median_fscore")
-        first_author = s.get("first_author")
-        year = s.get("year")
-        journal = s.get("journal")
-        if first_author and year:
-            citation = f"{first_author} et al. ({year})"
-            if journal:
-                citation += f" {journal}"
+        citation = build_citation(
+            s.get("first_author"), s.get("year"), s.get("journal")
+        )
 
     if harvester_row is not None:
         h = harvester_row
@@ -780,12 +778,51 @@ def build_cell_set_dataset(
         kwargs["donor_id_count"] = as_int(h, "donor_id_count")
         kwargs["assay_summary"] = as_str(h, "assay_ontology_summary")
         kwargs["tissue_annotation"] = as_str(h, "tissue_ontology_summary")
-        first_author = as_str(h, "first_author")
-        year = as_str(h, "year")
-        journal = as_str(h, "journal")
-        if first_author and year and citation is None:
-            citation = f"{first_author} et al. ({year})"
-            if journal:
-                citation += f" {journal}"
+        if citation is None:
+            citation = build_citation(
+                h.get("first_author"), h.get("year"), h.get("journal")
+            )
 
     return CellSetDataset(**kwargs), citation
+
+
+def cell_set_dataset_name_tuples(
+    term: str, citation: str | None, dataset_name: str | None
+) -> list[tuple]:
+    """Create the Citation and Name annotations of a cell set dataset.
+
+    A publication can contribute several datasets, and the graph labels a
+    cell set dataset by its Name, so the name qualifies the citation with
+    the dataset name to tell those datasets apart. Every writer that
+    creates a cell set dataset annotates it here, so that all of them
+    name it the same way.
+
+    Parameters
+    ----------
+    term : str
+        The cell set dataset vertex term (e.g., "CSD_5774ef6a-4082").
+    citation : str or None
+        Citation of the publication the dataset was reported in.
+    dataset_name : str or None
+        Name of the dataset.
+
+    Returns
+    -------
+    list[tuple]
+        The annotation triples, omitting each annotation that has no
+        value.
+    """
+    tuples = []
+    for attribute, value in [
+        ("Citation", citation),
+        ("Name", build_dataset_label(citation, dataset_name)),
+    ]:
+        if value:
+            tuples.append(
+                (
+                    URIRef(f"{PURLBASE}/{term}"),
+                    URIRef(f"{RDFSBASE}#{attribute}"),
+                    Literal(value),
+                )
+            )
+    return tuples

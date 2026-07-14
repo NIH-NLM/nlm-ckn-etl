@@ -34,6 +34,7 @@ from TupleWriterUtilities import (
     ASSOCIATION_CLASSES,
     association_to_tuples,
     build_cell_set_dataset,
+    cell_set_dataset_name_tuples,
     curie_to_term,
     get_tuples_dir,
     parse_string_list,
@@ -225,15 +226,11 @@ def create_tuples(
                 assoc, ctx, source="Manual Mapping", annotated_terms=annotated
             )
         )
-        if citation:
-            csd_term = f"CSD_{dataset_version_id}"
-            tuples.append(
-                (
-                    URIRef(f"{PURLBASE}/{csd_term}"),
-                    URIRef(f"{RDFSBASE}#Citation"),
-                    Literal(citation),
-                )
+        tuples.extend(
+            cell_set_dataset_name_tuples(
+                f"CSD_{dataset_version_id}", citation, csd.dataset_name
             )
+        )
 
     return tuples
 
