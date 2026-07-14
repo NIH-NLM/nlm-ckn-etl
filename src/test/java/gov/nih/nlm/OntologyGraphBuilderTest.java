@@ -235,6 +235,18 @@ class OntologyGraphBuilderTest {
     }
 
     @Test
+    void normalizeEdgeLabel_selectivelyExpresses() {
+        // The UI filters marker gene edges on this label, and its counterpart, EXPRESSES.
+        assertEquals("SELECTIVELY_EXPRESSES", OntologyGraphBuilder.normalizeEdgeLabel("selectively expresses"));
+        assertEquals("EXPRESSES", OntologyGraphBuilder.normalizeEdgeLabel("expresses"));
+    }
+
+    @Test
+    void normalizeEdgeLabel_isAbout() {
+        assertEquals("IS_ABOUT", OntologyGraphBuilder.normalizeEdgeLabel("is about"));
+    }
+
+    @Test
     void normalizeEdgeLabel_crossSpeciesExactMatch() {
         assertEquals("CROSS_SPECIES_EXACT_MATCH", OntologyGraphBuilder.normalizeEdgeLabel("crossSpeciesExactMatch"));
     }

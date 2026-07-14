@@ -191,9 +191,11 @@ public class OntologyElementParser {
                 ontologyElementMapMaps.get("ro").getTerms().put("RO_0002027",
                         new OntologyElementMap.OntologyTerm(new URI("http://purl.obolibrary.org/obo/RO_0002027"),
                                 "has pharmacological effect"));
+                // RO_0002294 is not defined in RO; the schema uses it as a project-local term. The label matches
+                // that of RO_0002292, "expresses", since the edge label is derived from it: SELECTIVELY_EXPRESSES.
                 ontologyElementMapMaps.get("ro").getTerms().put("RO_0002294",
                         new OntologyElementMap.OntologyTerm(new URI("http://purl.obolibrary.org/obo/RO_0002294"),
-                                "selectively express"));
+                                "selectively expresses"));
                 ontologyElementMapMaps.get("ro").getTerms().put("RO_0020325",
                         new OntologyElementMap.OntologyTerm(new URI("http://purl.obolibrary.org/obo/RO_0020325"),
                                 "evaluated in"));

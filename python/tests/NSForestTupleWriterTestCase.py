@@ -49,36 +49,73 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         self.assertTrue(any("RO_0015004" in p for p in preds))
 
+    def _part_of(self, tuples, object_prefix):
+        """Return the subject terms of part_of triples with the given object."""
+        # Gene part_of BMC and Gene part_of BGS share the part_of predicate,
+        # so only the object tells them apart.
+        return {
+            str(t[0]).rsplit("/", 1)[-1]
+            for t in tuples
+            if len(t) == 3
+            and "BFO_0000050" in str(t[1])
+            and f"/{object_prefix}_" in str(t[2])
+        }
+
     def test_contains_gene_part_of_bmc(self):
         nsf, summary = self._make_data()
         tuples = create_tuples(nsf, summary, ["dvid-001"])
-        preds = [str(t[1]) for t in tuples if len(t) == 3]
-        self.assertTrue(any("BFO_0000050" in p for p in preds))  # part_of
+        # The markers alone, not every binary gene.
+        self.assertEqual(self._part_of(tuples, "BMC"), {"GS_TP53"})
 
-    def test_contains_subcluster_of(self):
+    def test_contains_gene_part_of_bgs(self):
+        nsf, summary = self._make_data()
+        tuples = create_tuples(nsf, summary, ["dvid-001"])
+        self.assertEqual(
+            self._part_of(tuples, "BGS"), {"GS_TP53", "GS_BRCA1", "GS_EGFR"}
+        )
+
+    def test_does_not_contain_subcluster_of(self):
+        # BiomarkerCombinationSubclusterOfBinaryGeneSet was removed from the
+        # schema.
         nsf, summary = self._make_data()
         tuples = create_tuples(nsf, summary, ["dvid-001"])
         preds = [str(t[1]) for t in tuples if len(t) == 3]
-        self.assertTrue(any("RO_0015003" in p for p in preds))  # subcluster_of
+        self.assertFalse(any("RO_0015003" in p for p in preds))
 
-    def test_contains_expresses(self):
+    def test_contains_expresses_binary_gene_set(self):
+        # CellSetExpressesBinaryGeneSet keeps expresses, while the gene edges
+        # move to selectively_expresses — the two must stay distinct.
         nsf, summary = self._make_data()
         tuples = create_tuples(nsf, summary, ["dvid-001"])
-        preds = [str(t[1]) for t in tuples if len(t) == 3]
-        self.assertTrue(any("RO_0002292" in p for p in preds))  # expresses
+        bgs_edges = [
+            t
+            for t in tuples
+            if len(t) == 3 and "RO_0002292" in str(t[1]) and "/BGS_" in str(t[2])
+        ]
+        self.assertEqual(len(bgs_edges), 1)
 
-    def test_contains_expresses_gene_per_binary_gene(self):
+    def test_contains_selectively_expresses_gene_per_binary_gene(self):
         nsf, summary = self._make_data()
         tuples = create_tuples(nsf, summary, ["dvid-001"])
-        # CS -[expresses]-> Gene triples: predicate RO_0002292, object GS_<symbol>
+        # CS -[selectively_expresses]-> Gene: predicate RO_0002294, object GS_*
         gene_edges = [
             t for t in tuples
             if len(t) == 3
-            and "RO_0002292" in str(t[1])
+            and "RO_0002294" in str(t[1])
             and "/GS_" in str(t[2])
         ]
         objects = {str(t[2]).rsplit("/", 1)[-1] for t in gene_edges}
         self.assertEqual(objects, {"GS_TP53", "GS_BRCA1", "GS_EGFR"})
+
+    def test_no_gene_keeps_the_plain_expresses_predicate(self):
+        nsf, summary = self._make_data()
+        tuples = create_tuples(nsf, summary, ["dvid-001"])
+        self.assertFalse(
+            any(
+                len(t) == 3 and "RO_0002292" in str(t[1]) and "/GS_" in str(t[2])
+                for t in tuples
+            )
+        )
 
     def test_contains_source_quintuple(self):
         nsf, summary = self._make_data()
@@ -162,20 +199,20 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
             {"UBERON_0006566", "UBERON_0006567", "UBERON_0002084"},
         )
 
-    # --- member_of dataset_version_id resolution ---------------------------
+    # --- is_about dataset_version_id resolution ----------------------------
 
     @staticmethod
-    def _member_of(tuples):
-        """Return {(CS_term, CSD_term)} for member_of core triples.
+    def _is_about_cell_set(tuples):
+        """Return {(CSD_term, CS_term)} for the dataset is_about cell set triples.
 
-        A CellSetDataset term only ever appears as the OBJECT of member_of
-        (is_about has the CSD as subject), so a 3-tuple whose object is a
-        CSD_* term is a member_of edge.
+        A CellSetDataset is also is_about an AnatomicalStructure, which shares
+        the is_about predicate, so the object must be a cell set to tell the
+        two apart.
         """
         return {
             (str(t[0]).rsplit("/", 1)[-1], str(t[2]).rsplit("/", 1)[-1])
             for t in tuples
-            if len(t) == 3 and "/CSD_" in str(t[2])
+            if len(t) == 3 and "/CSD_" in str(t[0]) and "/CS_" in str(t[2])
         }
 
     def _multi_dataset_data(self):
@@ -190,10 +227,12 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         summary = pd.DataFrame({"tissue_ontology_term_id": ["UBERON:0000966"]})
         return nsf, summary
 
-    def test_single_dvid_member_of_unchanged(self):
+    def test_single_dvid_is_about_unchanged(self):
         nsf, summary = self._make_data()
         tuples = create_tuples(nsf, summary, ["dvid-001"])
-        self.assertEqual(self._member_of(tuples), {("CS_abc123", "CSD_dvid-001")})
+        self.assertEqual(
+            self._is_about_cell_set(tuples), {("CSD_dvid-001", "CS_abc123")}
+        )
 
     def test_multi_dvid_resolves_one_edge_per_cluster(self):
         nsf, summary = self._multi_dataset_data()
@@ -201,10 +240,10 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         tuples = create_tuples(
             nsf, summary, ["dv1", "dv2"], None, cluster_dvid_map
         )
-        # Each cell set is a member of ONLY its mapped dataset — no fan-out.
+        # Each cell set is described by ONLY its mapped dataset — no fan-out.
         self.assertEqual(
-            self._member_of(tuples),
-            {("CS_ua", "CSD_dv1"), ("CS_ub", "CSD_dv2")},
+            self._is_about_cell_set(tuples),
+            {("CSD_dv1", "CS_ua"), ("CSD_dv2", "CS_ub")},
         )
 
     def test_multi_dvid_unresolved_cluster_raises(self):
