@@ -16,6 +16,7 @@ from TupleWriterUtilities import (
     association_to_tuples,
     entity_to_term,
     get_tuples_dir,
+    normalize_doi,
     remove_protocols,
     write_tuples,
 )
@@ -27,6 +28,9 @@ def create_tuples(cellxgene_results: dict) -> list[tuple]:
     Produces:
     - CellSetDatasetWasAttributedToPublication
     - CSD and PUB vertex annotations
+
+    Publications are keyed by DOI, so the datasets of a paper all share
+    one publication vertex.
 
     Parameters
     ----------
@@ -64,7 +68,7 @@ def create_tuples(cellxgene_results: dict) -> list[tuple]:
             collection_id=metadata.get("Collection_ID"),
         )
         pub = Publication(
-            publication_doi=remove_protocols(metadata.get("Link_to_publication")),
+            publication_doi=normalize_doi(metadata.get("Link_to_publication")),
             author_list=metadata.get("Author_list"),
             year=str(metadata.get("Year")),
             title=metadata.get("Title"),

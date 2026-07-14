@@ -160,27 +160,42 @@ class CellxGeneTransformer(BaseTransformer):
             title = collection_json.get("name")
 
             entry["Citation"] = f"{first_author} ({published_year}) {journal}"
-            entry["Author_list"] = (
-                ", ".join(
-                    f"{a.get('family', '')}, {a.get('given', '')}" for a in authors
-                )
-                if authors
-                else None
-            )
+            # A consortium author carries a single "name" rather than a
+            # family and given name. Join only the parts that are present,
+            # so such an author reads as its name instead of ", , ".
+            author_names = []
+            for a in authors:
+                parts = [
+                    part.strip()
+                    for part in (a.get("family"), a.get("given"))
+                    if part and part.strip()
+                ]
+                name = ", ".join(parts) or (a.get("name") or "").strip()
+                if name:
+                    author_names.append(name)
+            entry["Author_list"] = ", ".join(author_names) if author_names else None
             entry["Year"] = str(published_year) if published_year else None
             entry["Title"] = title
             entry["Journal"] = journal
 
-            # Publication and collection links
+            # Publication and collection links. The collection's doi field
+            # is authoritative, and is the only source for collections whose
+            # citation string is absent or carries no publication (e.g.
+            # Jorstad (2023) Science), so prefer it and fall back to the
+            # citation.
             entry["Link_to_publication"] = None
             entry["Link_to_CELLxGENE_collection"] = None
+            doi = get_value_or_none(collection_json, ["doi"])
+            if doi:
+                entry["Link_to_publication"] = f"https://doi.org/{doi}"
             citation = get_value_or_none(dataset_json, ["citation"])
             if not citation:
                 citation = get_value_or_none(collection_json, ["citation"])
             if citation:
-                m = re.search(r"Publication:\s*(\S*)\s*Dataset Version:", citation)
-                if m:
-                    entry["Link_to_publication"] = m.group(1)
+                if not entry["Link_to_publication"]:
+                    m = re.search(r"Publication:\s*(\S*)\s*Dataset Version:", citation)
+                    if m:
+                        entry["Link_to_publication"] = m.group(1)
                 m = re.search(r"Collection:\s*(\S*)$", citation)
                 if m:
                     entry["Link_to_CELLxGENE_collection"] = m.group(1)
