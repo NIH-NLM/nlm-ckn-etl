@@ -8,6 +8,7 @@ from E_Utilities import parse_xml_for_gene_id
 
 from LoaderUtilities import (
     OPENTARGETS_RESOURCES,
+    build_citation,
     get_current_run,
     get_value_or_none,
     get_values_or_none,
@@ -159,7 +160,7 @@ class CellxGeneTransformer(BaseTransformer):
             journal = pub_meta.get("journal")
             title = collection_json.get("name")
 
-            entry["Citation"] = f"{first_author} ({published_year}) {journal}"
+            entry["Citation"] = build_citation(first_author, published_year, journal)
             # A consortium author carries a single "name" rather than a
             # family and given name. Join only the parts that are present,
             # so such an author reads as its name instead of ", , ".

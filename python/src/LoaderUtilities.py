@@ -554,6 +554,93 @@ def get_uuid():
     return "".join(random.choices(ALPHABET, k=12))
 
 
+def as_citation_part(value):
+    """Return a citation part as a clean string, or "" if it is missing.
+
+    Accepts values as they come from either JSON metadata or a CSV row,
+    so a NaN reads as missing rather than as the string "nan", and a year
+    that pandas typed as a float reads as 2023 rather than as 2023.0.
+
+    Parameters
+    ----------
+    value : Any
+        A citation part: an author, a year, or a journal.
+
+    Returns
+    -------
+    str
+        The part as a string, or "" if it is missing.
+    """
+    if value is None or (pd.api.types.is_scalar(value) and pd.isna(value)):
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return str(value).strip()
+
+
+def build_citation(first_author, year, journal=None):
+    """Build a citation from author, year, and journal.
+
+    The single source of the citation format. CELLxGENE metadata and the
+    dataset summary and harvester CSV files each carry these fields, and
+    each writes a citation onto the same cell set dataset vertex, so all
+    three must spell it the same way.
+
+    Parameters
+    ----------
+    first_author : Any
+        Family name of the first author.
+    year : Any
+        Year of publication.
+    journal : Any
+        Journal of publication, omitted from the citation when absent.
+
+    Returns
+    -------
+    str or None
+        A citation, such as "Sikkema (2023) Nat Med", or None unless
+        both an author and a year are known.
+    """
+    author = as_citation_part(first_author)
+    year = as_citation_part(year)
+    if not author or not year:
+        return None
+    citation = f"{author} ({year})"
+    journal = as_citation_part(journal)
+    if journal:
+        citation += f" {journal}"
+    return citation
+
+
+def build_dataset_label(citation, dataset_name):
+    """Build the name by which a cell set dataset is known.
+
+    A publication can contribute several datasets, so a citation alone
+    does not identify one. Qualifying the citation with the dataset name
+    does, provided both are known, and the label falls back to whichever
+    is known so that every dataset is named as uniquely as its metadata
+    allows.
+
+    Parameters
+    ----------
+    citation : Any
+        Citation of the publication the dataset was reported in.
+    dataset_name : Any
+        Name of the dataset.
+
+    Returns
+    -------
+    str or None
+        A label, such as "Sikkema (2023) Nat Med - Lung, 3' v2", or None
+        if neither a citation nor a dataset name is known.
+    """
+    citation = as_citation_part(citation)
+    dataset_name = as_citation_part(dataset_name)
+    if citation and dataset_name:
+        return f"{citation} - {dataset_name}"
+    return citation or dataset_name or None
+
+
 def load_results(results_path):
     """Load results CSV file and append a UUID.
 

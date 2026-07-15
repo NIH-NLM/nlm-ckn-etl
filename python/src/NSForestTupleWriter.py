@@ -37,6 +37,7 @@ from TupleWriterUtilities import (
     as_int,
     association_to_tuples,
     build_cell_set_dataset,
+    cell_set_dataset_name_tuples,
     get_predicate_uri,
     get_tuples_dir,
     parse_string_list,
@@ -186,14 +187,9 @@ def create_tuples(
                     f"CSD_{dvid}", assoc, uberon_term, sampled_tissue
                 )
             )
-        if citation:
-            tuples.append(
-                (
-                    URIRef(f"{PURLBASE}/CSD_{dvid}"),
-                    URIRef(f"{RDFSBASE}#Citation"),
-                    Literal(citation),
-                )
-            )
+        tuples.extend(
+            cell_set_dataset_name_tuples(f"CSD_{dvid}", citation, csd.dataset_name)
+        )
 
     for _, row in nsforest_results.iterrows():
         uuid = row["uuid"]

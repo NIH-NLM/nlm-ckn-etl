@@ -395,3 +395,56 @@ class LoaderUtilitiesTestCase(unittest.TestCase):
         self.assertNotIn("KRAS", genes)
         # Should be sorted
         self.assertEqual(genes, sorted(genes))
+
+    # build_citation tests
+
+    def test_build_citation(self):
+        """Citation reads author, year, and journal."""
+        self.assertEqual(
+            lu.build_citation("Sikkema", 2023, "Nat Med"),
+            "Sikkema (2023) Nat Med",
+        )
+
+    def test_build_citation_without_journal(self):
+        """The journal is omitted when it is unknown."""
+        self.assertEqual(lu.build_citation("Sikkema", 2023, None), "Sikkema (2023)")
+
+    def test_build_citation_without_author_or_year(self):
+        """A citation needs both an author and a year."""
+        self.assertIsNone(lu.build_citation(None, 2023, "Nat Med"))
+        self.assertIsNone(lu.build_citation("Sikkema", None, "Nat Med"))
+        self.assertIsNone(lu.build_citation(None, None, None))
+
+    def test_build_citation_reads_a_csv_row(self):
+        """A missing CSV value reads as missing, not as "nan"."""
+        row = pd.DataFrame(
+            {"first_author": [None], "year": [None], "journal": [None]}
+        ).iloc[0]
+        self.assertIsNone(
+            lu.build_citation(row.get("first_author"), row.get("year"), row.get("journal"))
+        )
+
+    def test_build_citation_reads_a_float_year(self):
+        """A year pandas typed as a float reads as 2023, not as 2023.0."""
+        self.assertEqual(
+            lu.build_citation("Sikkema", 2023.0, "Nat Med"),
+            "Sikkema (2023) Nat Med",
+        )
+
+    # build_dataset_label tests
+
+    def test_build_dataset_label(self):
+        """The label qualifies the citation with the dataset name."""
+        self.assertEqual(
+            lu.build_dataset_label("Sikkema (2023) Nat Med", "Lung, 3' v2"),
+            "Sikkema (2023) Nat Med - Lung, 3' v2",
+        )
+
+    def test_build_dataset_label_falls_back(self):
+        """The label is whichever part is known."""
+        self.assertEqual(
+            lu.build_dataset_label("Sikkema (2023) Nat Med", None),
+            "Sikkema (2023) Nat Med",
+        )
+        self.assertEqual(lu.build_dataset_label(None, "Lung, 3' v2"), "Lung, 3' v2")
+        self.assertIsNone(lu.build_dataset_label(None, None))

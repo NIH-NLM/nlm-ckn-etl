@@ -149,6 +149,24 @@ class MappingTupleWriterTestCase(unittest.TestCase):
         blob = " ".join(str(part) for t in tuples for part in t)
         self.assertIn("nsforest-uuid", blob)
 
+    def test_dataset_named_by_citation_and_dataset_name(self):
+        summary = self._make_summary()
+        summary["first_author"] = ["Sikkema"]
+        summary["year"] = [2023]
+        summary["journal"] = ["Nat Med"]
+        summary["dataset_title"] = ["Lung, 3' v2"]
+
+        tuples = create_tuples(self._make_data(), summary)
+
+        names = [
+            str(t[2]) for t in tuples if len(t) == 3 and str(t[1]).endswith("#Name")
+        ]
+        citations = [
+            str(t[2]) for t in tuples if len(t) == 3 and str(t[1]).endswith("#Citation")
+        ]
+        self.assertEqual(names, ["Sikkema (2023) Nat Med - Lung, 3' v2"])
+        self.assertEqual(citations, ["Sikkema (2023) Nat Med"])
+
 
 if __name__ == "__main__":
     unittest.main()

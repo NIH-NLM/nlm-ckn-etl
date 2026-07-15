@@ -14,6 +14,7 @@ from LoaderUtilities import PURLBASE, RDFSBASE, get_current_run
 from TupleWriterUtilities import (
     ASSOCIATION_CLASSES,
     association_to_tuples,
+    cell_set_dataset_name_tuples,
     entity_to_term,
     get_tuples_dir,
     normalize_doi,
@@ -85,16 +86,19 @@ def create_tuples(cellxgene_results: dict) -> list[tuple]:
 
         # Additional annotations not on the PUB and CSD entities
         citation = metadata.get("Citation")
+        tuples.extend(
+            cell_set_dataset_name_tuples(
+                entity_to_term(csd, ctx), citation, csd.dataset_name
+            )
+        )
         if citation:
-            for entity in [csd, pub]:
-                term = entity_to_term(entity, ctx)
-                tuples.append(
-                    (
-                        URIRef(f"{PURLBASE}/{term}"),
-                        URIRef(f"{RDFSBASE}#Citation"),
-                        Literal(citation),
-                    )
+            tuples.append(
+                (
+                    URIRef(f"{PURLBASE}/{entity_to_term(pub, ctx)}"),
+                    URIRef(f"{RDFSBASE}#Citation"),
+                    Literal(citation),
                 )
+            )
 
     return tuples
 
