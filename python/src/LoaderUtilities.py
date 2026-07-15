@@ -237,7 +237,7 @@ def get_uberon_root_map(results_dir=None):
     results_dir = Path(results_dir)
 
     root_map = {}
-    for path in sorted(Path(results_dir).glob(spec.UBERON_GLOB)):
+    for path in sorted(Path(results_dir).glob(spec.UBERON_GLOB_RECURSIVE)):
         organ = spec.organ_of_uberon_path(path)
         uberon_data = pd.read_csv(path)
         roots = [

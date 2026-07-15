@@ -52,6 +52,20 @@ class UberonRootMapTestCase(unittest.TestCase):
         self.assertEqual(self.root_map["kidney"]["roots"], [("UBERON:0002113", "kidney")])
         self.assertIn("UBERON:8920012", self.root_map["kidney"]["terms"])
 
+    def test_nested_organ_file_is_discovered(self):
+        # The validator discovers UBERON tables recursively, so the root map
+        # must too: a table nested a directory deep would otherwise pass
+        # validation yet be missing from the map, sending writers down the
+        # descendant-tissue fallback the rollup exists to avoid.
+        nested = self.results_dir / "extracted"
+        nested.mkdir()
+        (nested / "uberon_liver.csv").write_text(
+            "obo_id,label,level\nUBERON:0002107,liver,root\n"
+        )
+        root_map = get_uberon_root_map(self.results_dir)
+        self.assertIn("liver", root_map)
+        self.assertEqual(root_map["liver"]["roots"], [("UBERON:0002107", "liver")])
+
     def test_descendant_resolves_to_organ_root(self):
         self.assertEqual(
             resolve_root_uberon_term(

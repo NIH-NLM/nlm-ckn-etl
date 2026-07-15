@@ -130,7 +130,11 @@ def create_tuples(
         if root_term is None and not summary_row.empty:
             raw_tissue = summary_row.iloc[0].get("tissue_ontology_term_id")
             if pd.notna(raw_tissue):
-                terms = [t.strip() for t in str(raw_tissue).split("|") if t.strip()]
+                terms = [
+                    t.strip().replace("_", ":")
+                    for t in str(raw_tissue).split("|")
+                    if t.strip()
+                ]
                 root_term = terms[0] if terms else None
         if root_term is not None:
             anat = AnatomicalStructure(ontology_purl=root_term)
