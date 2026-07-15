@@ -392,6 +392,26 @@ def check_content(report, nsforest_paths):
             "harvester_final",
         )
 
+    # UBERON: required columns, and a root term to roll cell sets up to.
+    for up in data_dir.rglob(spec.UBERON_GLOB):
+        u_cols = _check_required_columns(
+            report,
+            up,
+            spec.UBERON_REQUIRED_COLUMNS,
+            "uberon-columns",
+            "uberon",
+        )
+        if u_cols and "level" in u_cols:
+            udf = pd.read_csv(up)
+            if not (udf["level"] == spec.UBERON_ROOT_LEVEL).any():
+                report.add(
+                    ERROR,
+                    "uberon-root",
+                    f"No row with level == {spec.UBERON_ROOT_LEVEL}, so cell sets "
+                    "of this organ cannot be connected to a root UBERON term.",
+                    _rel(report, up),
+                )
+
 
 # ---------------------------------------------------------------------------
 # Value-format checks (P1)
@@ -468,6 +488,9 @@ def check_referential(report, nsforest_paths):
     """
     data_dir = report.data_dir
     harvester_dvids = _harvester_dvids(data_dir)
+    uberon_organs = {
+        spec.organ_of_uberon_path(up) for up in data_dir.rglob(spec.UBERON_GLOB)
+    }
 
     for p in nsforest_paths:
         try:
@@ -501,6 +524,22 @@ def check_referential(report, nsforest_paths):
                         "tissue-curie",
                         f"tissue_ontology_term_id has non-CURIE token(s): "
                         f"{sorted(bad)}",
+                        _rel(report, sp),
+                    )
+            if "organ" in sdf.columns:
+                unrooted = {
+                    spec.normalize_organ(o)
+                    for o in sdf["organ"].dropna().astype(str)
+                    if spec.normalize_organ(o) not in uberon_organs
+                    and spec.normalize_organ(o) not in spec.ORGAN_ROOT_OVERRIDES
+                }
+                if unrooted:
+                    report.add(
+                        WARN,
+                        "uberon-root-missing",
+                        f"organ(s) {sorted(unrooted)} have neither a "
+                        f"{spec.UBERON_GLOB} file nor an ORGAN_ROOT_OVERRIDES entry; "
+                        "cell sets keep an edge to every tissue term.",
                         _rel(report, sp),
                     )
 

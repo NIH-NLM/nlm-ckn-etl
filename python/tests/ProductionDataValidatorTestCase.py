@@ -57,6 +57,7 @@ class Tree:
     silhouette: Path
     mapping: Path
     harvester: Path
+    uberon: Path
     manifest: Path
 
 
@@ -94,6 +95,7 @@ class ValidatorFixtureTestCase(unittest.TestCase):
         harvester = (
             root / "liver" / "cellxgene-harvester" / "homo_sapiens_liver_harvester_final.csv"
         )
+        uberon = root / "liver" / "cellxgene-harvester" / "uberon_liver.csv"
         manifest = ds / "master_s3_manifest.csv"
 
         self._write(
@@ -141,6 +143,16 @@ class ValidatorFixtureTestCase(unittest.TestCase):
         )
         self._write(harvester, pd.DataFrame({"dataset_version_id": ["dv-1"]}))
         self._write(
+            uberon,
+            pd.DataFrame(
+                {
+                    "obo_id": ["UBERON:0002107", "UBERON:0001280"],
+                    "label": ["liver", "caudate lobe of liver"],
+                    "level": ["root", "descendant"],
+                }
+            ),
+        )
+        self._write(
             manifest,
             pd.DataFrame({"filename": [name], "s3_path": ["s3://x/y"]}),
         )
@@ -154,6 +166,7 @@ class ValidatorFixtureTestCase(unittest.TestCase):
             silhouette=silhouette,
             mapping=mapping,
             harvester=harvester,
+            uberon=uberon,
             manifest=manifest,
         )
 
@@ -163,6 +176,22 @@ class ValidatorFixtureTestCase(unittest.TestCase):
         self.assertEqual(
             report.warnings(), [], msg=[vars(f) for f in report.warnings()]
         )
+
+    def test_uberon_without_a_root_term(self):
+        df = pd.read_csv(self.tree.uberon)
+        df["level"] = "descendant"
+        df.to_csv(self.tree.uberon, index=False)
+        report = v.validate(self.root)
+        findings = self._find(report, "uberon-root")
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, self._rel(self.tree.uberon))
+
+    def test_organ_without_a_uberon_file(self):
+        self.tree.uberon.unlink()
+        report = v.validate(self.root)
+        findings = self._find(report, "uberon-root-missing")
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, self._rel(self.tree.summary))
 
     def test_no_results(self):
         # The one case that needs an empty tree rather than the fixture.

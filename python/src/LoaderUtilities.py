@@ -211,6 +211,129 @@ def get_cellxgene_harvester_data(results_dir=None):
     return pd.DataFrame()
 
 
+def get_uberon_root_map(results_dir=None):
+    """Get the organ to UBERON root/descendant mapping from the flat results dir.
+
+    Reads each ``uberon_<organ>.csv`` the cellxgene-harvester emits, keying it
+    by the organ in its filename, which is the value a dataset summary carries
+    in its ``organ`` column.
+
+    Parameters
+    ----------
+    results_dir : Path, optional
+        Flat directory of extracted release zip contents.  Defaults to the
+        current run config's ``results_dir``.
+
+    Returns
+    -------
+    dict
+        Mapping from organ to ``{"roots": [(obo_id, label), ...], "terms":
+        set[obo_id]}``, where ``terms`` holds every term of the organ, root
+        and descendant alike.
+    """
+    if results_dir is None:
+        results_dir = get_current_run().results_dir
+
+    results_dir = Path(results_dir)
+
+    root_map = {}
+    for path in sorted(Path(results_dir).glob(spec.UBERON_GLOB_RECURSIVE)):
+        organ = spec.organ_of_uberon_path(path)
+        uberon_data = pd.read_csv(path)
+        roots = [
+            (row["obo_id"], row["label"])
+            for _, row in uberon_data.iterrows()
+            if row["level"] == spec.UBERON_ROOT_LEVEL
+        ]
+        if not roots:
+            print(f"Warning: no root term in {path.name}")
+            continue
+        root_map[organ] = {"roots": roots, "terms": set(uberon_data["obo_id"])}
+
+    return root_map
+
+
+def resolve_root_uberon_term(organ, tissue_terms, root_map):
+    """Resolve the single root UBERON term a dataset's cell sets derive from.
+
+    A dataset is sampled from one organ, so its cell sets connect to that
+    organ's root term rather than to each of the pipe-delimited descendant
+    terms the summary carries (Springbok-LLC/nlm-ckn-etl#38).
+
+    Parameters
+    ----------
+    organ : str
+        The summary's ``organ`` value.
+    tissue_terms : list[str]
+        The summary's ``tissue_ontology_term_id`` values, as CURIEs.
+    root_map : dict
+        Mapping returned by :func:`get_uberon_root_map`.
+
+    Returns
+    -------
+    str or None
+        The root UBERON CURIE, or None if the organ has neither a harvester
+        table nor an override, in which case the caller keeps the dataset's
+        own tissue terms.
+    """
+    organ = spec.normalize_organ(organ)
+    entry = root_map.get(organ)
+
+    if entry is None:
+        root_term = spec.ORGAN_ROOT_OVERRIDES.get(organ)
+        if root_term is None:
+            print(f"Warning: no UBERON root term for organ {organ}")
+        return root_term
+
+    # An organ whose harvester table was built from more than one query has
+    # more than one root (respiratory system also has nose).  A dataset
+    # sampled from one of those roots connects to it directly; any other
+    # dataset connects to the root named by the organ.
+    roots = entry["roots"]
+    root_ids = [obo_id for obo_id, _ in roots]
+    for term in tissue_terms:
+        if term in root_ids:
+            return term
+
+    for term in tissue_terms:
+        if term not in entry["terms"]:
+            print(f"Warning: tissue term {term} not among the terms of {organ}")
+
+    for obo_id, label in roots:
+        if spec.normalize_organ(label) == organ:
+            return obo_id
+
+    return root_ids[0]
+
+
+def resolve_summary_root_uberon_term(summary_data, root_map):
+    """Resolve the root UBERON term of a dataset summary, or None.
+
+    Wraps :func:`resolve_root_uberon_term` for the writers, which hold the
+    summary as a dataframe with ``organ`` and ``tissue_ontology_term_id``
+    columns.
+    """
+    if summary_data is None or summary_data.empty:
+        return None
+
+    row = summary_data.iloc[0]
+    if "organ" not in summary_data.columns or pd.isna(row["organ"]):
+        print("Warning: dataset summary has no organ, so no UBERON root term")
+        return None
+
+    tissue_terms = []
+    if "tissue_ontology_term_id" in summary_data.columns and pd.notna(
+        row["tissue_ontology_term_id"]
+    ):
+        tissue_terms = [
+            t.strip().replace("_", ":")
+            for t in str(row["tissue_ontology_term_id"]).split("|")
+            if t.strip()
+        ]
+
+    return resolve_root_uberon_term(row["organ"], tissue_terms, root_map)
+
+
 def get_dataset_file_paths(results_dir=None):
     """Get all NSForest results paths and their companion file paths from
     the flat release zip directory.

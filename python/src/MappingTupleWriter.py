@@ -18,8 +18,10 @@ from LoaderUtilities import (
     get_current_run,
     get_dataset_file_paths,
     get_gene_ensembl_id_to_names_map,
+    get_uberon_root_map,
     hyphenate,
     load_results,
+    resolve_summary_root_uberon_term,
 )
 
 from ckn_schema.pydantic.ckn_schema import (
@@ -45,6 +47,7 @@ def create_tuples(
     mapping_results: pd.DataFrame,
     summary_data: pd.DataFrame,
     harvester_data: pd.DataFrame | None = None,
+    uberon_root_map: dict | None = None,
 ) -> list[tuple]:
     """Create tuples from cluster_cid author-to-CL mapping results.
 
@@ -65,6 +68,10 @@ def create_tuples(
         ``dataset_version_id``), supplying tissue and dataset metadata.
     harvester_data : pd.DataFrame, optional
         CELLxGENE harvester metadata, keyed by ``dataset_version_id``.
+    uberon_root_map : dict, optional
+        Organ to UBERON root mapping from ``LoaderUtilities.get_uberon_root_map``,
+        used to set each cell set's anatomical structure to the root term of the
+        organ its dataset was sampled from.
 
     Returns
     -------
@@ -114,18 +121,26 @@ def create_tuples(
 
         # Tissue (UBERON) comes from the dataset summary.  Datasets are
         # tissue-filtered during processing, so the dataset's tissue is the
-        # cluster's tissue; use the first term if multi-valued to preserve the
-        # CellSet -> AnatomicalStructure relation.
+        # cluster's tissue: the root term of the organ the dataset was sampled
+        # from, matching the CellSet -> AnatomicalStructure edge
+        # NSForestTupleWriter emits.  Fall back to the first of the summary's
+        # tissue terms for an organ with no root term.
         anat = None
-        if not summary_row.empty:
+        root_term = resolve_summary_root_uberon_term(summary_row, uberon_root_map or {})
+        if root_term is None and not summary_row.empty:
             raw_tissue = summary_row.iloc[0].get("tissue_ontology_term_id")
             if pd.notna(raw_tissue):
-                terms = [t.strip() for t in str(raw_tissue).split("|") if t.strip()]
-                if terms:
-                    anat = AnatomicalStructure(ontology_purl=terms[0])
-                    uberon_term = curie_to_term(anat.ontology_purl)
-                    if uberon_term in DEPRECATED_TERMS:
-                        print(f"Warning: UBERON term {uberon_term} deprecated")
+                terms = [
+                    t.strip().replace("_", ":")
+                    for t in str(raw_tissue).split("|")
+                    if t.strip()
+                ]
+                root_term = terms[0] if terms else None
+        if root_term is not None:
+            anat = AnatomicalStructure(ontology_purl=root_term)
+            uberon_term = curie_to_term(anat.ontology_purl)
+            if uberon_term in DEPRECATED_TERMS:
+                print(f"Warning: UBERON term {uberon_term} deprecated")
 
         author_cell_set = hyphenate(str(row.get("cluster_name", "")))
         markers = resolve_gene_names(
@@ -237,6 +252,7 @@ def main():
     """
     results_dir = get_current_run().results_dir
     harvester_data = get_cellxgene_harvester_data(results_dir)
+    uberon_root_map = get_uberon_root_map(results_dir)
     file_paths = get_dataset_file_paths(results_dir)
 
     for nsforest_path, mapping_path, summary_path in zip(
@@ -276,7 +292,9 @@ def main():
         summary_data = load_results(summary_path[0]) if summary_path else pd.DataFrame()
 
         print(f"Creating mapping tuples from {cluster_cid_path.name}")
-        tuples = create_tuples(mapping_results, summary_data, harvester_data)
+        tuples = create_tuples(
+            mapping_results, summary_data, harvester_data, uberon_root_map
+        )
         if tuples:
             output_name = cluster_cid_path.name.replace(".csv", "-mapping.json")
             write_tuples(tuples, get_tuples_dir() / output_name)
