@@ -152,16 +152,61 @@ class EntityToTermTestCase(unittest.TestCase):
             "BGS_xyz789",
         )
 
-    def test_publication_with_context(self):
+    def test_publication_keyed_by_doi_not_dataset(self):
+        # The dataset a publication was harvested with must not enter its
+        # key, or each dataset of a paper gets its own publication vertex.
         pub = Publication(publication_doi="10.1234/test")
+        self.assertEqual(
+            twu.entity_to_term(pub, {"dataset_version_id": "dvid-001"}),
+            "PUB_10.1234-test",
+        )
+
+    def test_publication_without_context(self):
+        pub = Publication(publication_doi="10.1234/test")
+        self.assertEqual(twu.entity_to_term(pub), "PUB_10.1234-test")
+
+    def test_publication_without_doi_falls_back_to_dataset(self):
+        pub = Publication(title="Untitled")
         self.assertEqual(
             twu.entity_to_term(pub, {"dataset_version_id": "dvid-001"}),
             "PUB_dvid-001",
         )
 
-    def test_publication_without_context(self):
-        pub = Publication(publication_doi="10.1234/test")
-        self.assertEqual(twu.entity_to_term(pub), "PUB_10.1234/test")
+    def test_publication_without_doi_or_context(self):
+        pub = Publication(title="Untitled")
+        self.assertIsNone(twu.entity_to_term(pub))
+
+    def test_normalize_doi(self):
+        self.assertEqual(
+            twu.normalize_doi("https://doi.org/10.1038/S41591-023-02327-2"),
+            "10.1038/s41591-023-02327-2",
+        )
+        self.assertEqual(
+            twu.normalize_doi("dx.doi.org/10.1234/test"), "10.1234/test"
+        )
+        self.assertEqual(twu.normalize_doi(" 10.1234/test "), "10.1234/test")
+        self.assertIsNone(twu.normalize_doi(None))
+        self.assertIsNone(twu.normalize_doi(""))
+
+    def test_doi_to_key(self):
+        # The key can hold neither the DOI's slash nor an underscore, which
+        # OntologyGraphBuilder treats as the collection separator.
+        self.assertEqual(
+            twu.doi_to_key("https://doi.org/10.1038/s41591-023-02327-2"),
+            "10.1038-s41591-023-02327-2",
+        )
+        self.assertEqual(twu.doi_to_key("10.1234/a_b c"), "10.1234-a-b-c")
+        self.assertIsNone(twu.doi_to_key(None))
+
+    def test_doi_key_is_a_legal_vertex_term(self):
+        # OntologyGraphBuilder.createVTuple splits the term on "_" and drops
+        # the vertex unless it yields exactly two tokens.
+        term = twu.entity_to_term(
+            Publication(publication_doi="https://doi.org/10.1126/science.adf6812")
+        )
+        self.assertEqual(len(term.split("_")), 2)
+        self.assertNotIn("/", term)
+        self.assertNotIn(":", term)
 
     def test_drug_with_chembl_context(self):
         drug = Drug(label="Imatinib")

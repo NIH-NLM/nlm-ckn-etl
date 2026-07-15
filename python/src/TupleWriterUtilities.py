@@ -213,6 +213,59 @@ def remove_protocols(value: Any) -> Any:
     return value
 
 
+def normalize_doi(value: Any) -> str | None:
+    """Reduce a publication link to a bare, lowercase DOI.
+
+    Strips the protocol and any DOI resolver host, so that
+    "https://doi.org/10.1038/S41591-023-02327-2" and
+    "10.1038/s41591-023-02327-2" both yield the latter. DOIs are
+    case-insensitive, so the result is lowercased to give a paper one
+    identity regardless of how CELLxGENE spelled it.
+
+    Parameters
+    ----------
+    value : Any
+        A DOI, DOI URL, or None; non-string values return None.
+
+    Returns
+    -------
+    str or None
+        The bare DOI, or None if there is none.
+    """
+    if not isinstance(value, str):
+        return None
+    doi = remove_protocols(value).strip().lower()
+    doi = re.sub(r"^(dx\.)?doi\.org/", "", doi)
+    return doi or None
+
+
+def doi_to_key(value: Any) -> str | None:
+    """Convert a DOI to an ArangoDB document key.
+
+    A DOI contains a slash, which cannot appear in a document key, and
+    would also break the term parsing in OntologyGraphBuilder, which
+    splits the last segment of a vertex PURL on "_" and requires exactly
+    two tokens. Characters outside that safe set are replaced with "-",
+    so 10.1038/s41591-023-02327-2 becomes 10.1038-s41591-023-02327-2.
+
+    Parameters
+    ----------
+    value : Any
+        A DOI, DOI URL, or None.
+
+    Returns
+    -------
+    str or None
+        The document key, or None if there is no DOI.
+    """
+    doi = normalize_doi(value)
+    if doi is None:
+        return None
+    key = re.sub(r"[^a-z0-9.-]+", "-", doi)
+    key = re.sub(r"-{2,}", "-", key).strip("-")
+    return key or None
+
+
 # ---------------------------------------------------------------------------
 # Tuple infrastructure
 # ---------------------------------------------------------------------------
@@ -335,11 +388,16 @@ def entity_to_term(entity: Any, context: dict[str, Any] | None = None) -> str | 
         return f"BGS_{uuid}" if uuid else None
 
     if isinstance(entity, Publication):
+        # Key Publications by DOI, not by the dataset they were harvested
+        # with, so that every dataset of a paper attaches to one shared
+        # publication vertex. Datasets whose CELLxGENE record carries no
+        # publication link fall back to the dataset version id, which at
+        # least keeps them attributed to something.
+        key = doi_to_key(getattr(entity, "publication_doi", None))
+        if key:
+            return f"PUB_{key}"
         dvid = ctx.get("dataset_version_id")
-        if dvid:
-            return f"PUB_{dvid}"
-        doi = remove_protocols(getattr(entity, "publication_doi", None))
-        return f"PUB_{doi}" if doi else None
+        return f"PUB_{dvid}" if dvid else None
 
     if isinstance(entity, Drug):
         chembl_id = ctx.get("chembl_id")

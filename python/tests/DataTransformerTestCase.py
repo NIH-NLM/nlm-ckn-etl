@@ -74,6 +74,42 @@ class CellxGeneTransformerTestCase(unittest.TestCase):
         for field in expected_fields:
             self.assertIn(field, entry, f"Missing field: {field}")
 
+    def test_transform_names_authors_without_a_given_name(self):
+        """A consortium author reads as its name, not as ", , "."""
+        transformer = CellxGeneTransformer()
+        result = transformer.transform(self.raw)
+
+        entry = result[list(result.keys())[0]]
+        self.assertNotIn(", , ", entry["Author_list"])
+        self.assertTrue(entry["Author_list"].endswith("KPMP Consortium"))
+
+    def test_transform_reads_publication_doi_without_a_citation(self):
+        """The collection doi is used when the citation carries no publication.
+
+        Jorstad (2023) Science is such a collection, and its datasets would
+        otherwise reach no publication at all.
+        """
+        transformer = CellxGeneTransformer()
+        raw = {
+            "dv-1": {
+                "dataset_json": {
+                    "citation": None,
+                    "assets": [{"url": "https://cellxgene.cziscience.com/e/dv-1.cxg/"}],
+                },
+                "collection_json": {
+                    "doi": "10.1126/science.adf6812",
+                    "citation": None,
+                    "publisher_metadata": {"authors": [{"family": "Jorstad"}]},
+                },
+            }
+        }
+        result = transformer.transform(raw)
+
+        self.assertEqual(
+            result["dv-1"]["Link_to_publication"],
+            "https://doi.org/10.1126/science.adf6812",
+        )
+
     def test_transform_skips_missing_collection(self):
         """Entries with no collection_json are skipped."""
         transformer = CellxGeneTransformer()
