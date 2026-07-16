@@ -245,15 +245,37 @@ class GetPredicateUriTestCase(unittest.TestCase):
             URIRef("http://purl.obolibrary.org/obo/BFO_0000050"),
         )
 
-    def test_member_of(self):
-        assoc = twu.ASSOCIATION_CLASSES["CellSetMemberOfCellSetDataset"](
-            subject=CellSet(author_cell_term="T-Cell"),
-            predicate="nlm-ckn:member_of",
-            object=CellSetDataset(dataset_identifier="abc"),
+    def test_is_about(self):
+        assoc = twu.ASSOCIATION_CLASSES["CellSetDatasetIsAboutCellSet"](
+            subject=CellSetDataset(dataset_identifier="abc"),
+            predicate="nlm-ckn:is_about",
+            object=CellSet(author_cell_term="T-Cell"),
         )
         self.assertEqual(
             twu.get_predicate_uri(assoc),
-            URIRef("http://purl.obolibrary.org/obo/RO_0002350"),
+            URIRef("http://purl.obolibrary.org/obo/IAO_0000136"),
+        )
+
+    def test_selectively_expresses(self):
+        assoc = twu.ASSOCIATION_CLASSES["CellSetSelectivelyExpressesGene"](
+            subject=CellSet(author_cell_term="T-Cell"),
+            predicate="nlm-ckn:selectively_expresses",
+            object=Gene(gene_symbol="TP53"),
+        )
+        self.assertEqual(
+            twu.get_predicate_uri(assoc),
+            URIRef("http://purl.obolibrary.org/obo/RO_0002294"),
+        )
+
+    def test_expresses_binary_gene_set_keeps_expresses(self):
+        assoc = twu.ASSOCIATION_CLASSES["CellSetExpressesBinaryGeneSet"](
+            subject=CellSet(author_cell_term="T-Cell"),
+            predicate="nlm-ckn:expresses",
+            object=BinaryGeneSet(markers="TP53 BRCA1"),
+        )
+        self.assertEqual(
+            twu.get_predicate_uri(assoc),
+            URIRef("http://purl.obolibrary.org/obo/RO_0002292"),
         )
 
 

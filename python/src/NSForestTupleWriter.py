@@ -94,13 +94,13 @@ def create_tuples(
 
     Produces:
     - CellSetDatasetIsAboutAnatomicalStructure (dataset-scope, per UBERON term)
+    - CellSetDatasetIsAboutCellSet
     - CellSetDerivesFromAnatomicalStructure
     - CellSetExpressesBinaryGeneSet
-    - CellSetExpressesGene (for each binary gene)
     - CellSetHasCharacterizingMarkerSetBiomarkerCombination
-    - CellSetMemberOfCellSetDataset
+    - CellSetSelectivelyExpressesGene (for each binary gene)
+    - GenePartOfBinaryGeneSet (for each binary gene)
     - GenePartOfBiomarkerCombination (for each marker)
-    - BiomarkerCombinationSubclusterOfBinaryGeneSet
 
     Parameters
     ----------
@@ -120,7 +120,7 @@ def create_tuples(
         Mapping from ``clusterName`` to the single ``dataset_version_id`` the
         cluster belongs to, used only when ``dataset_version_ids`` spans more
         than one dataset (in prod, only Jorstad).  When provided, each cell
-        set emits a single ``member_of`` edge to its resolved dataset instead
+        set emits a single ``is_about`` edge from its resolved dataset instead
         of fanning out to every dataset.  A cluster the map cannot resolve to
         a known dataset raises (the multi-dataset mapping is incomplete).
         ``None`` for single-dataset results files, where the lone dataset is
@@ -265,13 +265,24 @@ def create_tuples(
             )
         )
 
-        # CellSet expresses Gene (for each binary gene)
+        # CellSet selectively_expresses Gene, and Gene part_of BinaryGeneSet
+        # (for each binary gene)
         for gene_symbol in binary_genes:
             gene = Gene(gene_symbol=gene_symbol)
-            assoc = ASSOCIATION_CLASSES["CellSetExpressesGene"](
+            assoc = ASSOCIATION_CLASSES["CellSetSelectivelyExpressesGene"](
                 subject=cell_set,
-                predicate="nlm-ckn:expresses",
+                predicate="nlm-ckn:selectively_expresses",
                 object=gene,
+            )
+            tuples.extend(
+                association_to_tuples(
+                    assoc, ctx, source="NS-Forest", annotated_terms=annotated
+                )
+            )
+            assoc = ASSOCIATION_CLASSES["GenePartOfBinaryGeneSet"](
+                subject=gene,
+                predicate="nlm-ckn:part_of",
+                object=bgs,
             )
             tuples.extend(
                 association_to_tuples(
@@ -318,35 +329,35 @@ def create_tuples(
                     )
                 )
 
-        # CellSet member_of CellSetDataset.  A cell set belongs to exactly one
-        # dataset.  For a single-dataset results file that is the lone dvid;
+        # CellSetDataset is_about CellSet.  A cell set is described by exactly
+        # one dataset.  For a single-dataset results file that is the lone dvid;
         # for a multi-dataset file (Jorstad) the cluster's dataset comes from
         # cluster_dvid_map.  Fanning out to every dvid would falsely assert the
-        # cell set is a member of datasets it does not belong to.
+        # cell set is described by datasets it was not taken from.
         if cluster_dvid_map is not None:
-            member_dvid = cluster_dvid_map.get(str(row["clusterName"]))
-            if member_dvid is None or member_dvid not in csd_by_dvid:
+            describing_dvid = cluster_dvid_map.get(str(row["clusterName"]))
+            if describing_dvid is None or describing_dvid not in csd_by_dvid:
                 raise Exception(
                     f"No dataset_version_id resolved for cluster "
                     f"{row['clusterName']!r} in a multi-dataset results file; "
                     "cluster_cid_mapping is incomplete"
                 )
-            member_dvids = [member_dvid]
+            describing_dvids = [describing_dvid]
         else:
             if len(csd_by_dvid) > 1:
                 raise Exception(
                     "Multi-dataset results require cluster_dvid_map to resolve "
-                    "per-cluster member_of edges"
+                    "per-cluster is_about edges"
                 )
-            member_dvids = list(csd_by_dvid.keys())
-        for dvid in member_dvids:
+            describing_dvids = list(csd_by_dvid.keys())
+        for dvid in describing_dvids:
             csd, _ = csd_by_dvid[
                 dvid
             ]  # (CellSetDataset, citation); citation unused here
-            assoc = ASSOCIATION_CLASSES["CellSetMemberOfCellSetDataset"](
-                subject=cell_set,
-                predicate="nlm-ckn:member_of",
-                object=csd,
+            assoc = ASSOCIATION_CLASSES["CellSetDatasetIsAboutCellSet"](
+                subject=csd,
+                predicate="nlm-ckn:is_about",
+                object=cell_set,
             )
             tuples.extend(
                 association_to_tuples(
@@ -367,18 +378,6 @@ def create_tuples(
                     assoc, ctx, source="NS-Forest", annotated_terms=annotated
                 )
             )
-
-        # BiomarkerCombination subcluster_of BinaryGeneSet
-        assoc = ASSOCIATION_CLASSES["BiomarkerCombinationSubclusterOfBinaryGeneSet"](
-            subject=bmc,
-            predicate="nlm-ckn:subcluster_of",
-            object=bgs,
-        )
-        tuples.extend(
-            association_to_tuples(
-                assoc, ctx, source="NS-Forest", annotated_terms=annotated
-            )
-        )
 
     return tuples
 
@@ -425,10 +424,11 @@ def main():
         # Jorstad), each cell set belongs to exactly one of them; the
         # per-cluster dataset_version_id lives in the reference
         # cluster_cid_mapping.  Build the clusterName -> dataset_version_id map
-        # so create_tuples emits a single member_of edge per cell set.  This is
+        # so create_tuples emits a single is_about edge per cell set.  This is
         # an enforced invariant: a multi-dataset file must carry a mapping with
-        # a dataset_version_id column, else we cannot resolve membership.
-        # Single-dataset files need no mapping (the lone dvid is the member).
+        # a dataset_version_id column, else we cannot resolve which dataset
+        # describes a cell set.  Single-dataset files need no mapping (the lone
+        # dvid is the only dataset that can describe it).
         # (pd.read_csv, not load_results: avoid load_results rewriting the
         # mapping CSV with a uuid column we do not use here.)
         cluster_dvid_map = None

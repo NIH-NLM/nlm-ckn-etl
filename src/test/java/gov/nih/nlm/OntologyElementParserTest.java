@@ -206,7 +206,8 @@ class OntologyElementParserTest {
         assertEquals(URI.create("http://purl.obolibrary.org/obo/RO_0002027"), terms.get("RO_0002027").purl());
 
         assertTrue(terms.containsKey("RO_0002294"));
-        assertEquals("selectively express", terms.get("RO_0002294").label());
+        // The edge label is derived from this: SELECTIVELY_EXPRESSES.
+        assertEquals("selectively expresses", terms.get("RO_0002294").label());
         assertEquals(URI.create("http://purl.obolibrary.org/obo/RO_0002294"), terms.get("RO_0002294").purl());
 
         assertTrue(terms.containsKey("RO_0020325"));

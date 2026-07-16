@@ -597,8 +597,8 @@ def check_multidataset_mapping(report, nsforest_paths):
     Mirrors the hard-fail invariant NSForestTupleWriter enforces: a
     multi-dataset results file (in prod, only Jorstad) carries a reference
     mapping with a dataset_version_id column that resolves each cluster to one
-    of the summary's datasets, so member_of edges point at a single dataset
-    rather than fanning out to all.  Single-dataset files need no mapping.
+    of the summary's datasets, so is_about edges come from a single dataset
+    rather than fanning out from all.  Single-dataset files need no mapping.
     Surfaced here (ERROR) so the violation is caught at validation time rather
     than as a mid-run exception.
     """
@@ -667,7 +667,7 @@ def check_multidataset_mapping(report, nsforest_paths):
                 ERROR,
                 "multidataset-cluster-unresolved",
                 f"{len(unresolved)} large cluster(s) are not resolved to a summary "
-                "dataset_version_id by the mapping; member_of would be ambiguous.",
+                "dataset_version_id by the mapping; is_about would be ambiguous.",
                 _rel(report, p),
             )
 
