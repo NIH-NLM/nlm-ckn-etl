@@ -94,10 +94,12 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         ]
         self.assertEqual(len(bgs_edges), 1)
 
-    def test_contains_selectively_expresses_gene_per_binary_gene(self):
+    def test_contains_selectively_expresses_gene_per_marker(self):
         nsf, summary = self._make_data()
         tuples = create_tuples(nsf, summary, ["dvid-001"])
-        # CS -[selectively_expresses]-> Gene: predicate RO_0002294, object GS_*
+        # CS -[selectively_expresses]-> Gene: predicate RO_0002294, object GS_*.
+        # The cell set selectively expresses the marker genes alone, not every
+        # binary gene (it merely expresses the binary gene set as a whole).
         gene_edges = [
             t for t in tuples
             if len(t) == 3
@@ -105,7 +107,7 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
             and "/GS_" in str(t[2])
         ]
         objects = {str(t[2]).rsplit("/", 1)[-1] for t in gene_edges}
-        self.assertEqual(objects, {"GS_TP53", "GS_BRCA1", "GS_EGFR"})
+        self.assertEqual(objects, {"GS_TP53"})
 
     def test_no_gene_keeps_the_plain_expresses_predicate(self):
         nsf, summary = self._make_data()
