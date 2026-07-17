@@ -448,3 +448,36 @@ class LoaderUtilitiesTestCase(unittest.TestCase):
         )
         self.assertEqual(lu.build_dataset_label(None, "Lung, 3' v2"), "Lung, 3' v2")
         self.assertIsNone(lu.build_dataset_label(None, None))
+
+
+class DatasetOrgansMapTestCase(unittest.TestCase):
+    """Tests for get_dataset_organs_map."""
+
+    def setUp(self):
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.results_dir = Path(self._tmp.name)
+        # Two organ pipelines that filtered the SAME source dataset (dvid-shared),
+        # plus one organ-only dataset (dvid-kidney).  A companion results_ensg
+        # file per summary is needed for get_dataset_file_paths to pair them.
+        for suffix, rows in {
+            "kidney_set": [("dvid-shared", "kidney"), ("dvid-kidney", "kidney")],
+            "liver_set": [("dvid-shared", "liver")],
+        }.items():
+            (self.results_dir / f"results_ensg_{suffix}.csv").write_text(
+                "clusterName\nc1\n"
+            )
+            lines = ["organ,dataset_version_id"]
+            lines += [f"{organ},{dvid}" for dvid, organ in rows]
+            (self.results_dir / f"master_dataset_summary_{suffix}.csv").write_text(
+                "\n".join(lines) + "\n"
+            )
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_maps_source_dataset_to_all_its_organs(self):
+        organs = lu.get_dataset_organs_map(self.results_dir)
+        self.assertEqual(organs["dvid-shared"], {"kidney", "liver"})
+        self.assertEqual(organs["dvid-kidney"], {"kidney"})

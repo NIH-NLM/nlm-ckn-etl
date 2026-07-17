@@ -40,6 +40,8 @@ from LoaderUtilities import (
     map_gene_ensembl_id_to_names,
 )
 
+import ProductionDataSpecification as spec
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -694,6 +696,37 @@ def write_tuples(tuples: list[tuple], output_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def cell_set_dataset_identifier(dataset_version_id: str, organ: str | None) -> str:
+    """Compose the identifier of a cell set dataset from its source dataset
+    and the organ it was tissue-filtered for.
+
+    A CELLxGENE ``dataset_version_id`` identifies the unfiltered source h5ad.
+    Several NSForest results derive from the same source by filtering it for
+    different organs, so keying a cell set dataset on the source id alone
+    collapses those filtered datasets into one vertex (Springbok-LLC/nlm-ckn#…).
+    The organ makes the identifier unique per filtered dataset, while the
+    source id is retained separately (``version``) for CELLxGENE provenance.
+
+    Parameters
+    ----------
+    dataset_version_id : str
+        The source CELLxGENE ``dataset_version_id``.
+    organ : str or None
+        The organ the source was filtered for, or None when there is no
+        organ (an unfiltered dataset), in which case the source id is used
+        unchanged so single-organ datasets keep their existing identifier.
+
+    Returns
+    -------
+    str
+        ``"<dataset_version_id>__<organ>"`` normalized, or the bare
+        ``dataset_version_id`` when ``organ`` is falsy.
+    """
+    if not organ or (isinstance(organ, float) and pd.isna(organ)):
+        return str(dataset_version_id)
+    return f"{dataset_version_id}__{spec.normalize_organ(organ)}"
+
+
 def build_cell_set_dataset(
     dataset_version_id: str,
     summary_data: pd.DataFrame | None = None,
@@ -730,8 +763,14 @@ def build_cell_set_dataset(
         derived from author, year, and journal fields.
     """
     citation = None
+    organ = None
+    if summary_data is not None and len(summary_data) > 0:
+        organ = summary_data.iloc[0].get("organ")
     kwargs: dict[str, Any] = {
-        "dataset_identifier": dataset_version_id,
+        # Identify the filtered dataset by (source, organ); retain the source
+        # dataset_version_id in ``version`` for CELLxGENE provenance.
+        "dataset_identifier": cell_set_dataset_identifier(dataset_version_id, organ),
+        "version": str(dataset_version_id),
         "species": "Homo sapiens",
         "publication": doi,
         "collection_id": collection_id,

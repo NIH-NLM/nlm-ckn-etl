@@ -477,6 +477,52 @@ def get_dataset_version_id_lists(file_paths):
     return dataset_version_id_lists
 
 
+def get_dataset_organs_map(results_dir=None):
+    """Map each source ``dataset_version_id`` to the organs it was filtered for.
+
+    A CELLxGENE source dataset is filtered for one organ per NSForest results
+    set, so the same ``dataset_version_id`` can appear in several summaries
+    (one per organ).  Writers that mint a cell set dataset vertex per filtered
+    dataset (keyed on source id plus organ) need this map to reproduce the same
+    identifiers the summary-driven writers use — most importantly
+    ``CellxGeneTupleWriter``, whose CELLxGENE metadata carries no organ.
+
+    Parameters
+    ----------
+    results_dir : Path, optional
+        Flat directory of extracted release zip contents.  Defaults to the
+        current run config's ``results_dir``.
+
+    Returns
+    -------
+    dict
+        Mapping from ``dataset_version_id`` to the set of organ values found
+        across the summaries.  A dataset with no organ contributes an empty
+        set.
+    """
+    if results_dir is None:
+        results_dir = get_current_run().results_dir
+
+    file_paths = get_dataset_file_paths(results_dir)
+    organs_by_dvid = {}
+    for summary_path in file_paths["summary_paths"]:
+        for p in summary_path:
+            summary_data = pd.read_csv(p)
+            if "dataset_version_id" not in summary_data.columns:
+                continue
+            has_organ = "organ" in summary_data.columns
+            for _, row in summary_data.iterrows():
+                dvid = row["dataset_version_id"]
+                if pd.isna(dvid):
+                    continue
+                dvid = str(dvid)
+                organ = row["organ"] if has_organ else None
+                organs = organs_by_dvid.setdefault(dvid, set())
+                if organ is not None and pd.notna(organ) and str(organ).strip():
+                    organs.add(str(organ))
+    return organs_by_dvid
+
+
 def get_unique_gene_names_and_ids(nsforest_paths):
     """Get unique gene names, and Ensembl and Entrez ids from all NSForest
     results.

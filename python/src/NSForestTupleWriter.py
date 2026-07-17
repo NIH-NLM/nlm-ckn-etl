@@ -174,6 +174,7 @@ def create_tuples(
 
     # CellSetDataset is_about AnatomicalStructure (dataset-scope)
     for dvid, (csd, citation) in csd_by_dvid.items():
+        csd_term = f"CSD_{csd.dataset_identifier}"
         for uberon_term in uberon_terms:
             anat = AnatomicalStructure(ontology_purl=uberon_term.replace("_", ":"))
             assoc = ASSOCIATION_CLASSES["CellSetDatasetIsAboutAnatomicalStructure"](
@@ -184,11 +185,11 @@ def create_tuples(
             tuples.extend(association_to_tuples(assoc, source="CELLxGENE"))
             tuples.extend(
                 sampled_tissue_annotation(
-                    f"CSD_{dvid}", assoc, uberon_term, sampled_tissue
+                    csd_term, assoc, uberon_term, sampled_tissue
                 )
             )
         tuples.extend(
-            cell_set_dataset_name_tuples(f"CSD_{dvid}", citation, csd.dataset_name)
+            cell_set_dataset_name_tuples(csd_term, citation, csd.dataset_name)
         )
 
     for _, row in nsforest_results.iterrows():

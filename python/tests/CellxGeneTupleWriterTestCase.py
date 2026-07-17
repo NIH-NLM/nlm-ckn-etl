@@ -60,6 +60,34 @@ class CellxGeneTupleWriterTestCase(unittest.TestCase):
         tuples = create_tuples(self._make_data())
         self.assertGreater(len(tuples), 0)
 
+    def test_no_organ_map_keeps_source_keyed_vertex(self):
+        # Without a dataset->organs map, the vertex keys on the source id.
+        tuples = create_tuples(self._make_data())
+        subjects = {s for s, _ in self._attributed_to_edges(tuples)}
+        self.assertEqual(subjects, {"CSD_dvid-001"})
+
+    def test_fans_out_one_vertex_per_organ(self):
+        # A source filtered for two organs is attributed to the publication
+        # once per organ, each with a composite (source__organ) key.
+        dataset_organs = {"dvid-001": {"kidney", "liver"}}
+        tuples = create_tuples(self._make_data(), dataset_organs)
+        subjects = {s for s, _ in self._attributed_to_edges(tuples)}
+        self.assertEqual(
+            subjects, {"CSD_dvid-001__kidney", "CSD_dvid-001__liver"}
+        )
+
+    def test_fan_out_matches_summary_driven_key(self):
+        # The composite key here must equal the one build_cell_set_dataset
+        # produces from a summary, so the two writers share the vertex.
+        from TupleWriterUtilities import cell_set_dataset_identifier
+
+        dataset_organs = {"dvid-001": {"kidney"}}
+        tuples = create_tuples(self._make_data(), dataset_organs)
+        subjects = {s for s, _ in self._attributed_to_edges(tuples)}
+        self.assertEqual(
+            subjects, {f"CSD_{cell_set_dataset_identifier('dvid-001', 'kidney')}"}
+        )
+
     def test_contains_source_quintuple(self):
         tuples = create_tuples(self._make_data())
         quints = [t for t in tuples if len(t) == 5 and "Source" in str(t[3])]

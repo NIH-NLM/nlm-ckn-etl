@@ -138,6 +138,50 @@ class EntityToTermTestCase(unittest.TestCase):
         csd = CellSetDataset(dataset_identifier="5774ef6a-4082")
         self.assertEqual(twu.entity_to_term(csd), "CSD_5774ef6a-4082")
 
+    def test_cell_set_dataset_composite_identifier(self):
+        csd = CellSetDataset(dataset_identifier="5774ef6a-4082__kidney")
+        self.assertEqual(twu.entity_to_term(csd), "CSD_5774ef6a-4082__kidney")
+
+
+class CellSetDatasetIdentifierTestCase(unittest.TestCase):
+    """Tests for cell_set_dataset_identifier and build_cell_set_dataset keys."""
+
+    def test_organ_makes_a_composite_identifier(self):
+        self.assertEqual(
+            twu.cell_set_dataset_identifier("5774ef6a-4082", "heart plus pericardium"),
+            "5774ef6a-4082__heart_plus_pericardium",
+        )
+
+    def test_no_organ_keeps_the_source_identifier(self):
+        # Falsy / NaN organ leaves single-organ datasets unchanged.
+        self.assertEqual(
+            twu.cell_set_dataset_identifier("5774ef6a-4082", None), "5774ef6a-4082"
+        )
+        self.assertEqual(
+            twu.cell_set_dataset_identifier("5774ef6a-4082", ""), "5774ef6a-4082"
+        )
+
+    def test_same_source_different_organs_are_distinct(self):
+        a = twu.cell_set_dataset_identifier("dvid-1", "kidney")
+        b = twu.cell_set_dataset_identifier("dvid-1", "liver")
+        self.assertNotEqual(a, b)
+
+    def test_build_sets_composite_id_and_retains_source_version(self):
+        import pandas as pd
+
+        summary = pd.DataFrame({"organ": ["kidney"], "dataset_title": ["A kidney set"]})
+        csd, _ = twu.build_cell_set_dataset("dvid-1", summary_data=summary)
+        self.assertEqual(csd.dataset_identifier, "dvid-1__kidney")
+        self.assertEqual(csd.version, "dvid-1")
+
+    def test_build_without_organ_keeps_source_id(self):
+        import pandas as pd
+
+        summary = pd.DataFrame({"dataset_title": ["No organ column"]})
+        csd, _ = twu.build_cell_set_dataset("dvid-1", summary_data=summary)
+        self.assertEqual(csd.dataset_identifier, "dvid-1")
+        self.assertEqual(csd.version, "dvid-1")
+
     def test_biomarker_combination_with_context(self):
         bmc = BiomarkerCombination(markers="TP53 BRCA1")
         self.assertEqual(

@@ -232,7 +232,7 @@ def create_tuples(
         )
         tuples.extend(
             cell_set_dataset_name_tuples(
-                f"CSD_{dataset_version_id}", citation, csd.dataset_name
+                f"CSD_{csd.dataset_identifier}", citation, csd.dataset_name
             )
         )
 
