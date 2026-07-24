@@ -87,15 +87,22 @@ public class OntologyGraphBuilder {
         Path fileName = Paths.get(path).getFileName();
         if (fileName == null) return vtuple;
         String term = fileName.toString();
+        // Split on the first delimiter only: the id is the ontology prefix and the
+        // number is the whole remaining local identifier, which may itself contain
+        // underscores (e.g. a CellSetDataset keyed "CSD_<dvid>__<organ>").  A plain
+        // split("_") would break such a term into more than two tokens and cause it
+        // to be rejected as an invalid vertex, silently dropping every organ-keyed
+        // CellSetDataset and its edges.  The id (not the token count) is what gates
+        // validity, via VALID_VERTICES below.
         String[] tokens = null;
         if (term.contains("_")) {
-            tokens = term.split("_");
+            tokens = term.split("_", 2);
         } else if (term.contains(":")) {
-            tokens = term.split(":");
+            tokens = term.split(":", 2);
         }
         String id;
         String number;
-        if (tokens != null && tokens.length == 2) {
+        if (tokens != null && tokens.length == 2 && !tokens[1].isEmpty()) {
             id = tokens[0];
             number = tokens[1];
         } else {

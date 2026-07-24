@@ -134,6 +134,43 @@ class OntologyGraphBuilderTest {
         assertTrue(vtuple.isValidVertex());
     }
 
+    @Test
+    void createVTuple_validCellSetDatasetSourceKey() {
+        // A single-organ dataset keeps the bare source dataset_version_id (one
+        // underscore after the CSD prefix; the id itself carries hyphens).
+        var node = NodeFactory.createURI(
+                "http://purl.obolibrary.org/obo/CSD_2b1f9ac3-1234-5678-9abc-def012345678");
+        OntologyGraphBuilder.VTuple vtuple = OntologyGraphBuilder.createVTuple(node);
+
+        assertEquals("CSD", vtuple.id());
+        assertEquals("2b1f9ac3-1234-5678-9abc-def012345678", vtuple.number());
+        assertTrue(vtuple.isValidVertex());
+    }
+
+    @Test
+    void createVTuple_validCellSetDatasetCompositeKey() {
+        // A dataset filtered for an organ is keyed "<dvid>__<organ>"; the "__"
+        // plus the organ must remain part of the number (the Arango _key), not
+        // split the term into more than two tokens (Springbok-LLC/nlm-ckn-etl#55
+        // regression: organ-keyed CellSetDatasets were silently dropped).
+        var node = NodeFactory.createURI(
+                "http://purl.obolibrary.org/obo/CSD_2b1f9ac3-1234-5678-9abc-def012345678__respiratory_system");
+        OntologyGraphBuilder.VTuple vtuple = OntologyGraphBuilder.createVTuple(node);
+
+        assertEquals("CSD", vtuple.id());
+        assertEquals("2b1f9ac3-1234-5678-9abc-def012345678__respiratory_system", vtuple.number());
+        assertTrue(vtuple.isValidVertex());
+    }
+
+    @Test
+    void createVTuple_delimiterWithEmptyNumberIsInvalid() {
+        // A trailing delimiter with no local identifier is not a vertex.
+        var node = NodeFactory.createURI("http://purl.obolibrary.org/obo/CSD_");
+        OntologyGraphBuilder.VTuple vtuple = OntologyGraphBuilder.createVTuple(node);
+
+        assertFalse(vtuple.isValidVertex());
+    }
+
     // --- taxon-constraint predicate tests (no ArangoDB needed) ---
 
     @Test
