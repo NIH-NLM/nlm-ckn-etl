@@ -305,5 +305,88 @@ class NSForestDatasetNameTestCase(unittest.TestCase):
         self.assertEqual(self._annotations(tuples, "Citation"), ["Sikkema (2023) Nat Med"])
 
 
+class CellSetDatasetMetadataTestCase(unittest.TestCase):
+    """A cell set carries its dataset's metadata.
+
+    Only the manually mapped clusters used to, which left most cell sets
+    without a species, organ, publication, or dataset name
+    (Springbok-LLC/nlm-ckn-etl#63).
+    """
+
+    def _make_data(self):
+        nsforest = pd.DataFrame({
+            "clusterName": ["T Cell"],
+            "clusterSize": [1718],
+            "f_score": [0.716],
+            "cluster_header": ["author_cell_type"],
+            "NSForest_markers": ["['TP53']"],
+            "binary_genes": ["['TP53']"],
+            "uuid": ["abc123"],
+        })
+        summary = pd.DataFrame({
+            "tissue_ontology_term_id": ["UBERON:0002048"],
+            "organ": ["respiratory system"],
+            "doi": ["10.1038/S41591-023-02327-2"],
+            "dataset_title": ["Lung, 3' v2"],
+            "collection_url": ["https://cellxgene.cziscience.com/collections/c1"],
+        })
+        return nsforest, summary
+
+    def _annotation(self, tuples, attribute):
+        values = [
+            str(t[2])
+            for t in tuples
+            if len(t) == 3
+            and str(t[0]).endswith("CS_abc123")
+            and str(t[1]).endswith(f"#{attribute}")
+        ]
+        return values[0] if values else None
+
+    def test_cell_set_carries_dataset_metadata(self):
+        nsf, summary = self._make_data()
+        tuples = create_tuples(
+            nsf, summary, ["dvid-001"], root_uberon_term="UBERON:0002048"
+        )
+        self.assertEqual(self._annotation(tuples, "species"), "Homo sapiens")
+        self.assertEqual(
+            self._annotation(tuples, "anatomical_structure"), "UBERON:0002048"
+        )
+        self.assertEqual(
+            self._annotation(tuples, "publication"), "10.1038/s41591-023-02327-2"
+        )
+        self.assertEqual(self._annotation(tuples, "dataset_name"), "Lung, 3' v2")
+        self.assertEqual(
+            self._annotation(tuples, "cellxgene_collection"),
+            "cellxgene.cziscience.com/collections/c1",
+        )
+        self.assertEqual(
+            self._annotation(tuples, "cellxgene_dataset"),
+            "datasets.cellxgene.cziscience.com/dvid-001.h5ad",
+        )
+        self.assertEqual(
+            self._annotation(tuples, "cluster_annotation"), "author_cell_type"
+        )
+
+    def test_cell_set_takes_the_dataset_that_describes_it(self):
+        # With several datasets in one results file, the cell set must name
+        # the dataset its cluster came from, not the first of the list.
+        nsf, summary = self._make_data()
+        summary = pd.concat([
+            summary.assign(dataset_title="Other", doi="10.1000/other"),
+            summary,
+        ])
+        tuples = create_tuples(
+            nsf,
+            summary,
+            ["dvid-001", "dvid-002"],
+            cluster_dvid_map={"T Cell": "dvid-002"},
+            root_uberon_term="UBERON:0002048",
+        )
+        self.assertEqual(
+            self._annotation(tuples, "cellxgene_dataset"),
+            "datasets.cellxgene.cziscience.com/dvid-002.h5ad",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

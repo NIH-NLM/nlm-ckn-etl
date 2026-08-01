@@ -103,6 +103,14 @@ SUMMARY_OPTIONAL_COLUMNS = [
     "journal",
     "doi",
     "tissue_ontology_term_id",
+    # Dataset-scoped rollups the harvester also reports.  The summary is the
+    # primary source for them because it covers every dataset, while the
+    # per-organ harvester tables do not (Springbok-LLC/nlm-ckn-etl#63).
+    "filtered_cell_count",
+    "tissue_ontology_summary",
+    "assay_ontology_summary",
+    "median_silhouette",
+    "n_clusters",
 ]
 
 # silhouette_fscore_summary_*.csv — the five stat columns merged into the

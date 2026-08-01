@@ -93,6 +93,13 @@ def create_tuples(
                     metadata.get("Link_to_CELLxGENE_dataset")
                 ),
                 collection_id=metadata.get("Collection_ID"),
+                dataset_collection_version=metadata.get("Collection_version_ID"),
+                # The DOI the dataset is attributed to, on the dataset vertex
+                # as well as the edge.  CELLxGENE knows it for every dataset,
+                # so this is the one source that reaches the datasets no
+                # dataset summary or harvester row covers
+                # (Springbok-LLC/nlm-ckn-etl#63).
+                publication=normalize_doi(metadata.get("Link_to_publication")),
             )
             pub = Publication(
                 publication_doi=normalize_doi(metadata.get("Link_to_publication")),

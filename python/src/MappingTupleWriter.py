@@ -37,6 +37,7 @@ from TupleWriterUtilities import (
     cell_set_dataset_name_tuples,
     curie_to_term,
     get_tuples_dir,
+    normalize_doi,
     parse_string_list,
     purl_to_curie,
     resolve_gene_names,
@@ -160,7 +161,9 @@ def create_tuples(
             ontology_purl=cell_type.ontology_purl,
             anatomical_structure=anat.ontology_purl if anat is not None else None,
             species="Homo sapiens",
-            publication=str(doi) if pd.notna(doi) else None,
+            # Normalized so that a cell set and its dataset name the paper the
+            # same way, whichever writer got there first.
+            publication=normalize_doi(str(doi)) if pd.notna(doi) else None,
             cell_count=int(cluster_size) if pd.notna(cluster_size) else None,
             biomarker_combination=",".join(markers) if markers else None,
             binary_gene_set=",".join(binary_genes) if binary_genes else None,
