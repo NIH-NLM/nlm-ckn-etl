@@ -603,5 +603,142 @@ class WriteTuplesDedupeTestCase(unittest.TestCase):
         self.assertEqual(len(quints), 2)
 
 
+class CellSetDatasetSlotSourcesTestCase(unittest.TestCase):
+    """The summary is primary and the harvester the fallback.
+
+    The per-organ harvester tables do not cover every dataset, so slots
+    sourced from them alone were absent on part of the graph
+    (Springbok-LLC/nlm-ckn-etl#63).
+    """
+
+    def _summary(self, **overrides):
+        import pandas as pd
+
+        row = {
+            "organ": "kidney",
+            "dataset_title": "A kidney set",
+            "doi": "10.1000/ABC",
+            "filtered_cell_count": 105445,
+            "tissue_ontology_summary": "UBERON:0002113: 105445",
+            "assay_ontology_summary": "EFO:0009922: 105445",
+            "median_silhouette": 0.39,
+            "n_clusters": 75,
+        }
+        row.update(overrides)
+        return pd.DataFrame({k: [v] for k, v in row.items()})
+
+    def _harvester(self, **overrides):
+        import pandas as pd
+
+        row = {
+            "dataset_version_id": "dvid-1",
+            "normal_cell_count": 99999,
+            # The harvester spells its rollups with "; ", the summary " | ".
+            "tissue_ontology_summary": "UBERON:0002113: 99998; UBERON:0001225: 1",
+            "assay_ontology_summary": "EFO:0009922: 99999",
+            "donor_id_count": 31,
+            "collection_version_id": "cvid-1",
+        }
+        row.update(overrides)
+        return pd.DataFrame({k: [v] for k, v in row.items()}).iloc[0]
+
+    def test_summary_supplies_the_dataset_rollups(self):
+        csd, _ = twu.build_cell_set_dataset("dvid-1", summary_data=self._summary())
+        self.assertEqual(csd.filtered_cell_count, "105445")
+        self.assertEqual(csd.tissue_annotation, "UBERON:0002113: 105445")
+        self.assertEqual(csd.assay_summary, "EFO:0009922: 105445")
+        self.assertEqual(csd.median_of_median_silhouette, 0.39)
+        self.assertEqual(csd.cluster_summary, "75")
+
+    def test_summary_wins_over_the_harvester(self):
+        # The harvester's normal_cell_count is computed differently than the
+        # slot's definition (Springbok-LLC/nlm-ckn-etl#64); the summary's
+        # filtered_cell_count is the faithful one.
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1", summary_data=self._summary(), harvester_row=self._harvester()
+        )
+        self.assertEqual(csd.filtered_cell_count, "105445")
+        self.assertEqual(csd.tissue_annotation, "UBERON:0002113: 105445")
+
+    def test_harvester_fills_what_the_summary_leaves_empty(self):
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1",
+            summary_data=self._summary(
+                tissue_ontology_summary=None,
+                assay_ontology_summary=None,
+            ),
+            harvester_row=self._harvester(),
+        )
+        self.assertEqual(
+            csd.tissue_annotation, "UBERON:0002113: 99998 | UBERON:0001225: 1"
+        )
+        self.assertEqual(csd.assay_summary, "EFO:0009922: 99999")
+
+    def test_filtered_cell_count_never_falls_back_to_normal_cell_count(self):
+        # The harvester's normal_cell_count is a different quantity, not the
+        # same one computed elsewhere (Springbok-LLC/nlm-ckn-etl#64), so a
+        # summary without the count leaves the slot empty rather than
+        # carrying a number that does not mean what the slot says.
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1",
+            summary_data=self._summary(filtered_cell_count=None),
+            harvester_row=self._harvester(),
+        )
+        self.assertIsNone(csd.filtered_cell_count)
+
+    def test_donor_count_and_collection_version_come_from_the_harvester(self):
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1", summary_data=self._summary(), harvester_row=self._harvester()
+        )
+        self.assertEqual(csd.donor_id_count, 31)
+        self.assertEqual(csd.dataset_collection_version, "cvid-1")
+
+    def test_rollups_use_one_separator_whichever_source_they_came_from(self):
+        # The summary spells these with " | " and the harvester with "; ",
+        # so a consumer that splits them would otherwise have to handle both
+        # depending on which source covered the dataset.
+        from_summary, _ = twu.build_cell_set_dataset(
+            "dvid-1", summary_data=self._summary()
+        )
+        from_harvester, _ = twu.build_cell_set_dataset(
+            "dvid-1",
+            summary_data=self._summary(
+                tissue_ontology_summary=None, assay_ontology_summary=None
+            ),
+            harvester_row=self._harvester(),
+        )
+        self.assertEqual(from_summary.tissue_annotation, "UBERON:0002113: 105445")
+        self.assertEqual(
+            from_harvester.tissue_annotation,
+            "UBERON:0002113: 99998 | UBERON:0001225: 1",
+        )
+
+    def test_counts_are_whole_numbers_from_a_float_backed_column(self):
+        # A count column loads as float64 when any row of its file is blank,
+        # and these counts reach the UI as strings.
+        import pandas as pd
+
+        summary = pd.DataFrame({
+            "organ": ["kidney", "kidney"],
+            "filtered_cell_count": [105445.0, None],
+            "n_clusters": [75.0, None],
+        })
+        csd, _ = twu.build_cell_set_dataset("dvid-1", summary_data=summary)
+        self.assertEqual(csd.filtered_cell_count, "105445")
+        self.assertEqual(csd.cluster_summary, "75")
+
+    def test_publication_falls_back_to_the_summary_doi_normalized(self):
+        # DOIs are case-insensitive, so the dataset must name the paper the
+        # same way its PUB vertex key does.
+        csd, _ = twu.build_cell_set_dataset("dvid-1", summary_data=self._summary())
+        self.assertEqual(csd.publication, "10.1000/abc")
+
+    def test_explicit_doi_wins_over_the_summary(self):
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1", summary_data=self._summary(), doi="https://doi.org/10.1000/XYZ"
+        )
+        self.assertEqual(csd.publication, "10.1000/xyz")
+
+
 if __name__ == "__main__":
     unittest.main()

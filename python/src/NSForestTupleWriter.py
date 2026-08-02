@@ -25,6 +25,7 @@ from LoaderUtilities import (
     get_dataset_file_paths,
     get_dataset_version_id_lists,
     get_gene_ensembl_id_to_names_map,
+    get_harvester_row,
     get_uberon_root_map,
     hyphenate,
     load_results,
@@ -35,12 +36,14 @@ from TupleWriterUtilities import (
     ASSOCIATION_CLASSES,
     as_float,
     as_int,
+    as_str,
     association_to_tuples,
     build_cell_set_dataset,
     cell_set_dataset_name_tuples,
     get_predicate_uri,
     get_tuples_dir,
     parse_string_list,
+    remove_protocols,
     resolve_gene_names,
     write_tuples,
 )
@@ -165,12 +168,28 @@ def create_tuples(
     # Build CellSetDataset entities once per dvid (reused across clusters).
     csd_by_dvid: dict[str, tuple] = {}
     for dvid in dataset_version_ids:
-        harvester_row = None
-        if harvester_data is not None and not harvester_data.empty:
-            match = harvester_data[harvester_data["dataset_version_id"] == dvid]
-            if not match.empty:
-                harvester_row = match.iloc[0]
-        csd_by_dvid[dvid] = build_cell_set_dataset(dvid, summary_data, harvester_row)
+        # Take this dataset's own summary row.  A multi-dataset summary
+        # (Jorstad) has one row per dataset, and build_cell_set_dataset reads
+        # the first, so passing the whole frame would give every dataset the
+        # first one's title and statistics.  A dvid the summary does not
+        # cover keeps the empty frame, which build_cell_set_dataset reads as
+        # "no summary" rather than as the first dataset's.
+        summary_row = summary_data
+        if (
+            summary_data is not None
+            and not summary_data.empty
+            and "dataset_version_id" in summary_data.columns
+        ):
+            summary_row = summary_data[
+                summary_data["dataset_version_id"].astype(str) == str(dvid)
+            ]
+        organ = (
+            summary_row.iloc[0].get("organ")
+            if summary_row is not None and not summary_row.empty
+            else None
+        )
+        harvester_row = get_harvester_row(harvester_data, dvid, organ)
+        csd_by_dvid[dvid] = build_cell_set_dataset(dvid, summary_row, harvester_row)
 
     # CellSetDataset is_about AnatomicalStructure (dataset-scope)
     for dvid, (csd, citation) in csd_by_dvid.items():
@@ -211,8 +230,58 @@ def create_tuples(
             f_beta_score=float(row["f_score"]) if pd.notna(row["f_score"]) else None,
         )
         bgs = BinaryGeneSet(markers=",".join(binary_genes))
+
+        # Resolve the cluster's dataset before building the cell set, so the
+        # cell set can carry that dataset's metadata.  A cell set is described
+        # by exactly one dataset.  For a single-dataset results file that is
+        # the lone dvid; for a multi-dataset file (Jorstad) the cluster's
+        # dataset comes from cluster_dvid_map.  Fanning out to every dvid
+        # would falsely assert the cell set is described by datasets it was
+        # not taken from.
+        if cluster_dvid_map is not None:
+            describing_dvid = cluster_dvid_map.get(str(row["clusterName"]))
+            if describing_dvid is None or describing_dvid not in csd_by_dvid:
+                raise Exception(
+                    f"No dataset_version_id resolved for cluster "
+                    f"{row['clusterName']!r} in a multi-dataset results file; "
+                    "cluster_cid_mapping is incomplete"
+                )
+            describing_dvids = [describing_dvid]
+        else:
+            if len(csd_by_dvid) > 1:
+                raise Exception(
+                    "Multi-dataset results require cluster_dvid_map to resolve "
+                    "per-cluster is_about edges"
+                )
+            describing_dvids = list(csd_by_dvid.keys())
+        describing_csd = csd_by_dvid[describing_dvids[0]][0]
+
+        # A dataset is tissue-filtered before clustering, so the dataset's
+        # organ is the cell set's organ, matching the derives_from edge below.
+        cell_set_anatomical_structure = (
+            uberon_terms[0].replace("_", ":") if uberon_terms else None
+        )
+
         cell_set = CellSet(
             author_cell_term=cluster_name,
+            # Dataset-scoped metadata, carried onto the cell set so that every
+            # cell set is described the same way whether or not it also has a
+            # manual cell type mapping (Springbok-LLC/nlm-ckn-etl#63).
+            species=describing_csd.species,
+            anatomical_structure=cell_set_anatomical_structure,
+            publication=describing_csd.publication,
+            dataset_name=describing_csd.dataset_name,
+            cellxgene_collection=remove_protocols(
+                describing_csd.cellxgene_collection
+            ),
+            # Built the way MappingTupleWriter builds it, so a cell set names
+            # its dataset identically whether or not it is also mapped.
+            cellxgene_dataset=(
+                f"datasets.cellxgene.cziscience.com/{describing_dvids[0]}.h5ad"
+            ),
+            cluster_annotation=(
+                as_str(row, "cluster_header") or describing_csd.cluster_annotation
+            ),
             cell_count=as_int(row, "clusterSize"),
             cluster_cell_count=as_int(row, "clusterSize"),
             biomarker_combination=",".join(markers),
@@ -322,27 +391,7 @@ def create_tuples(
                     )
                 )
 
-        # CellSetDataset is_about CellSet.  A cell set is described by exactly
-        # one dataset.  For a single-dataset results file that is the lone dvid;
-        # for a multi-dataset file (Jorstad) the cluster's dataset comes from
-        # cluster_dvid_map.  Fanning out to every dvid would falsely assert the
-        # cell set is described by datasets it was not taken from.
-        if cluster_dvid_map is not None:
-            describing_dvid = cluster_dvid_map.get(str(row["clusterName"]))
-            if describing_dvid is None or describing_dvid not in csd_by_dvid:
-                raise Exception(
-                    f"No dataset_version_id resolved for cluster "
-                    f"{row['clusterName']!r} in a multi-dataset results file; "
-                    "cluster_cid_mapping is incomplete"
-                )
-            describing_dvids = [describing_dvid]
-        else:
-            if len(csd_by_dvid) > 1:
-                raise Exception(
-                    "Multi-dataset results require cluster_dvid_map to resolve "
-                    "per-cluster is_about edges"
-                )
-            describing_dvids = list(csd_by_dvid.keys())
+        # CellSetDataset is_about CellSet, for the dataset resolved above.
         for dvid in describing_dvids:
             csd, _ = csd_by_dvid[
                 dvid

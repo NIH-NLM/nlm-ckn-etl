@@ -481,3 +481,68 @@ class DatasetOrgansMapTestCase(unittest.TestCase):
         organs = lu.get_dataset_organs_map(self.results_dir)
         self.assertEqual(organs["dvid-shared"], {"kidney", "liver"})
         self.assertEqual(organs["dvid-kidney"], {"kidney"})
+
+
+class HarvesterRowTestCase(unittest.TestCase):
+    """A dataset takes its harvester row from its own organ's table.
+
+    A source dataset harvested for several organs has one row per organ and
+    those rows differ, so selecting on dataset_version_id alone attributed
+    whichever table sorted first to all of them
+    (Springbok-LLC/nlm-ckn-etl#63).
+    """
+
+    def setUp(self):
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.results_dir = Path(self._tmp.name)
+        for organ, rows in {
+            "bone_marrow": [("dvid-shared", 20), ("dvid-marrow", 5)],
+            "skin_of_body": [("dvid-shared", 8)],
+        }.items():
+            lines = ["dataset_version_id,donor_id_count"]
+            lines += [f"{dvid},{count}" for dvid, count in rows]
+            (
+                self.results_dir / f"homo_sapiens_{organ}_harvester_final.csv"
+            ).write_text("\n".join(lines) + "\n")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _data(self):
+        return lu.get_cellxgene_harvester_data(self.results_dir)
+
+    def test_organ_comes_from_the_filename(self):
+        # The tables carry no organ column, so it can only come from there.
+        self.assertEqual(
+            set(self._data()["organ"]), {"bone_marrow", "skin_of_body"}
+        )
+
+    def test_multi_organ_dataset_takes_its_own_organs_row(self):
+        data = self._data()
+        self.assertEqual(
+            lu.get_harvester_row(data, "dvid-shared", "skin of body")["donor_id_count"],
+            8,
+        )
+        self.assertEqual(
+            lu.get_harvester_row(data, "dvid-shared", "bone marrow")["donor_id_count"],
+            20,
+        )
+
+    def test_single_organ_dataset_ignores_the_organ(self):
+        # With one row there is nothing to tell apart, so a dataset whose
+        # organ is spelled differently upstream still finds its row.
+        row = lu.get_harvester_row(self._data(), "dvid-marrow", "something else")
+        self.assertEqual(row["donor_id_count"], 5)
+
+    def test_no_row_for_the_organ_yields_none(self):
+        # An arbitrary organ's counts are worse than no counts.
+        self.assertIsNone(lu.get_harvester_row(self._data(), "dvid-shared", "liver"))
+
+    def test_unknown_dataset_yields_none(self):
+        self.assertIsNone(lu.get_harvester_row(self._data(), "dvid-absent", "liver"))
+
+    def test_empty_harvester_data_yields_none(self):
+        self.assertIsNone(lu.get_harvester_row(pd.DataFrame(), "dvid-shared", "liver"))
+        self.assertIsNone(lu.get_harvester_row(None, "dvid-shared", "liver"))

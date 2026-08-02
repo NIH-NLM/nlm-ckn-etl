@@ -18,6 +18,7 @@ from LoaderUtilities import (
     get_current_run,
     get_dataset_file_paths,
     get_gene_ensembl_id_to_names_map,
+    get_harvester_row,
     get_uberon_root_map,
     hyphenate,
     load_results,
@@ -37,6 +38,7 @@ from TupleWriterUtilities import (
     cell_set_dataset_name_tuples,
     curie_to_term,
     get_tuples_dir,
+    normalize_doi,
     parse_string_list,
     purl_to_curie,
     resolve_gene_names,
@@ -160,7 +162,9 @@ def create_tuples(
             ontology_purl=cell_type.ontology_purl,
             anatomical_structure=anat.ontology_purl if anat is not None else None,
             species="Homo sapiens",
-            publication=str(doi) if pd.notna(doi) else None,
+            # Normalized so that a cell set and its dataset name the paper the
+            # same way, whichever writer got there first.
+            publication=normalize_doi(str(doi)) if pd.notna(doi) else None,
             cell_count=int(cluster_size) if pd.notna(cluster_size) else None,
             biomarker_combination=",".join(markers) if markers else None,
             binary_gene_set=",".join(binary_genes) if binary_genes else None,
@@ -206,13 +210,11 @@ def create_tuples(
         # CellType has_exemplar_data CellSetDataset (this cluster's single
         # dataset).  Collection / cell-count metadata come from the CELLxGENE
         # harvester row, dataset metadata from the matching summary row.
-        harvester_row = None
-        if harvester_data is not None and not harvester_data.empty:
-            match_df = harvester_data[
-                harvester_data["dataset_version_id"] == dataset_version_id
-            ]
-            if not match_df.empty:
-                harvester_row = match_df.iloc[0]
+        harvester_row = get_harvester_row(
+            harvester_data,
+            dataset_version_id,
+            summary_row.iloc[0].get("organ") if not summary_row.empty else None,
+        )
 
         csd, citation = build_cell_set_dataset(
             dataset_version_id,

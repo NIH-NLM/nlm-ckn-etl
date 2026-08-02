@@ -180,6 +180,40 @@ def as_str(row, col):
     return str(v) if pd.notna(v) else None
 
 
+def as_count_str(row, col):
+    """Return ``row[col]`` as a whole-number string, or ``None``.
+
+    A count column loads as float64 when any row of its file is blank, and
+    ``str`` would then render 105445 as ``"105445.0"``.  These counts reach
+    the UI as strings, so they go through ``int`` first.
+    """
+    v = row.get(col)
+    return str(int(v)) if pd.notna(v) else None
+
+
+# Separator the ontology rollups are published with.  The summaries spell
+# them with " | " and the harvester with "; ", so whichever source a value
+# comes from it is rewritten to one separator, and consumers that split
+# these strings need handle only that one (Springbok-LLC/nlm-ckn-etl#63).
+ROLLUP_SEPARATOR = " | "
+_ROLLUP_SEPARATOR_RE = re.compile(r"\s*[;|]\s*")
+
+
+def as_rollup_str(row, col):
+    """Return ``row[col]`` as a rollup string, or ``None``.
+
+    A rollup is a list of ``"<CURIE>: <count>"`` pairs.  The pairs are
+    rejoined on :data:`ROLLUP_SEPARATOR` regardless of how the source
+    spelled the separator.
+    """
+    v = row.get(col)
+    if pd.isna(v):
+        return None
+    return ROLLUP_SEPARATOR.join(
+        part for part in _ROLLUP_SEPARATOR_RE.split(str(v).strip()) if part
+    )
+
+
 def curie_to_term(curie: str) -> str:
     """Convert a CURIE to an ArangoDB-compatible underscore term.
 
@@ -741,6 +775,13 @@ def build_cell_set_dataset(
     and/or a CELLxGENE harvester row into a CellSetDataset entity.
     Used by both NSForestTupleWriter and MappingTupleWriter.
 
+    The summary is the primary source and the harvester row the fallback.
+    The harvester tables are per-organ and do not cover every dataset the
+    pipeline processed, so fields sourced from them alone were absent on
+    part of the graph (Springbok-LLC/nlm-ckn-etl#63); the master dataset
+    summary carries the same rollups for every dataset.  ``donor_id_count``
+    remains harvester-only because no summary reports it.
+
     Parameters
     ----------
     dataset_version_id : str
@@ -772,10 +813,20 @@ def build_cell_set_dataset(
         "dataset_identifier": cell_set_dataset_identifier(dataset_version_id, organ),
         "version": str(dataset_version_id),
         "species": "Homo sapiens",
-        "publication": doi,
+        "publication": normalize_doi(doi),
         "collection_id": collection_id,
         "dataset_collection_version": collection_version_id,
     }
+
+    def fill(field: str, value: Any) -> None:
+        """Set ``field`` only if it has no value yet and ``value`` is one.
+
+        The summary is the primary source and the harvester the fallback,
+        so a field the summary left empty can still be filled from the
+        harvester row, while one the summary set is never overwritten.
+        """
+        if value is not None and kwargs.get(field) is None:
+            kwargs[field] = value
 
     if summary_data is not None and len(summary_data) > 0:
         s = summary_data.iloc[0]
@@ -796,27 +847,54 @@ def build_cell_set_dataset(
         kwargs["standard_deviation_of_silhouette"] = as_float(s, "std_silhouette")
         kwargs["mean_f_beta_score"] = as_float(s, "mean_fscore")
         kwargs["median_of_f_beta_scores"] = as_float(s, "median_fscore")
+        kwargs["median_of_median_silhouette"] = as_float(s, "median_silhouette")
+        # The summary is the authority for the dataset-scoped counts and
+        # ontology rollups: it covers every dataset the pipeline processed,
+        # whereas the harvester tables are keyed per organ and miss some
+        # (Springbok-LLC/nlm-ckn-etl#63).
+        #
+        # The slot takes the summary's ``filtered_cell_count``, the count the
+        # slot is defined as.  It used to take the harvester's
+        # ``normal_cell_count``, a differently-computed quantity, and only the
+        # harvester carries that column just as only the summary carries this
+        # one (Springbok-LLC/nlm-ckn-etl#64).
+        fill("filtered_cell_count", as_count_str(s, "filtered_cell_count"))
+        fill("tissue_annotation", as_rollup_str(s, "tissue_ontology_summary"))
+        # tissue_annotation_id is deliberately left empty: the summary's
+        # tissue_ontology_term_id is the value it wants, but the slot's range
+        # TissueEnum is declared with no permissible values, so the schema
+        # accepts nothing for it (Springbok-LLC/nlm-ckn-etl#63).
+        fill("assay_summary", as_rollup_str(s, "assay_ontology_summary"))
+        fill("cluster_summary", as_count_str(s, "n_clusters"))
+        fill("publication", normalize_doi(as_str(s, "doi")))
         citation = build_citation(
             s.get("first_author"), s.get("year"), s.get("journal")
         )
 
     if harvester_row is not None:
         h = harvester_row
-        kwargs.setdefault("dataset_name", as_str(h, "dataset_title"))
-        kwargs.setdefault("anatomical_structure", as_str(h, "tissue_ontology_term_id"))
+        fill("dataset_name", as_str(h, "dataset_title"))
+        fill("anatomical_structure", as_str(h, "tissue_ontology_term_id"))
         disease = as_str(h, "disease")
         if disease:
             kwargs["disease_status"] = disease
         total = h.get("total_cell_count")
         if pd.notna(total):
-            kwargs.setdefault("cell_count", int(total))
-        kwargs.setdefault("cellxgene_collection", as_str(h, "collection_url"))
-        kwargs.setdefault("cellxgene_dataset", as_str(h, "explorer_url"))
-        kwargs.setdefault("embedding", as_str(h, "embedding"))
-        kwargs["filtered_cell_count"] = as_str(h, "normal_cell_count")
+            fill("cell_count", int(total))
+        fill("cellxgene_collection", as_str(h, "collection_url"))
+        fill("cellxgene_dataset", as_str(h, "explorer_url"))
+        fill("embedding", as_str(h, "embedding"))
+        # No fallback for filtered_cell_count.  The harvester's
+        # normal_cell_count is not that count computed elsewhere, it is a
+        # different quantity (Springbok-LLC/nlm-ckn-etl#64), so a dataset
+        # whose summary omits the count leaves the slot empty rather than
+        # carrying a number that does not mean what the slot says.
+        fill("assay_summary", as_rollup_str(h, "assay_ontology_summary"))
+        fill("tissue_annotation", as_rollup_str(h, "tissue_ontology_summary"))
+        fill("dataset_collection_version", as_str(h, "collection_version_id"))
+        fill("publication", normalize_doi(as_str(h, "doi")))
+        # Donor counts appear only in the harvester tables.
         kwargs["donor_id_count"] = as_int(h, "donor_id_count")
-        kwargs["assay_summary"] = as_str(h, "assay_ontology_summary")
-        kwargs["tissue_annotation"] = as_str(h, "tissue_ontology_summary")
         if citation is None:
             citation = build_citation(
                 h.get("first_author"), h.get("year"), h.get("journal")

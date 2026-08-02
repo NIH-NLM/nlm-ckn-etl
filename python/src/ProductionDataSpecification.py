@@ -42,6 +42,10 @@ COMPANION_PREFIXES = {
 NSFOREST_GLOB = f"**/{NSFOREST_PREFIX}_*.csv"
 HARVESTER_GLOB = "*_harvester_final.csv"
 HARVESTER_GLOB_RECURSIVE = f"**/{HARVESTER_GLOB}"
+# A harvester filename is ``<species>_<organ>_harvester_final.csv``, and the
+# organ is recoverable only from it: the table itself has no organ column
+# (see organ_of_harvester_path).
+HARVESTER_SPECIES_PREFIX = "homo_sapiens_"
 UBERON_PREFIX = "uberon"
 UBERON_GLOB = f"{UBERON_PREFIX}_*.csv"
 UBERON_GLOB_RECURSIVE = f"**/{UBERON_GLOB}"
@@ -103,6 +107,20 @@ SUMMARY_OPTIONAL_COLUMNS = [
     "journal",
     "doi",
     "tissue_ontology_term_id",
+    # Dataset-scoped rollups the harvester also reports, under these same
+    # names.  The summary is the primary source for them because it covers
+    # every dataset, while the per-organ harvester tables do not
+    # (Springbok-LLC/nlm-ckn-etl#63).
+    "tissue_ontology_summary",
+    "assay_ontology_summary",
+    # Reported by the summary alone.  ``filtered_cell_count`` has no
+    # harvester equivalent -- the harvester's ``normal_cell_count`` is a
+    # different quantity, not this one computed elsewhere
+    # (Springbok-LLC/nlm-ckn-etl#64) -- and the harvester reports no
+    # clustering statistics at all.
+    "filtered_cell_count",
+    "median_silhouette",
+    "n_clusters",
 ]
 
 # silhouette_fscore_summary_*.csv — the five stat columns merged into the
@@ -210,6 +228,33 @@ def normalize_organ(organ: str) -> str:
 def organ_of_uberon_path(path) -> str:
     """Return the organ named by a ``uberon_<organ>.csv`` filename."""
     return normalize_organ(Path(path).stem[len(UBERON_PREFIX) + 1 :])
+
+
+def organ_of_harvester_path(path) -> str:
+    """Return the organ named by a harvester filename.
+
+    A harvester table holds one organ's rows, but carries no organ column,
+    so the organ has to come from the ``<species>_<organ>_harvester_final``
+    filename.  Without it a dataset harvested for several organs cannot be
+    joined to the right row (Springbok-LLC/nlm-ckn-etl#63).
+
+    Parameters
+    ----------
+    path : Path or str
+        Path to a ``*_harvester_final.csv``.
+
+    Returns
+    -------
+    str
+        The normalized organ name (e.g. ``"skin_of_body"``).
+    """
+    stem = Path(path).stem
+    suffix = HARVESTER_GLOB[1:].removesuffix(".csv")
+    if stem.endswith(suffix):
+        stem = stem[: -len(suffix)]
+    if stem.startswith(HARVESTER_SPECIES_PREFIX):
+        stem = stem[len(HARVESTER_SPECIES_PREFIX) :]
+    return normalize_organ(stem)
 
 
 def companion_basename(nsforest_basename: str, companion_prefix: str) -> str:
