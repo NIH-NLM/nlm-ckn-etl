@@ -18,6 +18,7 @@ from LoaderUtilities import (
     get_current_run,
     get_dataset_file_paths,
     get_gene_ensembl_id_to_names_map,
+    get_harvester_row,
     get_uberon_root_map,
     hyphenate,
     load_results,
@@ -209,13 +210,11 @@ def create_tuples(
         # CellType has_exemplar_data CellSetDataset (this cluster's single
         # dataset).  Collection / cell-count metadata come from the CELLxGENE
         # harvester row, dataset metadata from the matching summary row.
-        harvester_row = None
-        if harvester_data is not None and not harvester_data.empty:
-            match_df = harvester_data[
-                harvester_data["dataset_version_id"] == dataset_version_id
-            ]
-            if not match_df.empty:
-                harvester_row = match_df.iloc[0]
+        harvester_row = get_harvester_row(
+            harvester_data,
+            dataset_version_id,
+            summary_row.iloc[0].get("organ") if not summary_row.empty else None,
+        )
 
         csd, citation = build_cell_set_dataset(
             dataset_version_id,

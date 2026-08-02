@@ -633,8 +633,9 @@ class CellSetDatasetSlotSourcesTestCase(unittest.TestCase):
         row = {
             "dataset_version_id": "dvid-1",
             "normal_cell_count": 99999,
-            "tissue_ontology_summary": "UBERON:0002113; 99999",
-            "assay_ontology_summary": "EFO:0009922; 99999",
+            # The harvester spells its rollups with "; ", the summary " | ".
+            "tissue_ontology_summary": "UBERON:0002113: 99998; UBERON:0001225: 1",
+            "assay_ontology_summary": "EFO:0009922: 99999",
             "donor_id_count": 31,
             "collection_version_id": "cvid-1",
         }
@@ -668,8 +669,10 @@ class CellSetDatasetSlotSourcesTestCase(unittest.TestCase):
             ),
             harvester_row=self._harvester(),
         )
-        self.assertEqual(csd.tissue_annotation, "UBERON:0002113; 99999")
-        self.assertEqual(csd.assay_summary, "EFO:0009922; 99999")
+        self.assertEqual(
+            csd.tissue_annotation, "UBERON:0002113: 99998 | UBERON:0001225: 1"
+        )
+        self.assertEqual(csd.assay_summary, "EFO:0009922: 99999")
 
     def test_filtered_cell_count_never_falls_back_to_normal_cell_count(self):
         # The harvester's normal_cell_count is a different quantity, not the
@@ -689,6 +692,40 @@ class CellSetDatasetSlotSourcesTestCase(unittest.TestCase):
         )
         self.assertEqual(csd.donor_id_count, 31)
         self.assertEqual(csd.dataset_collection_version, "cvid-1")
+
+    def test_rollups_use_one_separator_whichever_source_they_came_from(self):
+        # The summary spells these with " | " and the harvester with "; ",
+        # so a consumer that splits them would otherwise have to handle both
+        # depending on which source covered the dataset.
+        from_summary, _ = twu.build_cell_set_dataset(
+            "dvid-1", summary_data=self._summary()
+        )
+        from_harvester, _ = twu.build_cell_set_dataset(
+            "dvid-1",
+            summary_data=self._summary(
+                tissue_ontology_summary=None, assay_ontology_summary=None
+            ),
+            harvester_row=self._harvester(),
+        )
+        self.assertEqual(from_summary.tissue_annotation, "UBERON:0002113: 105445")
+        self.assertEqual(
+            from_harvester.tissue_annotation,
+            "UBERON:0002113: 99998 | UBERON:0001225: 1",
+        )
+
+    def test_counts_are_whole_numbers_from_a_float_backed_column(self):
+        # A count column loads as float64 when any row of its file is blank,
+        # and these counts reach the UI as strings.
+        import pandas as pd
+
+        summary = pd.DataFrame({
+            "organ": ["kidney", "kidney"],
+            "filtered_cell_count": [105445.0, None],
+            "n_clusters": [75.0, None],
+        })
+        csd, _ = twu.build_cell_set_dataset("dvid-1", summary_data=summary)
+        self.assertEqual(csd.filtered_cell_count, "105445")
+        self.assertEqual(csd.cluster_summary, "75")
 
     def test_publication_falls_back_to_the_summary_doi_normalized(self):
         # DOIs are case-insensitive, so the dataset must name the paper the

@@ -25,6 +25,7 @@ from LoaderUtilities import (
     get_dataset_file_paths,
     get_dataset_version_id_lists,
     get_gene_ensembl_id_to_names_map,
+    get_harvester_row,
     get_uberon_root_map,
     hyphenate,
     load_results,
@@ -167,15 +168,12 @@ def create_tuples(
     # Build CellSetDataset entities once per dvid (reused across clusters).
     csd_by_dvid: dict[str, tuple] = {}
     for dvid in dataset_version_ids:
-        harvester_row = None
-        if harvester_data is not None and not harvester_data.empty:
-            match = harvester_data[harvester_data["dataset_version_id"] == dvid]
-            if not match.empty:
-                harvester_row = match.iloc[0]
         # Take this dataset's own summary row.  A multi-dataset summary
         # (Jorstad) has one row per dataset, and build_cell_set_dataset reads
         # the first, so passing the whole frame would give every dataset the
-        # first one's title and statistics.
+        # first one's title and statistics.  A dvid the summary does not
+        # cover keeps the empty frame, which build_cell_set_dataset reads as
+        # "no summary" rather than as the first dataset's.
         summary_row = summary_data
         if (
             summary_data is not None
@@ -185,8 +183,12 @@ def create_tuples(
             summary_row = summary_data[
                 summary_data["dataset_version_id"].astype(str) == str(dvid)
             ]
-            if summary_row.empty:
-                summary_row = summary_data
+        organ = (
+            summary_row.iloc[0].get("organ")
+            if summary_row is not None and not summary_row.empty
+            else None
+        )
+        harvester_row = get_harvester_row(harvester_data, dvid, organ)
         csd_by_dvid[dvid] = build_cell_set_dataset(dvid, summary_row, harvester_row)
 
     # CellSetDataset is_about AnatomicalStructure (dataset-scope)

@@ -198,7 +198,8 @@ def get_cellxgene_harvester_data(results_dir=None):
     Returns
     -------
     harvester_data : pd.DataFrame
-        Dataframe containing the concatenated cellxgene-harvester data
+        Dataframe containing the concatenated cellxgene-harvester data, with
+        an ``organ`` column naming the table each row came from.
     """
     if results_dir is None:
         results_dir = get_current_run().results_dir
@@ -207,8 +208,59 @@ def get_cellxgene_harvester_data(results_dir=None):
     harvester_paths = sorted(results_dir.glob(spec.HARVESTER_GLOB))
 
     if harvester_paths:
-        return pd.concat([pd.read_csv(p) for p in harvester_paths])
+        # Tag each row with its table's organ.  A harvester table holds one
+        # organ's rows but says so only in its filename, so concatenating
+        # them without this loses the one field that tells apart the several
+        # rows a multi-organ dataset has (Springbok-LLC/nlm-ckn-etl#63).
+        return pd.concat(
+            [
+                pd.read_csv(p).assign(organ=spec.organ_of_harvester_path(p))
+                for p in harvester_paths
+            ]
+        )
     return pd.DataFrame()
+
+
+def get_harvester_row(harvester_data, dataset_version_id, organ=None):
+    """Return a dataset's harvester row, from its own organ's table.
+
+    A source dataset harvested for several organs has one row per organ, and
+    those rows differ in the counts they report (donor counts, cell counts,
+    the ontology rollups).  Selecting on ``dataset_version_id`` alone
+    therefore attributes whichever organ's table sorted first to all of them
+    (Springbok-LLC/nlm-ckn-etl#63).
+
+    Parameters
+    ----------
+    harvester_data : pd.DataFrame or None
+        Concatenated harvester tables from
+        :func:`get_cellxgene_harvester_data`.
+    dataset_version_id : str
+        The source dataset the row must describe.
+    organ : str, optional
+        The organ the dataset was filtered for.  Ignored when the dataset has
+        only one harvester row, since then there is nothing to tell apart.
+
+    Returns
+    -------
+    pd.Series or None
+        The matching row, or None when the dataset has no harvester row, or
+        has several and none is for ``organ`` — an arbitrary organ's counts
+        being worse than no counts.
+    """
+    if harvester_data is None or harvester_data.empty:
+        return None
+
+    match = harvester_data[
+        harvester_data["dataset_version_id"].astype(str) == str(dataset_version_id)
+    ]
+    if match.empty:
+        return None
+    if len(match) == 1 or organ is None or "organ" not in match.columns:
+        return match.iloc[0]
+
+    for_organ = match[match["organ"] == spec.normalize_organ(organ)]
+    return for_organ.iloc[0] if not for_organ.empty else None
 
 
 def get_uberon_root_map(results_dir=None):

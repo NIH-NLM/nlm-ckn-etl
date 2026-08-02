@@ -16,8 +16,9 @@ presence there is slot presence in the graph. Counts confirmed against the
 | distinct CellSet attribute sets | 3 | 3 |
 
 The 3 remaining CSD attribute sets are the real groups in the data, not
-loading gaps: 76 datasets with a CELLxGENE harvester row, 8 without one, and
-the 5 Jorstad neocortex superclusters that NS-Forest QC was never run on.
+loading gaps: 74 datasets whose organ has a CELLxGENE harvester table, 10
+whose organ has none (all 9 heart, whose table is misnamed, plus Guo), and the
+5 Jorstad neocortex superclusters that NS-Forest QC was never run on.
 
 ## Slot-by-slot enumeration
 
@@ -48,7 +49,7 @@ the 5 Jorstad neocortex superclusters that NS-Forest QC was never run on.
 | `mean_silhouette` | 84 | 84 | summary `mean_silhouette` |
 | `standard_deviation_of_silhouette` | 84 | 84 | summary `std_silhouette` |
 | `cluster_annotation` | 84 | 84 | summary `cluster_header` |
-| `donor_id_count` | 76 | 76 | harvester `donor_id_count` only |
+| `donor_id_count` | 76 | 74 | harvester `donor_id_count` only, from the dataset's own organ |
 | `assay_summary` | 76 | **84** | summary `assay_ontology_summary` |
 | `cluster_summary` | 0 | **84** | summary `n_clusters` |
 
@@ -98,15 +99,25 @@ The 153 cell sets short of 2617 on every silhouette slot are all Jorstad's.
 and `homo_sapiens_respiratory_system_harvester_guo.csv` — so 8 datasets got
 none of those slots. `master_dataset_summary_*.csv` carries the same rollups
 for all 84 non-Jorstad datasets, so it is now the primary source and the
-harvester the fallback. `donor_id_count` has no summary equivalent and so
-still stops at 76.
+harvester the fallback. `donor_id_count` has no summary equivalent, so it is
+still harvester-only and now stops at 74 — the 15 documents without it are
+exactly those whose organ has no harvester table: all 9 heart, all 5
+neocortex, and Guo.
 
 **The harvester join ignored the organ.** A source dataset filtered for
 several organs yields one CSD per organ, but the harvester row was matched on
-`dataset_version_id` alone, so all of them received the same
-`filtered_cell_count`. Wells 2025, for instance, reported 142608 filtered
-cells for its bone marrow, respiratory system, and skin datasets alike; the
-correct per-organ counts are 142607, 213154, and 1731.
+`dataset_version_id` alone, so all of them received the same counts. Wells
+2025, for instance, reported 142608 filtered cells for its bone marrow,
+respiratory system, and skin datasets alike; the correct per-organ counts are
+142607, 213154, and 1731.
+
+A harvester table holds one organ's rows but names that organ only in its
+filename, so `get_cellxgene_harvester_data` now tags each row with the organ
+it was read from and `get_harvester_row` selects on `(dataset_version_id,
+organ)`. A dataset with one harvester row is matched regardless of organ,
+since there is nothing to tell apart; a dataset with several and none for the
+wanted organ gets none, an arbitrary organ's counts being worse than no
+counts.
 
 **`publication` came only from the manual mapping.** Only the 11 datasets
 with a `cluster_cid_mapping_*.csv` reached `build_cell_set_dataset` with a
@@ -137,11 +148,20 @@ before building the cell set and copies that dataset's metadata onto it.
   (verified column by column), so the value #64 asks for is the value loaded,
   without adding a third file to the loader. **#64's hold still applies** —
   do not ship the reload until the author of `n_cells` confirms the values.
+- **`donor_id_count` is taken from the dataset's own organ** — 11 values
+  change. 9 were another organ's count (Han (2020) loaded 2 donors for its
+  digestive tract, kidney, liver, pancreas and respiratory system datasets
+  alike, whose real counts are 16, 7, 4, 4 and 6). The other 2 are heart
+  datasets that had borrowed a count from an unrelated organ and now have
+  none, which is why coverage falls from 76 to 74. The 15 documents without
+  the slot are now exactly those whose organ has no harvester table.
 - **List separator in `tissue_annotation` and `assay_summary`** changes from
   `"; "` to `" | "` for 38–40 documents, because the summary spells these
-  rollups with `" | "` and the harvester with `"; "`. Every populated value
-  now uses `" | "`, matching `tissue_ontology_term_id`. **Any UI that splits
-  these strings on `;` needs updating.**
+  rollups with `" | "` and the harvester with `"; "`. Both sources are now
+  rejoined on `" | "` in the builder, so the separator is a property of the
+  slot rather than of whichever file covered the dataset, matching
+  `tissue_ontology_term_id`. **Any UI that splits these strings on `;` needs
+  updating.**
 - **DOI case** — one CSD and 55 cell sets change from `10.1158/…BCD-24-0342`
   to the lowercased form.
 
@@ -192,8 +212,12 @@ Slots the workflow does not produce, or that the schema will not accept:
     missing `harvester` in its name, and
     `homo_sapiens_respiratory_system_harvester_guo.csv` is a per-dataset
     harvester table outside the `*_harvester_final.csv` convention. Renaming
-    them upstream would recover `donor_id_count` for 8 of the 13 documents
-    that lack it; the 5 Jorstad ones have no harvester table at all.
+    them upstream would recover `donor_id_count` for 10 of the 15 documents
+    that lack it; the 5 Jorstad ones have no harvester table at all. The
+    harvester tables also carry no `organ` column, so the ETL has to parse
+    the organ out of the filename to join them correctly — an explicit
+    column would be sturdier than a naming convention that two files already
+    break.
 11. **`master_dataset_summary_retina_Xu_Cell_2023_…_5188c1.csv` has
     `dataset_title` = `Bone_marrow`** for a retina run. The dataset name and
     filtered cell count loaded for that CSD follow the summary, so the vertex
