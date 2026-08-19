@@ -32,10 +32,11 @@ import static gov.nih.nlm.PathUtilities.listFilesMatchingPattern;
 public class OntologyTripleParser {
 
     // Assign selected predicate namespaces
-    private static final List<String> PREDICATE_NAMESPACES = List.of("http://www.w3.org/2000/01/rdf-schema#",
-            "http://purl.obolibrary.org/obo/",
+    private static final List<String> PREDICATE_NAMESPACES = List.of("http://purl.obolibrary.org/obo/",
             "http://purl.org/dc/",
-            "http://www.geneontology.org/formats/oboInOwl#");
+            "http://www.geneontology.org/formats/oboInOwl#",
+            "http://www.w3.org/2000/01/rdf-schema#",
+            "http://www.w3.org/2002/07/owl#");
 
     // Additional class namespaces to include per ontology file, beyond the root namespace.
     // Key: OWL filename, Value: set of namespace prefixes to include.
@@ -147,9 +148,6 @@ public class OntologyTripleParser {
                         // selected name spaces
                         Triple triple = classStatement.asTriple();
                         if (isValidTriple(triple, namespaces, testObjectInRootNS)) {
-                            if (triple.getPredicate().getURI().contains("curated")) {
-                                System.out.println("Stop here");
-                            }
                             triples.add(triple);
                         }
                     }
