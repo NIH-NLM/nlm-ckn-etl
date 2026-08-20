@@ -34,7 +34,9 @@ def create_tuples(hubmap_data: dict) -> list[tuple]:
     hubmap_data : dict
         Dictionary containing HuBMAP CCF data with 'data' key
         containing an 'anatomical_structures' array. Each anatomical
-        structure has 'id', 'ccf_pref_label', and 'ccf_part_of'.
+        structure has 'id' and 'ccf_part_of'. A 'ccf_pref_label' may be
+        present but is deliberately ignored, so that the label loaded
+        from the UBERON ontology is not overwritten.
 
     Returns
     -------
@@ -55,10 +57,10 @@ def create_tuples(hubmap_data: dict) -> list[tuple]:
         if s_uberon_term in DEPRECATED_TERMS:
             print(f"Warning: UBERON term {s_uberon_term} deprecated")
 
-        subject = AnatomicalStructure(
-            ontology_purl=anat_struct["id"],
-            label=anat_struct.get("ccf_pref_label"),
-        )
+        # No label: the UBERON ontology supplies it. HuBMAP's ccf_pref_label
+        # would otherwise overwrite it, since the loader keeps the last
+        # non-None value and HuBMAP loads after the ontologies.
+        subject = AnatomicalStructure(ontology_purl=anat_struct["id"])
 
         for o_id in anat_struct["ccf_part_of"]:
             if "UBERON" not in o_id:
