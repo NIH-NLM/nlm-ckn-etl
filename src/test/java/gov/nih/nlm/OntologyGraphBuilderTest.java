@@ -304,6 +304,11 @@ class OntologyGraphBuilderTest {
     }
 
     @Test
+    void normalizeEdgeLabel_wasAttributedTo() {
+        assertEquals("WAS_ATTRIBUTED_TO", OntologyGraphBuilder.normalizeEdgeLabel("wasAttributedTo"));
+    }
+
+    @Test
     void normalizeEdgeLabel_defaultWithSpaces() {
         assertEquals("DEVELOPS_FROM", OntologyGraphBuilder.normalizeEdgeLabel("develops from"));
         assertEquals("CAPABLE_OF", OntologyGraphBuilder.normalizeEdgeLabel("capable of"));
