@@ -199,6 +199,11 @@ public class OntologyElementParser {
                 ontologyElementMapMaps.get("ro").getTerms().put("RO_0020325",
                         new OntologyElementMap.OntologyTerm(new URI("http://purl.obolibrary.org/obo/RO_0020325"),
                                 "evaluated in"));
+                // RO_0015013 is not defined in RO; the schema uses it as a project-local term for
+                // has_binary_gene_set, minted adjacent to RO_0015004, "has characterizing marker set".
+                ontologyElementMapMaps.get("ro").getTerms().put("RO_0015013",
+                        new OntologyElementMap.OntologyTerm(new URI("http://purl.obolibrary.org/obo/RO_0015013"),
+                                "has binary gene set"));
                 ontologyElementMapMaps.get("ro").getTerms().put("IAO_0000136",
                         new OntologyElementMap.OntologyTerm(new URI("http://purl.obolibrary.org/obo/IAO_0000136"),
                                 "is about"));
