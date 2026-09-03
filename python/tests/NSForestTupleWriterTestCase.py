@@ -90,7 +90,7 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         bgs_edges = [
             t
             for t in tuples
-            if len(t) == 3 and "RO_0002292" in str(t[1]) and "/BGS_" in str(t[2])
+            if len(t) == 3 and "RO_0015013" in str(t[1]) and "/BGS_" in str(t[2])
         ]
         self.assertEqual(len(bgs_edges), 1)
 
@@ -99,7 +99,7 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         tuples = create_tuples(nsf, summary, ["dvid-001"])
         # CS -[selectively_expresses]-> Gene: predicate RO_0002294, object GS_*.
         # The cell set selectively expresses the marker genes alone, not every
-        # binary gene (it merely expresses the binary gene set as a whole).
+        # binary gene (it merely has the binary gene set as a whole).
         gene_edges = [
             t for t in tuples
             if len(t) == 3
@@ -114,7 +114,7 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         tuples = create_tuples(nsf, summary, ["dvid-001"])
         self.assertFalse(
             any(
-                len(t) == 3 and "RO_0002292" in str(t[1]) and "/GS_" in str(t[2])
+                len(t) == 3 and "RO_0015013" in str(t[1]) and "/GS_" in str(t[2])
                 for t in tuples
             )
         )

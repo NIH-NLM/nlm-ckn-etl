@@ -312,6 +312,9 @@ class GetPredicateUriTestCase(unittest.TestCase):
         )
 
     def test_has_binary_gene_set_uses_its_own_relation(self):
+        # RO_0015013 is a placeholder minted by the schema, not a published RO
+        # term (Springbok-LLC/nlm-ckn-schema#12); OntologyElementParser
+        # registers its label so the edge is not nameless in the graph.
         assoc = twu.ASSOCIATION_CLASSES["CellSetHasBinaryGeneSetBinaryGeneSet"](
             subject=CellSet(author_cell_term="T-Cell"),
             predicate="nlm-ckn:has_binary_gene_set",
@@ -319,7 +322,7 @@ class GetPredicateUriTestCase(unittest.TestCase):
         )
         self.assertEqual(
             twu.get_predicate_uri(assoc),
-            URIRef("http://purl.obolibrary.org/obo/RO_0002292"),
+            URIRef("http://purl.obolibrary.org/obo/RO_0015013"),
         )
 
 
