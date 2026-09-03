@@ -398,6 +398,8 @@ def get_dataset_file_paths(results_dir=None):
       reference dataset per organ has one, so most results sets have none)
     - scores:   ``results_ensg`` → ``silhouette_fscore_summary``
     - summary:  ``results_ensg`` → ``master_dataset_summary``
+    - binary:   ``results_ensg`` → ``binary_scores_ensg`` (sparse — a few
+      results sets ship none)
 
     Parameters
     ----------
@@ -409,9 +411,10 @@ def get_dataset_file_paths(results_dir=None):
     -------
     file_paths : dict
         ``nsforest_paths`` — list of Path
-        ``mapping_paths``  — list of list[Path] (one per nsforest file)
-        ``scores_paths``   — list of list[Path]
-        ``summary_paths``  — list of list[Path]
+        ``mapping_paths``       — list of list[Path] (one per nsforest file)
+        ``scores_paths``        — list of list[Path]
+        ``summary_paths``       — list of list[Path]
+        ``binary_scores_paths`` — list of list[Path]
     """
     if results_dir is None:
         results_dir = get_current_run().results_dir
@@ -422,6 +425,7 @@ def get_dataset_file_paths(results_dir=None):
     mapping_paths = []
     scores_paths = []
     summary_paths = []
+    binary_scores_paths = []
 
     for p in nsforest_paths:
         mapping_paths.append(
@@ -442,6 +446,13 @@ def get_dataset_file_paths(results_dir=None):
             list(
                 results_dir.glob(
                     "**/" + spec.companion_basename(p.name, spec.SUMMARY_PREFIX)
+                )
+            )
+        )
+        binary_scores_paths.append(
+            list(
+                results_dir.glob(
+                    "**/" + spec.companion_basename(p.name, spec.BINARY_SCORES_PREFIX)
                 )
             )
         )
@@ -485,6 +496,7 @@ def get_dataset_file_paths(results_dir=None):
         "mapping_paths": mapping_paths,
         "scores_paths": scores_paths,
         "summary_paths": summary_paths,
+        "binary_scores_paths": binary_scores_paths,
     }
 
 

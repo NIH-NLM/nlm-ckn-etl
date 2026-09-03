@@ -214,6 +214,51 @@ def as_rollup_str(row, col):
     )
 
 
+def as_nonzero_rollup_str(row, col):
+    """Return ``row[col]`` as a rollup string with zero counts dropped.
+
+    The summaries pad ``development_stage_summary`` with every stage of the
+    HsapDv vocabulary, all but a handful at a count of zero, which would put
+    a multi-kilobyte list of stages the dataset does not cover into the
+    slot.  A zero-count pair says only that the term was enumerated, so it
+    is dropped; a pair whose count cannot be read is kept, since an
+    unparsable count is not evidence of absence.
+    """
+    rollup = as_rollup_str(row, col)
+    if rollup is None:
+        return None
+    kept = []
+    for pair in rollup.split(ROLLUP_SEPARATOR):
+        # The term itself can contain ": " ("30-year-old stage: 34,167"), so
+        # the count is taken from the last separator, and thousands are
+        # published with commas.
+        _, _, count = pair.rpartition(": ")
+        try:
+            if int(count.replace(",", "")) == 0:
+                continue
+        except ValueError:
+            pass
+        kept.append(pair)
+    return ROLLUP_SEPARATOR.join(kept) or None
+
+
+def as_rollup_terms_str(row, col):
+    """Return the terms a rollup in ``row[col]`` names, without their counts.
+
+    A rollup pairs a term with a count ("EFO:0009922: 105445"); this keeps
+    the terms alone, so a slot that wants the terms a dataset covers can be
+    filled from the same column that fills the slot wanting the counts.
+    Zero-count pairs are dropped, as in :func:`as_nonzero_rollup_str`.
+    """
+    rollup = as_nonzero_rollup_str(row, col)
+    if rollup is None:
+        return None
+    terms = [
+        pair.rpartition(": ")[0] or pair for pair in rollup.split(ROLLUP_SEPARATOR)
+    ]
+    return ROLLUP_SEPARATOR.join(terms) or None
+
+
 def curie_to_term(curie: str) -> str:
     """Convert a CURIE to an ArangoDB-compatible underscore term.
 
@@ -865,7 +910,21 @@ def build_cell_set_dataset(
         # TissueEnum is declared with no permissible values, so the schema
         # accepts nothing for it (Springbok-LLC/nlm-ckn-etl#63).
         fill("assay_summary", as_rollup_str(s, "assay_ontology_summary"))
-        fill("cluster_summary", as_count_str(s, "n_clusters"))
+        # ``assay`` names the assay terms the dataset covers and
+        # ``assay_summary`` how many cells each contributed, so both come
+        # from the one rollup the summary publishes.  Taking the terms from
+        # it rather than from the harvester's assay_ontology_term_id keeps
+        # the slot filled for every dataset, since the per-organ harvester
+        # tables miss some (Springbok-LLC/nlm-ckn-etl#63).
+        fill("assay", as_rollup_terms_str(s, "assay_ontology_summary"))
+        # Donor ages, as the stages the dataset covers and the cells each
+        # contributed.  The summary enumerates the whole HsapDv vocabulary
+        # here, so the zero-count stages are dropped.
+        fill("donor_age", as_nonzero_rollup_str(s, "development_stage_summary"))
+        # cluster_summary is an integer slot as of ckn-schema
+        # v0.0.0-alpha.4, so the count goes in as a number rather than
+        # the whole-number string the other counts still use.
+        fill("cluster_summary", as_int(s, "n_clusters"))
         fill("publication", normalize_doi(as_str(s, "doi")))
         citation = build_citation(
             s.get("first_author"), s.get("year"), s.get("journal")
@@ -890,6 +949,11 @@ def build_cell_set_dataset(
         # whose summary omits the count leaves the slot empty rather than
         # carrying a number that does not mean what the slot says.
         fill("assay_summary", as_rollup_str(h, "assay_ontology_summary"))
+        # The harvester names the assay terms outright, and its rollup
+        # backs that up the way the summary's does.
+        fill("assay", as_rollup_str(h, "assay_ontology_term_id"))
+        fill("assay", as_rollup_terms_str(h, "assay_ontology_summary"))
+        fill("donor_age", as_nonzero_rollup_str(h, "development_stage_summary"))
         fill("tissue_annotation", as_rollup_str(h, "tissue_ontology_summary"))
         fill("dataset_collection_version", as_str(h, "collection_version_id"))
         fill("publication", normalize_doi(as_str(h, "doi")))

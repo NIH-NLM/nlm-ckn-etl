@@ -29,12 +29,17 @@ NSFOREST_PREFIX = "results_ensg"
 SUMMARY_PREFIX = "master_dataset_summary"
 SILHOUETTE_PREFIX = "silhouette_fscore_summary"
 MAPPING_PREFIX = "cluster_cid_mapping"
+# Per-cluster binary scores, gene × cluster.  The ``_ensg`` variant is the
+# one the ETL reads: its gene index is spelled in the Ensembl ids that the
+# results file's ``binary_genes`` lists, so the two join without mapping.
+BINARY_SCORES_PREFIX = "binary_scores_ensg"
 
 # Companion kinds keyed by a short label, mapped to their filename prefix.
 COMPANION_PREFIXES = {
     "summary": SUMMARY_PREFIX,
     "silhouette": SILHOUETTE_PREFIX,
     "mapping": MAPPING_PREFIX,
+    "binary_scores": BINARY_SCORES_PREFIX,
 }
 
 # Globs used by the readers (recursive ``**/`` form, matching
@@ -121,12 +126,24 @@ SUMMARY_OPTIONAL_COLUMNS = [
     "filtered_cell_count",
     "median_silhouette",
     "n_clusters",
+    # Donor age rollup, reported under this name by the harvester too.  The
+    # summary pads it with every stage of the vocabulary at a zero count, so
+    # readers drop the zero-count pairs (as_nonzero_rollup_str).
+    "development_stage_summary",
 ]
 
 # silhouette_fscore_summary_*.csv — the five stat columns merged into the
 # NSForest frame, PLUS a join column whose NAME equals the value of the
 # results file's cluster_header (validated cross-file, not listed here).
 SILHOUETTE_REQUIRED_COLUMNS = ["median", "mean", "std", "q1", "q3"]
+
+# binary_scores_ensg_*.csv — a gene × cluster matrix of binary scores, read
+# with the first (unnamed) column as the gene index.  It declares no fixed
+# column names: the columns are the results file's cluster names, and the
+# index its ``binary_genes`` Ensembl ids.  Sparse in prod (a few results sets
+# ship none), so NSForestTupleWriter leaves mean_binary_score empty rather
+# than failing when it is absent.
+BINARY_SCORES_GENE_INDEX_COLUMN = 0
 
 # cluster_cid_mapping_*.csv — author-to-CL mapping consumed by MappingTupleWriter.
 MAPPING_REQUIRED_COLUMNS = [
@@ -166,6 +183,7 @@ CONSUMED_PREFIXES = [
     SUMMARY_PREFIX,
     SILHOUETTE_PREFIX,
     MAPPING_PREFIX,
+    BINARY_SCORES_PREFIX,
 ]
 
 # ---------------------------------------------------------------------------

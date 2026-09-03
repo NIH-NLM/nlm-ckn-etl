@@ -311,10 +311,10 @@ class GetPredicateUriTestCase(unittest.TestCase):
             URIRef("http://purl.obolibrary.org/obo/RO_0002294"),
         )
 
-    def test_expresses_binary_gene_set_keeps_expresses(self):
-        assoc = twu.ASSOCIATION_CLASSES["CellSetExpressesBinaryGeneSet"](
+    def test_has_binary_gene_set_uses_its_own_relation(self):
+        assoc = twu.ASSOCIATION_CLASSES["CellSetHasBinaryGeneSetBinaryGeneSet"](
             subject=CellSet(author_cell_term="T-Cell"),
-            predicate="nlm-ckn:expresses",
+            predicate="nlm-ckn:has_binary_gene_set",
             object=BinaryGeneSet(markers="TP53 BRCA1"),
         )
         self.assertEqual(
@@ -648,7 +648,7 @@ class CellSetDatasetSlotSourcesTestCase(unittest.TestCase):
         self.assertEqual(csd.tissue_annotation, "UBERON:0002113: 105445")
         self.assertEqual(csd.assay_summary, "EFO:0009922: 105445")
         self.assertEqual(csd.median_of_median_silhouette, 0.39)
-        self.assertEqual(csd.cluster_summary, "75")
+        self.assertEqual(csd.cluster_summary, 75)
 
     def test_summary_wins_over_the_harvester(self):
         # The harvester's normal_cell_count is computed differently than the
@@ -725,7 +725,7 @@ class CellSetDatasetSlotSourcesTestCase(unittest.TestCase):
         })
         csd, _ = twu.build_cell_set_dataset("dvid-1", summary_data=summary)
         self.assertEqual(csd.filtered_cell_count, "105445")
-        self.assertEqual(csd.cluster_summary, "75")
+        self.assertEqual(csd.cluster_summary, 75)
 
     def test_publication_falls_back_to_the_summary_doi_normalized(self):
         # DOIs are case-insensitive, so the dataset must name the paper the
@@ -738,6 +738,89 @@ class CellSetDatasetSlotSourcesTestCase(unittest.TestCase):
             "dvid-1", summary_data=self._summary(), doi="https://doi.org/10.1000/XYZ"
         )
         self.assertEqual(csd.publication, "10.1000/xyz")
+
+    def test_assay_names_the_terms_its_summary_counts(self):
+        # assay and assay_summary come from one rollup: the terms the
+        # dataset covers, and how many cells each contributed.
+        csd, _ = twu.build_cell_set_dataset("dvid-1", summary_data=self._summary())
+        self.assertEqual(csd.assay, "EFO:0009922")
+        self.assertEqual(csd.assay_summary, "EFO:0009922: 105445")
+
+    def test_assay_prefers_the_harvester_term_list_over_its_rollup(self):
+        # The harvester names the terms outright, so a dataset the summary
+        # does not cover still gets them without going through the rollup.
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1",
+            harvester_row=self._harvester(
+                assay_ontology_term_id="EFO:0009899; EFO:0010010"
+            ),
+        )
+        self.assertEqual(csd.assay, "EFO:0009899 | EFO:0010010")
+
+    def test_assay_falls_back_to_the_harvester_rollup(self):
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1", harvester_row=self._harvester()
+        )
+        self.assertEqual(csd.assay, "EFO:0009922")
+
+    def test_donor_age_comes_from_the_development_stage_summary(self):
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1",
+            summary_data=self._summary(
+                development_stage_summary="59-year-old stage: 40 | 22-year-old stage: 2"
+            ),
+        )
+        self.assertEqual(
+            csd.donor_age, "59-year-old stage: 40 | 22-year-old stage: 2"
+        )
+
+    def test_donor_age_drops_the_stages_the_dataset_does_not_cover(self):
+        # The summaries enumerate the whole HsapDv vocabulary here, all but
+        # a handful at zero, which would put thousands of characters of
+        # stages the dataset has no cells for into the slot.
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1",
+            summary_data=self._summary(
+                development_stage_summary=(
+                    "59-year-old stage: 40 | 1-month-old stage: 0 | "
+                    "101-year-old stage: 0 | 22-year-old stage: 2"
+                )
+            ),
+        )
+        self.assertEqual(
+            csd.donor_age, "59-year-old stage: 40 | 22-year-old stage: 2"
+        )
+
+    def test_donor_age_reads_a_count_published_with_thousands_separators(self):
+        # The harvester writes its counts with commas, so a naive int() of
+        # the count would treat every four-digit stage as unparsable.
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1",
+            harvester_row=self._harvester(
+                development_stage_summary="30-year-old stage: 34,167; 5-year-old stage: 0"
+            ),
+        )
+        self.assertEqual(csd.donor_age, "30-year-old stage: 34,167")
+
+    def test_donor_age_keeps_a_stage_whose_count_cannot_be_read(self):
+        # An unparsable count is not evidence that the dataset has no cells
+        # for the stage, so the pair stays rather than being dropped.
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1",
+            summary_data=self._summary(
+                development_stage_summary="59-year-old stage: unknown"
+            ),
+        )
+        self.assertEqual(csd.donor_age, "59-year-old stage: unknown")
+
+    def test_donor_age_is_empty_when_every_stage_is_zero(self):
+        csd, _ = twu.build_cell_set_dataset(
+            "dvid-1",
+            summary_data=self._summary(
+                development_stage_summary="1-month-old stage: 0 | 5-year-old stage: 0"
+            ),
+        )
+        self.assertIsNone(csd.donor_age)
 
 
 if __name__ == "__main__":
