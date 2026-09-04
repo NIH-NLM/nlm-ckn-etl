@@ -7,7 +7,6 @@ Executes each data-source-specific tuple writer in sequence:
 4. Open Targets
 5. NCBI Gene
 6. UniProt
-7. HuBMAP
 """
 
 import argparse
@@ -20,7 +19,6 @@ import CellxGeneTupleWriter
 import OpenTargetsTupleWriter
 import GeneTupleWriter
 import UniProtTupleWriter
-import HuBMAPTupleWriter
 
 
 def main():
@@ -68,12 +66,6 @@ def main():
     print("Running UniProt tuple writer")
     print("=" * 70)
     UniProtTupleWriter.main()
-
-    print()
-    print("=" * 70)
-    print("Running HuBMAP tuple writer")
-    print("=" * 70)
-    HuBMAPTupleWriter.main()
 
     print()
     print("=" * 70)

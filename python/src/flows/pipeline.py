@@ -848,7 +848,7 @@ def write_tuples(arango_db_password: str, run_name: str = "") -> None:
     """Run TupleWriterPipeline.py to write all tuple types in sequence.
 
     Delegates to the unified pipeline script which runs each writer in order:
-    NSForest, Mapping, CELLxGENE, Open Targets, Gene, UniProt, HuBMAP.
+    NSForest, Mapping, CELLxGENE, Open Targets, Gene, UniProt.
 
     Parameters
     ----------
