@@ -1,4 +1,17 @@
-# Deprecated Tuple Writers
+# Deprecated Modules
+
+This directory holds two kinds of retired code, kept apart below because
+they were retired for different reasons:
+
+- **Superseded tuple writers** — the original hand-crafted writers, replaced
+  in April 2026 by schema-driven ones. Their replacements do the same job.
+- **Retired capabilities** — code whose job the pipeline no longer does at
+  all. Nothing replaces these.
+
+Nothing here is imported by the live pipeline, and `_deprecated` is excluded
+from `ruff` and from the default `pytest` run (`norecursedirs`).
+
+## Superseded tuple writers
 
 These modules were the original hand-crafted tuple writers, replaced in
 April 2026 by schema-driven tuple writers that use `ckn-schema` Pydantic
@@ -20,6 +33,49 @@ entity classes and a shared infrastructure module (`TupleWriterUtilities.py`).
 These are retained for reference during the transition to ensure tuple
 consistency between old and new writers. They can be removed once the
 new writers are validated in production.
+
+## Retired capabilities
+
+| Module | Retired |
+|---|---|
+| `HuBMAPTupleWriter.py` | September 2026 |
+| `UberonHuBMAPAuditor.py` | September 2026 (never ran in production) |
+
+`HuBMAPTupleWriter` asserted `AnatomicalStructure part_of AnatomicalStructure`
+edges over UBERON terms, read from the HuBMAP CCF ASCT+B tables. It was the
+only consumer of the fetched HuBMAP data.
+
+It was retired because the hierarchy it asserted is the one UBERON already
+supplies, and the two disagree. HuBMAP tuples load *after* the ontology
+triples, and the loader keeps the last non-`None` value, so HuBMAP silently
+won every disagreement: first over labels — addressed in 9b68a91 by dropping
+`ccf_pref_label` — and then over the `part_of` edges themselves, which is what
+this retirement addresses.
+
+`UberonHuBMAPAuditor` is the tool built to adjudicate that: it compares the
+UBERON tuples written by `gov.nih.nlm.OntologyTupleWriter` against the HuBMAP
+tuples and writes a review workbook (label conflicts, HuBMAP-only `part_of`
+edges, unknown or deprecated terms) with a `Decision` column per row. It reads
+`HuBMAPTupleWriter`'s output, so the two are retired together — without the
+writer there is nothing for it to audit.
+
+`OntologyTupleWriter` itself is **not** retired: it dumps the triples the
+ontology graph builder loads from an OWL file, which is useful independently
+of this audit.
+
+**To revive either:** move the module back to `src/`, and re-add
+`HuBMAPTupleWriter` to `TupleWriterPipeline.py`. The HuBMAP fetch was left in
+place (`DataFetcher.HuBMAPFetcher`, `release.json` → `hubmap_urls.txt`), so the
+input data is still downloaded. The auditor additionally needs `openpyxl`,
+which is not a declared dependency.
+
+**To run the archived tests**, point `pytest` at them explicitly — the default
+run skips this directory:
+
+```
+poetry run pytest tests/_deprecated/HuBMAPTupleWriterTestCase.py \
+                  tests/_deprecated/UberonHuBMAPAuditorTestCase.py
+```
 
 ## Comparison: Old vs New (2026-04-03)
 

@@ -2,7 +2,11 @@ import sys
 from pathlib import Path
 import unittest
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Both directories: the module itself was retired to src/_deprecated/, but it
+# still imports LoaderUtilities and TupleWriterUtilities from src/.
+_PYTHON_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(_PYTHON_ROOT / "src"))
+sys.path.insert(0, str(_PYTHON_ROOT / "src" / "_deprecated"))
 
 from HuBMAPTupleWriter import create_tuples
 
