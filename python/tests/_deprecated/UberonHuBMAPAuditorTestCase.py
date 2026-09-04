@@ -32,6 +32,7 @@ PURL = "http://purl.obolibrary.org/obo"
 PART_OF = f"{PURL}/BFO_0000050"
 RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 RDF_LABEL = "http://www.w3.org/1999/02/22-rdf-syntax-ns#label"
+RDF_SOURCE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#Source"
 
 # UBERON: kidney part_of urinary system, and a nephron with no HuBMAP counterpart
 UBERON_TUPLES = [
@@ -81,6 +82,32 @@ class UberonHuBMAPAuditorTestCase(unittest.TestCase):
         self.assertEqual(
             self.hubmap["part_of"][("UBERON_0002015", "UBERON_0002113")],
             {"hubmap-kidney-v1.8"},
+        )
+
+    def test_index_hubmap_loses_nothing_by_skipping_edge_annotations(self):
+        # The writer emits an annotation quintuple that repeats the subject,
+        # predicate and object of a core triple it has already written, so
+        # indexing the triples alone is complete.  Written as it is emitted:
+        # the same edge as a triple, then as its source quintuple.
+        annotated_path = Path(self.tmp_dir.name) / "hubmap-kidney-v1.8-annotated.json"
+        annotated_tuples = []
+        for tup in HUBMAP_TUPLES:
+            annotated_tuples.append(tup)
+            annotated_tuples.append(tup + [RDF_SOURCE, "HuBMAP"])
+        with open(annotated_path, "w") as fp:
+            json.dump({"tuples": annotated_tuples}, fp)
+
+        annotated = index_hubmap([annotated_path])
+        source = {"hubmap-kidney-v1.8-annotated"}
+        self.assertEqual(
+            annotated["part_of"][("UBERON_0002015", "UBERON_0002113")], source
+        )
+        self.assertEqual(
+            set(annotated["part_of"]), set(self.hubmap["part_of"])
+        )
+        self.assertEqual(set(annotated["terms"]), set(self.hubmap["terms"]))
+        self.assertEqual(
+            annotated["labels"]["UBERON_0002015"], {"renal capsule": source}
         )
 
     def test_find_label_conflicts(self):

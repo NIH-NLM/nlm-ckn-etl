@@ -348,6 +348,13 @@ def index_hubmap(paths):
     for path in sorted(paths):
         source = Path(path).stem
         for tup in load_tuple_file(path):
+            # Core triples alone.  The five-element tuples are edge
+            # annotations, and carry no edge the three-element tuples do not:
+            # association_to_tuples always writes the core triple, and only
+            # then writes the annotation quintuple repeating that triple's
+            # subject, predicate and object.  Reading both would index every
+            # edge twice.  The annotation the quintuple carries is the source,
+            # which is taken from the file name above.
             if len(tup) != 3:
                 continue
             subject, predicate, obj = tup[0], tup[1], tup[2]
