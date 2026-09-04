@@ -8,6 +8,8 @@ scores.
 import pandas as pd
 from rdflib.term import Literal, URIRef
 
+import ProductionDataSpecification as spec
+
 from ckn_schema.pydantic.ckn_schema import (
     AnatomicalStructure,
     BinaryGeneSet,
@@ -85,6 +87,58 @@ def sampled_tissue_annotation(
     ]
 
 
+def mean_binary_scores(
+    nsforest_results: pd.DataFrame, binary_scores: pd.DataFrame
+) -> pd.Series:
+    """Return each cluster's mean binary score over its binary gene set.
+
+    The binary scores are published as a gene × cluster matrix alongside
+    the results file, so a cluster's score for one of its binary genes is
+    the cell at that gene's row and that cluster's column, and the mean
+    over the cluster's ``binary_genes`` is the value the schema's
+    ``mean_binary_score`` slot wants.
+
+    Genes are matched on the unversioned Ensembl id, as
+    :func:`resolve_gene_names` reads them, so a version suffix on either
+    side does not silently drop a gene from the mean.  A cluster the
+    matrix does not cover, or one none of whose binary genes it lists,
+    yields ``None`` rather than a mean over nothing.
+
+    Parameters
+    ----------
+    nsforest_results : pd.DataFrame
+        NSForest results, with ``clusterName`` and ``binary_genes``.
+    binary_scores : pd.DataFrame
+        Binary scores indexed by gene, one column per cluster.
+
+    Returns
+    -------
+    pd.Series
+        Mean binary score per row of ``nsforest_results``, aligned to its
+        index, with ``None`` where no score could be computed.
+    """
+    means = []
+    for _, row in nsforest_results.iterrows():
+        cluster = str(row["clusterName"])
+        if cluster not in binary_scores.columns:
+            means.append(None)
+            continue
+        by_gene = {
+            str(gene).split(".")[0]: score
+            for gene, score in binary_scores[cluster].items()
+        }
+        scores = [
+            by_gene[gene]
+            for gene in (
+                token.split(".")[0]
+                for token in parse_string_list(str(row["binary_genes"]))
+            )
+            if gene in by_gene
+        ]
+        means.append(sum(scores) / len(scores) if scores else None)
+    return pd.Series(means, index=nsforest_results.index, dtype="float64")
+
+
 def create_tuples(
     nsforest_results: pd.DataFrame,
     summary_data: pd.DataFrame,
@@ -99,7 +153,7 @@ def create_tuples(
     - CellSetDatasetIsAboutAnatomicalStructure (dataset-scope, per UBERON term)
     - CellSetDatasetIsAboutCellSet
     - CellSetDerivesFromAnatomicalStructure
-    - CellSetExpressesBinaryGeneSet
+    - CellSetHasBinaryGeneSetBinaryGeneSet
     - CellSetHasCharacterizingMarkerSetBiomarkerCombination
     - CellSetSelectivelyExpressesGene (for each binary gene)
     - GenePartOfBinaryGeneSet (for each binary gene)
@@ -110,7 +164,8 @@ def create_tuples(
     nsforest_results : pd.DataFrame
         DataFrame containing NSForest results with columns: clusterName,
         clusterSize, f_score, precision, NSForest_markers, binary_genes,
-        uuid. May include a 'median' column from merged silhouette scores.
+        uuid. May include a 'median' column from merged silhouette scores,
+        and a 'mean_binary_score' column from merged binary scores.
     summary_data : pd.DataFrame
         DataFrame containing dataset summary with a tissue_ontology_term_id
         column.
@@ -229,7 +284,10 @@ def create_tuples(
             markers=",".join(markers),
             f_beta_score=float(row["f_score"]) if pd.notna(row["f_score"]) else None,
         )
-        bgs = BinaryGeneSet(markers=",".join(binary_genes))
+        bgs = BinaryGeneSet(
+            markers=",".join(binary_genes),
+            mean_binary_score=as_float(row, "mean_binary_score"),
+        )
 
         # Resolve the cluster's dataset before building the cell set, so the
         # cell set can carry that dataset's metadata.  A cell set is described
@@ -268,6 +326,8 @@ def create_tuples(
             # cell set is described the same way whether or not it also has a
             # manual cell type mapping (Springbok-LLC/nlm-ckn-etl#63).
             species=describing_csd.species,
+            assay=describing_csd.assay,
+            donor_age=describing_csd.donor_age,
             anatomical_structure=cell_set_anatomical_structure,
             publication=describing_csd.publication,
             dataset_name=describing_csd.dataset_name,
@@ -293,7 +353,6 @@ def create_tuples(
             standard_deviation_of_silhouette=as_float(row, "std"),
             first_quartile_silhouette=as_float(row, "q1"),
             third_quartile_silhouette=as_float(row, "q3"),
-            f_beta_score=as_float(row, "f_score"),
             precision=as_float(row, "precision"),
             recall=as_float(row, "recall"),
             true_positive=as_int(row, "TP"),
@@ -323,10 +382,10 @@ def create_tuples(
                 )
             )
 
-        # CellSet expresses BinaryGeneSet
-        assoc = ASSOCIATION_CLASSES["CellSetExpressesBinaryGeneSet"](
+        # CellSet has_binary_gene_set BinaryGeneSet
+        assoc = ASSOCIATION_CLASSES["CellSetHasBinaryGeneSetBinaryGeneSet"](
             subject=cell_set,
-            predicate="nlm-ckn:expresses",
+            predicate="nlm-ckn:has_binary_gene_set",
             object=bgs,
         )
         tuples.extend(
@@ -336,7 +395,7 @@ def create_tuples(
         )
 
         # Gene part_of BinaryGeneSet (for each binary gene).  The cell set
-        # expresses the binary gene set as a whole (edge above); the
+        # has the binary gene set as a whole (edge above); the
         # selectively_expresses edges belong on the marker genes, not the
         # binary genes, and are emitted with the marker loop below.
         for gene_symbol in binary_genes:
@@ -452,11 +511,19 @@ def main():
     file_paths = get_dataset_file_paths(results_dir)
     dataset_version_id_lists = get_dataset_version_id_lists(file_paths)
 
-    for nsforest_path, scores_path, summary_path, mapping_path, dvids in zip(
+    for (
+        nsforest_path,
+        scores_path,
+        summary_path,
+        mapping_path,
+        binary_scores_path,
+        dvids,
+    ) in zip(
         file_paths["nsforest_paths"],
         file_paths["scores_paths"],
         file_paths["summary_paths"],
         file_paths["mapping_paths"],
+        file_paths["binary_scores_paths"],
         dataset_version_id_lists,
     ):
         nsforest_results = load_results(nsforest_path).sort_values(
@@ -473,6 +540,20 @@ def main():
                 silhouette_scores[silhouette_cols].copy(),
                 left_on="clusterName",
                 right_on=cluster_header,
+            )
+
+        # After the silhouette merge, so the column aligns to the merged
+        # frame's index.  The binary scores are sparse in prod, and a results
+        # set without them simply leaves mean_binary_score empty.
+        # (pd.read_csv, not load_results: the matrix is gene-indexed and has
+        # no cluster rows for load_results to add a uuid column to.)
+        if binary_scores_path:
+            binary_scores = pd.read_csv(
+                binary_scores_path[0],
+                index_col=spec.BINARY_SCORES_GENE_INDEX_COLUMN,
+            )
+            nsforest_results["mean_binary_score"] = mean_binary_scores(
+                nsforest_results, binary_scores
             )
 
         summary_data = load_results(summary_path[0]) if summary_path else pd.DataFrame()

@@ -214,6 +214,14 @@ class OntologyElementParserTest {
         assertEquals("evaluated in", terms.get("RO_0020325").label());
         assertEquals(URI.create("http://purl.obolibrary.org/obo/RO_0020325"), terms.get("RO_0020325").purl());
 
+        // RO_0015013 is not published by RO; the schema mints it for
+        // has_binary_gene_set, so this label is the only thing keeping the edge
+        // from loading nameless.  The edge label is derived from it:
+        // HAS_BINARY_GENE_SET.
+        assertTrue(terms.containsKey("RO_0015013"));
+        assertEquals("has binary gene set", terms.get("RO_0015013").label());
+        assertEquals(URI.create("http://purl.obolibrary.org/obo/RO_0015013"), terms.get("RO_0015013").purl());
+
         assertTrue(terms.containsKey("IAO_0000136"));
         assertEquals("is about", terms.get("IAO_0000136").label());
         assertEquals(URI.create("http://purl.obolibrary.org/obo/IAO_0000136"), terms.get("IAO_0000136").purl());

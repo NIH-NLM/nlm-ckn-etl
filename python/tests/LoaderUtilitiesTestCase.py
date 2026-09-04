@@ -546,3 +546,53 @@ class HarvesterRowTestCase(unittest.TestCase):
     def test_empty_harvester_data_yields_none(self):
         self.assertIsNone(lu.get_harvester_row(pd.DataFrame(), "dvid-shared", "liver"))
         self.assertIsNone(lu.get_harvester_row(None, "dvid-shared", "liver"))
+
+
+class BinaryScoresCompanionTestCase(unittest.TestCase):
+    """Binary scores pair to a results file by prefix substitution.
+
+    They are sparse in prod, so a results set without them must still be
+    discovered rather than dropped.
+    """
+
+    def setUp(self):
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.results_dir = Path(self._tmp.name)
+        for suffix in ("scored_set", "unscored_set"):
+            (self.results_dir / f"results_ensg_{suffix}.csv").write_text(
+                "clusterName\nc1\n"
+            )
+            (self.results_dir / f"master_dataset_summary_{suffix}.csv").write_text(
+                "organ,dataset_version_id\nkidney,dvid-1\n"
+            )
+        (self.results_dir / "binary_scores_ensg_scored_set.csv").write_text(
+            ",c1\nENSG00000141510,0.8\n"
+        )
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_binary_scores_pair_to_their_results_file(self):
+        paths = lu.get_dataset_file_paths(self.results_dir)
+        found = dict(
+            zip(
+                (p.name for p in paths["nsforest_paths"]),
+                paths["binary_scores_paths"],
+            )
+        )
+        self.assertEqual(
+            [p.name for p in found["results_ensg_scored_set.csv"]],
+            ["binary_scores_ensg_scored_set.csv"],
+        )
+
+    def test_results_without_binary_scores_pair_to_nothing(self):
+        paths = lu.get_dataset_file_paths(self.results_dir)
+        found = dict(
+            zip(
+                (p.name for p in paths["nsforest_paths"]),
+                paths["binary_scores_paths"],
+            )
+        )
+        self.assertEqual(found["results_ensg_unscored_set.csv"], [])

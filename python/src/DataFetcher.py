@@ -761,6 +761,7 @@ def main():
             "mapping_paths": [],
             "scores_paths": [],
             "summary_paths": [],
+            "binary_scores_paths": [],
         }
 
     if file_paths["nsforest_paths"]:

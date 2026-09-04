@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pandas as pd
 
-from NSForestTupleWriter import create_tuples
+from NSForestTupleWriter import create_tuples, mean_binary_scores
 
 
 class NSForestTupleWriterTestCase(unittest.TestCase):
@@ -82,15 +82,15 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         self.assertFalse(any("RO_0015003" in p for p in preds))
 
-    def test_contains_expresses_binary_gene_set(self):
-        # CellSetExpressesBinaryGeneSet keeps expresses, while the gene edges
-        # move to selectively_expresses — the two must stay distinct.
+    def test_contains_has_binary_gene_set(self):
+        # CellSetHasBinaryGeneSetBinaryGeneSet has its own relation, while the
+        # gene edges use selectively_expresses — the two must stay distinct.
         nsf, summary = self._make_data()
         tuples = create_tuples(nsf, summary, ["dvid-001"])
         bgs_edges = [
             t
             for t in tuples
-            if len(t) == 3 and "RO_0002292" in str(t[1]) and "/BGS_" in str(t[2])
+            if len(t) == 3 and "RO_0015013" in str(t[1]) and "/BGS_" in str(t[2])
         ]
         self.assertEqual(len(bgs_edges), 1)
 
@@ -99,7 +99,7 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         tuples = create_tuples(nsf, summary, ["dvid-001"])
         # CS -[selectively_expresses]-> Gene: predicate RO_0002294, object GS_*.
         # The cell set selectively expresses the marker genes alone, not every
-        # binary gene (it merely expresses the binary gene set as a whole).
+        # binary gene (it merely has the binary gene set as a whole).
         gene_edges = [
             t for t in tuples
             if len(t) == 3
@@ -109,12 +109,12 @@ class NSForestTupleWriterTestCase(unittest.TestCase):
         objects = {str(t[2]).rsplit("/", 1)[-1] for t in gene_edges}
         self.assertEqual(objects, {"GS_TP53"})
 
-    def test_no_gene_keeps_the_plain_expresses_predicate(self):
+    def test_no_gene_carries_the_binary_gene_set_predicate(self):
         nsf, summary = self._make_data()
         tuples = create_tuples(nsf, summary, ["dvid-001"])
         self.assertFalse(
             any(
-                len(t) == 3 and "RO_0002292" in str(t[1]) and "/GS_" in str(t[2])
+                len(t) == 3 and "RO_0015013" in str(t[1]) and "/GS_" in str(t[2])
                 for t in tuples
             )
         )
@@ -385,6 +385,109 @@ class CellSetDatasetMetadataTestCase(unittest.TestCase):
         self.assertEqual(
             self._annotation(tuples, "cellxgene_dataset"),
             "datasets.cellxgene.cziscience.com/dvid-002.h5ad",
+        )
+
+    def test_cell_set_carries_the_dataset_assay_and_donor_age(self):
+        # Both slots are dataset-scoped, so a cell set is described the same
+        # way whether or not it also has a manual cell type mapping.
+        nsf, summary = self._make_data()
+        summary = summary.assign(
+            assay_ontology_summary=["EFO:0009922: 40"],
+            development_stage_summary=["59-year-old stage: 40 | 5-year-old stage: 0"],
+        )
+        tuples = create_tuples(
+            nsf, summary, ["dvid-001"], root_uberon_term="UBERON:0002048"
+        )
+        self.assertEqual(self._annotation(tuples, "assay"), "EFO:0009922")
+        self.assertEqual(
+            self._annotation(tuples, "donor_age"), "59-year-old stage: 40"
+        )
+
+
+class MeanBinaryScoreTestCase(unittest.TestCase):
+    """The binary gene set carries the mean of its genes' binary scores.
+
+    The scores arrive as a gene × cluster matrix beside the results file,
+    so a cluster's mean is taken down its own column over its own binary
+    genes.
+    """
+
+    def _results(self, **overrides):
+        row = {
+            "clusterName": ["T Cell"],
+            "clusterSize": [1718],
+            "f_score": [0.716],
+            "NSForest_markers": ["['ENSG00000141510']"],
+            "binary_genes": ["['ENSG00000141510', 'ENSG00000012048']"],
+            "uuid": ["abc123"],
+        }
+        row.update({k: [v] for k, v in overrides.items()})
+        return pd.DataFrame(row)
+
+    def _scores(self):
+        return pd.DataFrame(
+            {"T Cell": [0.8, 0.6, 0.1], "B Cell": [0.2, 0.4, 0.9]},
+            index=["ENSG00000141510", "ENSG00000012048", "ENSG00000146648"],
+        )
+
+    def test_mean_is_taken_over_the_clusters_binary_genes_alone(self):
+        # ENSG00000146648 is in the matrix but not this cluster's binary
+        # gene set, so including it would drag the mean down to 0.5.
+        means = mean_binary_scores(self._results(), self._scores())
+        self.assertAlmostEqual(means.iloc[0], 0.7)
+
+    def test_mean_is_taken_down_the_clusters_own_column(self):
+        means = mean_binary_scores(
+            self._results(clusterName="B Cell"), self._scores()
+        )
+        self.assertAlmostEqual(means.iloc[0], 0.3)
+
+    def test_versioned_ensembl_ids_still_match(self):
+        # resolve_gene_names reads these unversioned, so a version suffix on
+        # either side must not silently drop a gene from the mean.
+        means = mean_binary_scores(
+            self._results(binary_genes="['ENSG00000141510.4', 'ENSG00000012048.2']"),
+            self._scores(),
+        )
+        self.assertAlmostEqual(means.iloc[0], 0.7)
+
+    def test_a_cluster_the_matrix_omits_has_no_mean(self):
+        means = mean_binary_scores(self._results(clusterName="NK Cell"), self._scores())
+        self.assertTrue(pd.isna(means.iloc[0]))
+
+    def test_a_cluster_whose_genes_the_matrix_omits_has_no_mean(self):
+        # Rather than a mean over nothing.
+        means = mean_binary_scores(
+            self._results(binary_genes="['ENSG00000999999']"), self._scores()
+        )
+        self.assertTrue(pd.isna(means.iloc[0]))
+
+    def test_binary_gene_set_carries_the_mean(self):
+        nsf = self._results()
+        nsf["mean_binary_score"] = mean_binary_scores(nsf, self._scores())
+        summary = pd.DataFrame({"tissue_ontology_term_id": ["UBERON:0000966"]})
+        tuples = create_tuples(nsf, summary, ["dvid-001"])
+        values = [
+            str(t[2])
+            for t in tuples
+            if len(t) == 3
+            and "/BGS_" in str(t[0])
+            and str(t[1]).endswith("#mean_binary_score")
+        ]
+        # Every edge touching the binary gene set re-annotates it, and
+        # write_tuples dedupes; what matters here is the value.
+        self.assertEqual(set(values), {"0.7"})
+
+    def test_results_without_binary_scores_leave_the_mean_empty(self):
+        # The matrix is sparse in prod, and a results set without one still
+        # has to produce its tuples.
+        summary = pd.DataFrame({"tissue_ontology_term_id": ["UBERON:0000966"]})
+        tuples = create_tuples(self._results(), summary, ["dvid-001"])
+        self.assertFalse(
+            any(
+                len(t) == 3 and str(t[1]).endswith("#mean_binary_score")
+                for t in tuples
+            )
         )
 
 
