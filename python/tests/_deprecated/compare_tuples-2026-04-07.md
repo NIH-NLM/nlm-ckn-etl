@@ -3,6 +3,11 @@
 Comparison run on 2026-04-07 using `compare_tuples.py` against the
 li-2023 MVP dataset.
 
+> Both `compare_tuples.py` and the OLD writers it compares were removed in
+> September 2026, once the NEW writers they vindicate had been validated in
+> production. This report is kept as the record of that comparison; see
+> [`../../src/_deprecated/README.md`](../../src/_deprecated/README.md).
+
 ## Overview
 
 | Writer | OLD tuples | NEW tuples | Common | Only OLD | Only NEW |
