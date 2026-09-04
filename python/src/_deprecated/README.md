@@ -1,25 +1,23 @@
 # Deprecated Modules
 
-This directory holds two kinds of retired code, kept apart below because
-they were retired for different reasons:
+This directory holds retired code: modules whose job the pipeline no longer
+does at all. Nothing here is imported by the live pipeline, and `_deprecated`
+is excluded from `ruff` and from the default `pytest` run (`norecursedirs`).
 
-- **Superseded tuple writers** — the original hand-crafted writers, replaced
-  in April 2026 by schema-driven ones. Their replacements do the same job.
-- **Retired capabilities** — code whose job the pipeline no longer does at
-  all. Nothing replaces these.
+Keep what lands here **self-contained**. The modules that used to sit
+alongside these imported live helpers from `src/`, and when those helpers
+moved on — `LoaderUtilities.EXTERNAL_DIRPATH` became the run-scoped
+`get_current_run().external_dir`, and `get_results_sources` was deleted
+outright — the archive stopped importing without anyone noticing. An archive
+that depends on live code is an archive that rots.
 
-Nothing here is imported by the live pipeline, and `_deprecated` is excluded
-from `ruff` and from the default `pytest` run (`norecursedirs`).
+## The April 2026 transition (code removed)
 
-## Superseded tuple writers
+The original hand-crafted tuple writers were replaced in April 2026 by the
+schema-driven writers that use `ckn-schema` Pydantic entity classes and a
+shared infrastructure module (`TupleWriterUtilities.py`):
 
-These modules were the original hand-crafted tuple writers, replaced in
-April 2026 by schema-driven tuple writers that use `ckn-schema` Pydantic
-entity classes and a shared infrastructure module (`TupleWriterUtilities.py`).
-
-## Replacements
-
-| Deprecated module | Replaced by |
+| Superseded module | Replaced by |
 |---|---|
 | `NSForestResultsTupleWriter.py` | `NSForestTupleWriter.py` |
 | `AuthorToClResultsTupleWriter.py` | `MappingTupleWriter.py` |
@@ -28,11 +26,19 @@ entity classes and a shared infrastructure module (`TupleWriterUtilities.py`).
 | `SchemaBasedTupleWriter.py` | (exploratory prototype, superseded by all of the above) |
 | `SchemaTupleWriter.py` | (intermediate version, split into the above modules) |
 
-## Why kept
+Those modules, their helpers (`CellKnSchemaUtilities.py`,
+`DatasetSummary.py`, `ExternalApiResultsFetcher.py`,
+`OntologyParserLoader.py`), their tests, and the comparison scripts
+(`compare_tuples.py`, `compare_fetcher_outputs.py`) were **deleted in
+September 2026**, on the exit criterion this file already stated: they were
+kept only until the replacements were validated in production, and the
+replacements have been through releases rc.7 to rc.10.
 
-These are retained for reference during the transition to ensure tuple
-consistency between old and new writers. They can be removed once the
-new writers are validated in production.
+They are in git history — the last commit to contain them is the parent of
+the one that removed them. What was worth keeping was never the code but the
+evidence that the replacements agree with them, and that is below and in
+[`compare_tuples-2026-04-07.md`](../../tests/_deprecated/compare_tuples-2026-04-07.md),
+which reports a fuller run of the same comparison.
 
 ## Retired capabilities
 
@@ -79,8 +85,8 @@ poetry run pytest tests/_deprecated/HuBMAPTupleWriterTestCase.py \
 
 ## Comparison: Old vs New (2026-04-03)
 
-Comparison run using `compare_tuples.py` on the li-2023 MVP dataset
-and all external API data sources.
+Comparison run on the li-2023 MVP dataset and all external API data sources,
+using the `compare_tuples.py` removed with the code it compared.
 
 ### NSForest (3,617 tuples both old and new)
 
