@@ -22,6 +22,17 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
             },
         }
 
+    def _make_uniprot_results(self):
+        """Return minimal UniProt results for CFTR (accession P13569)."""
+        return {
+            "protein_accessions": ["P13569"],
+            "P13569": {
+                "Protein_name": "Cystic fibrosis transmembrane conductance regulator",
+                "UniProt_ID": "P13569",
+                "Gene_name": "CFTR",
+            },
+        }
+
     def _make_ot_base(self):
         """Return Open Targets data with empty resource lists."""
         return {
@@ -102,14 +113,18 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
     def test_creates_disease_tuples(self):
         ot = self._make_ot_base()
         ot["ENSG00000001626"]["diseases"] = [self._make_disease()]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         self.assertTrue(any("RO_0004010" in p for p in preds))
 
     def test_disease_score_edge_annotation(self):
         ot = self._make_ot_base()
         ot["ENSG00000001626"]["diseases"] = [self._make_disease()]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         score_quints = [
             t for t in tuples if len(t) == 5 and "Score" in str(t[3])
         ]
@@ -118,7 +133,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
     def test_skips_low_score_diseases(self):
         ot = self._make_ot_base()
         ot["ENSG00000001626"]["diseases"] = [self._make_disease(score=0.2)]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         self.assertFalse(any("RO_0004010" in p for p in preds))
 
@@ -127,7 +144,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
     def test_creates_drug_protein_interaction_tuples(self):
         ot = self._make_ot_base()
         ot["ENSG00000001626"]["drugs"] = [self._make_drug()]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         # molecularly_interacts_with = RO_0002436
         mol_preds = [p for p in preds if "RO_0002436" in p]
@@ -138,7 +157,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
         ot["ENSG00000001626"]["drugs"] = [
             self._make_drug(maximumClinicalStage="PHASE_1")
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         self.assertFalse(any("RO_0002436" in p for p in preds))
 
@@ -147,7 +168,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
         ot["ENSG00000001626"]["drugs"] = [
             self._make_drug(drugWarnings=[{"warningType": "Withdrawn"}])
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         self.assertFalse(any("RO_0002436" in p for p in preds))
 
@@ -158,7 +181,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
                 indications={"rows": [self._make_indication()]}
             )
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         # is_substance_that_treats = RO_0002606
         self.assertTrue(any("RO_0002606" in p for p in preds))
@@ -171,7 +196,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
         ot["ENSG00000001626"]["drugs"] = [
             self._make_drug(indications={"rows": [indication]})
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         # evaluated_in = RO_0020325
         self.assertTrue(any("RO_0020325" in p for p in preds))
@@ -184,19 +211,51 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
         ot["ENSG00000001626"]["drugs"] = [
             self._make_drug(indications={"rows": [indication]})
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         self.assertFalse(any("RO_0020325" in p for p in preds))
 
     def test_drug_interacts_with_protein(self):
         ot = self._make_ot_base()
         ot["ENSG00000001626"]["drugs"] = [self._make_drug()]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         # Drug molecularly_interacts_with Protein produces a PR_ term
         subjects = [str(t[0]) for t in tuples if len(t) == 3]
         objects = [str(t[2]) for t in tuples if len(t) == 3]
         all_terms = subjects + objects
         self.assertTrue(any("PR_" in t for t in all_terms))
+
+    def test_drug_protein_is_protein_name(self):
+        """The drug protein target is the UniProt protein name, not the
+        gene symbol."""
+        ot = self._make_ot_base()
+        ot["ENSG00000001626"]["drugs"] = [self._make_drug()]
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
+        proteins = [
+            str(t[2]) for t in tuples if len(t) == 3 and str(t[1]).endswith("#protein")
+        ]
+        self.assertEqual(
+            proteins, ["Cystic fibrosis transmembrane conductance regulator"]
+        )
+
+    def test_drug_protein_omitted_without_uniprot_result(self):
+        """No protein annotation is written when the accession has no
+        UniProt result, rather than falling back to the gene symbol."""
+        ot = self._make_ot_base()
+        ot["ENSG00000001626"]["drugs"] = [self._make_drug()]
+        tuples = create_tuples(
+            ot, self._make_gene_results(), {"protein_accessions": []}
+        )
+        proteins = [
+            str(t[2]) for t in tuples if len(t) == 3 and str(t[1]).endswith("#protein")
+        ]
+        self.assertEqual(proteins, [])
 
     def test_drug_synonyms_and_trade_names_labels(self):
         """Synonyms and trade names arrive as {label: ...} objects and are
@@ -208,7 +267,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
                 tradeNames=[{"label": "Bar"}, {"label": "Qux"}],
             )
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         objects = [str(t[2]) for t in tuples if len(t) == 3]
         self.assertIn("Foo, Baz", objects)
         self.assertIn("Bar, Qux", objects)
@@ -220,7 +281,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
         ot["ENSG00000001626"]["pharmacogenetics"] = [
             self._make_pharmacogenetics()
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         # has_quality = RO_0000086
         self.assertTrue(any("RO_0000086" in p for p in preds))
@@ -230,7 +293,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
         ot["ENSG00000001626"]["pharmacogenetics"] = [
             self._make_pharmacogenetics(variantRsId=None)
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         self.assertFalse(any("RO_0000086" in p for p in preds))
 
@@ -242,7 +307,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
                 drugs=[{"drugId": "CHEMBL456", "drugFromSource": "PharmDrug"}],
             )
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         # has_pharmacological_effect = RO_0002027
         self.assertTrue(any("RO_0002027" in p for p in preds))
@@ -255,7 +322,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
                 drugs=[{"drugId": None, "drugFromSource": "Unknown"}],
             )
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         self.assertFalse(any("RO_0002027" in p for p in preds))
 
@@ -264,7 +333,9 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
         ot["ENSG00000001626"]["pharmacogenetics"] = [
             self._make_pharmacogenetics()
         ]
-        tuples = create_tuples(ot, self._make_gene_results())
+        tuples = create_tuples(
+            ot, self._make_gene_results(), self._make_uniprot_results()
+        )
         # RO_0002331 (involved_in) manual triple for Mutation→VariantConsequence
         preds = [str(t[1]) for t in tuples if len(t) == 3]
         self.assertTrue(any("RO_0002331" in p for p in preds))

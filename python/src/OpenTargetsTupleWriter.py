@@ -67,7 +67,9 @@ def get_mondo_term(disease_id: str, efo2mondo: pd.DataFrame) -> str | None:
     return mondo_term
 
 
-def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
+def create_tuples(
+    opentargets_results: dict, gene_results: dict, uniprot_results: dict
+) -> list[tuple]:
     """Create tuples from Open Targets results.
 
     Produces:
@@ -86,7 +88,11 @@ def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
         pharmacogenetics.
     gene_results : dict
         Dictionary containing NCBI Gene results keyed by gene Entrez
-        id. Used to look up UniProt names for protein associations.
+        id. Used to look up UniProt accessions for protein
+        associations.
+    uniprot_results : dict
+        Dictionary containing UniProt results keyed by protein
+        accession. Used to look up protein names for drug targets.
 
     Returns
     -------
@@ -118,14 +124,14 @@ def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
 
         gene_entity = Gene(gene_symbol=gene_name)
 
-        # Get UniProt name for protein associations
+        # Get UniProt accession, and protein name, for protein
+        # associations
         uniprot_name = None
-        if (
-            gene_entrez_id in gene_results
-            and "UniProt_name" in gene_results[gene_entrez_id]
-            and gene_results[gene_entrez_id]["UniProt_name"]
-        ):
-            uniprot_name = gene_results[gene_entrez_id]["UniProt_name"]
+        protein_name = None
+        gene_data = gene_results.get(gene_entrez_id, {})
+        if gene_data.get("UniProt_name"):
+            uniprot_name = gene_data["UniProt_name"]
+            protein_name = uniprot_results.get(uniprot_name, {}).get("Protein_name")
 
         ot_data = opentargets_results.get(gene_ensembl_id, {})
 
@@ -199,7 +205,7 @@ def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
                 exact_synonym=", ".join(synonyms) if synonyms else None,
                 approval_status=drug["drug"].get("maximumClinicalStage"),
                 uniprot_id=uniprot_name,
-                protein=gene_name,
+                protein=protein_name,
             )
             ctx = {"chembl_id": chembl_id}
 
@@ -366,18 +372,22 @@ def create_tuples(opentargets_results: dict, gene_results: dict) -> list[tuple]:
 def main():
     """Run Open Targets tuple writer.
 
-    Loads transformed Open Targets and Gene results and creates tuples
-    for each target, disease, drug, and pharmacogenetic resource.
-    Writes output to a single JSON tuple file.
+    Loads transformed Open Targets, Gene, and UniProt results and
+    creates tuples for each target, disease, drug, and pharmacogenetic
+    resource. Writes output to a single JSON tuple file.
     """
     external_dir = get_current_run().external_dir
     opentargets_path = external_dir / "opentargets_transformed.json"
     gene_path = external_dir / "gene_transformed.json"
+    uniprot_path = external_dir / "uniprot_transformed.json"
     if not opentargets_path.exists():
         print(f"Open Targets results not found at {opentargets_path}")
         return
     if not gene_path.exists():
         print(f"Gene results not found at {gene_path}")
+        return
+    if not uniprot_path.exists():
+        print(f"UniProt results not found at {uniprot_path}")
         return
 
     print(f"Creating Open Targets tuples from {opentargets_path}")
@@ -385,8 +395,10 @@ def main():
         opentargets_results = json.load(fp)
     with open(gene_path, "r") as fp:
         gene_results = json.load(fp)
+    with open(uniprot_path, "r") as fp:
+        uniprot_results = json.load(fp)
 
-    tuples = create_tuples(opentargets_results, gene_results)
+    tuples = create_tuples(opentargets_results, gene_results, uniprot_results)
     if tuples:
         write_tuples(tuples, get_tuples_dir() / "opentargets.json")
 
