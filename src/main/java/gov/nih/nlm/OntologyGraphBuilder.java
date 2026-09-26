@@ -317,12 +317,14 @@ public class OntologyGraphBuilder {
                             deprecatedTermsWriter.write(id + "_" + number + "\n");
                             continue;
                         }
+                        doc.updateAttribute("_search", SearchFieldBuilder.build(id, number));
                         try {
                             vertexCollection.insertVertex(doc);
                         } catch (Exception e) {
                             System.err.println("Error inserting vertex " + doc + ": " + e.getMessage());
                         }
                     } else {
+                        doc.updateAttribute("_search", SearchFieldBuilder.build(id, number));
                         try {
                             vertexCollection.updateVertex(doc.getKey(), doc);
                         } catch (Exception e) {
