@@ -1,5 +1,6 @@
 package gov.nih.nlm;
 
+import com.arangodb.entity.BaseDocument;
 import org.apache.jena.graph.NodeFactory;
 import org.junit.jupiter.api.Test;
 
@@ -364,4 +365,21 @@ class OntologyGraphBuilderTest {
         assertNull(OntologyGraphBuilder.getDocumentKey("CL0000235"));
     }
 
+
+    @Test
+    void addSearchField_setsFieldOnDocumentWithoutIt() {
+        BaseDocument doc = new BaseDocument("0002405");
+        OntologyGraphBuilder.addSearchField(doc, "UBERON");
+        assertEquals(List.of("UBERON:0002405",
+                "UBERON_0002405",
+                "http://purl.obolibrary.org/obo/UBERON_0002405"), doc.getAttribute("_search"));
+    }
+
+    @Test
+    void addSearchField_replacesExistingValue() {
+        BaseDocument doc = new BaseDocument("abc123");
+        doc.addAttribute("_search", List.of("stale"));
+        OntologyGraphBuilder.addSearchField(doc, "CS");
+        assertEquals(List.of("CS:abc123", "CS_abc123"), doc.getAttribute("_search"));
+    }
 }
