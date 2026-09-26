@@ -269,7 +269,7 @@ def print_summary(database_name):
 
 
 def create_analyzers(database_name):
-    """Create n-gram and text analyzers in the named database.
+    """Create n-gram, text, and norm analyzers in the named database.
 
     Parameters
     ----------
@@ -310,10 +310,22 @@ def create_analyzers(database_name):
         },
         features=["frequency", "position", "norm"],
     )
+    # Lowercase without tokenizing, so that a whole identifier such as
+    # "UBERON:0002405" is matched regardless of the case typed
+    db.create_analyzer(
+        name="norm-lower",
+        analyzer_type="norm",
+        properties={
+            "locale": "en",
+            "case": "lower",
+            "accent": False,
+        },
+        features=["frequency", "position", "norm"],
+    )
 
 
 def delete_analyzers(database_name):
-    """Delete n-gram and text analyzers in the named database.
+    """Delete n-gram, text, and norm analyzers in the named database.
 
     Parameters
     ----------
@@ -327,6 +339,7 @@ def delete_analyzers(database_name):
     db = create_or_get_database(database_name)
     db.delete_analyzer(f"{database_name}::n-gram", ignore_missing=True)
     db.delete_analyzer(f"{database_name}::text_en_no_stem", ignore_missing=True)
+    db.delete_analyzer(f"{database_name}::norm-lower", ignore_missing=True)
 
 
 def create_view(database_name, collection_maps_name):
@@ -386,6 +399,10 @@ def create_view(database_name, collection_maps_name):
             properties["links"][vertex_name]["fields"][vertex_field] = {
                 "analyzers": ["text_en", "text_en_no_stem", "n-gram", "identity"]
             }
+        # Identifier forms of each vertex, matched without regard to case
+        properties["links"][vertex_name]["fields"]["_search"] = {
+            "analyzers": ["norm-lower"]
+        }
         properties["links"][vertex_name]["includeAllFields"] = False
         properties["links"][vertex_name]["storeValues"] = "none"
         properties["links"][vertex_name]["trackListPositions"] = False
