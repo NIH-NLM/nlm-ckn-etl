@@ -85,6 +85,32 @@ Selected terms from the following ontology have also been selected for loading:
 
 - [PRO](http://purl.obolibrary.org/obo/pr.owl): PRotein Ontology
 
+### Cell type and anatomy relations
+
+Only reviewed relations are loaded between cell types and anatomical
+structures, and the choice depends on direction. When the ontologies are
+loaded, an edge in the `CL-UBERON` or `UBERON-CL` collection is kept only if its
+label is on the list below; any other label is dropped, including one that first
+appears in a later ontology release. Edges between all other pairs of
+collections are not filtered.
+
+| Edge collection | Kept labels |
+|-----------------|-------------|
+| `CL-UBERON` (cell type to anatomy) | `PART_OF`, `HAS_SOMA_LOCATION`, `HAS_SYNAPTIC_IO_IN_REGION`, `AXON_SYNAPSES_IN`, `HAS_DENDRITE_LOCATION`, `HAS_PRESYNAPTIC_TERMINAL_IN`, `HAS_SENSORY_DENDRITE_IN`, `HAS_SYNAPTIC_TERMINAL_IN` |
+| `UBERON-CL` (anatomy to cell type) | `HAS_PART`, `COMPOSED_PRIMARILY_OF` |
+
+For example, `PART_OF` is kept from cell type to anatomy but not from anatomy to
+cell type. The list is the `KEPT_LABELS_BY_PAIR` constant in
+`EdgeLabelFilter`. The number of edges dropped from each collection, by label, is
+printed when the edges are constructed, e.g.
+`Dropped 61 edges from CL-UBERON: LOCATED_IN=16, ADJACENT_TO=13, ...`, so a new
+relation in an ontology release shows up in the log instead of entering the
+graph. Some dropped edges belong to obsolete terms that would not have been
+loaded in any case, so these counts can exceed the change in the graph.
+
+Because the induced phenotype subgraph is built from these edges, terms that were
+reachable only through a dropped relation no longer appear in it.
+
 ## External Sources
 
 Data can be fetched from the following external sources:
