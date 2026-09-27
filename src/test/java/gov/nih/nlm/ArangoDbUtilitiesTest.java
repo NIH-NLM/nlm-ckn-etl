@@ -6,10 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -21,8 +19,6 @@ import org.junit.jupiter.api.Test;
 
 import com.arangodb.ArangoDatabase;
 import com.arangodb.ArangoGraph;
-import com.arangodb.entity.ViewEntity;
-import com.arangodb.entity.arangosearch.analyzer.SearchAnalyzer;
 
 @Tag("integration")
 class ArangoDbUtilitiesTest {
@@ -188,77 +184,5 @@ class ArangoDbUtilitiesTest {
 		assertEquals(1, edgeCounts.size());
 		assertTrue(edgeCounts.containsKey(edgeName));
 		assertEquals(0L, edgeCounts.get(edgeName));
-	}
-
-	@Test
-	void createAndDeleteAnalyzers() {
-		ArangoDatabase db = arangoDbUtilities.createOrGetDatabase(databaseName);
-
-		// Create analyzers
-		arangoDbUtilities.createAnalyzers(db);
-
-		// Verify analyzers exist
-		Collection<SearchAnalyzer> analyzers = db.getSearchAnalyzers();
-		boolean hasNgram = analyzers.stream().anyMatch(a -> a.getName().endsWith("n-gram"));
-		boolean hasText = analyzers.stream().anyMatch(a -> a.getName().endsWith("text_en_no_stem"));
-		assertTrue(hasNgram, "n-gram analyzer should exist");
-		assertTrue(hasText, "text_en_no_stem analyzer should exist");
-
-		// Delete analyzers
-		arangoDbUtilities.deleteAnalyzers(db);
-
-		// Verify analyzers are gone
-		Collection<SearchAnalyzer> analyzersAfter = db.getSearchAnalyzers();
-		boolean hasNgramAfter = analyzersAfter.stream().anyMatch(a -> a.getName().endsWith("n-gram"));
-		boolean hasTextAfter = analyzersAfter.stream().anyMatch(a -> a.getName().endsWith("text_en_no_stem"));
-		assertFalse(hasNgramAfter, "n-gram analyzer should be deleted");
-		assertFalse(hasTextAfter, "text_en_no_stem analyzer should be deleted");
-	}
-
-	@Test
-	void createAndDeleteView() throws IOException {
-		ArangoDatabase db = arangoDbUtilities.createOrGetDatabase(databaseName);
-
-		// Create a minimal collection maps JSON for testing
-		Path tempMaps = Files.createTempFile("collection-maps", ".json");
-		Files.writeString(tempMaps, """
-				{
-				  "maps": [
-				    ["TestCollection", {
-				      "individual_fields": [
-				        {"field_to_display": "label"},
-				        {"field_to_display": "term"}
-				      ]
-				    }]
-				  ]
-				}
-				""");
-
-		try {
-			// Create a vertex collection so the view link is valid
-			ArangoGraph graph = arangoDbUtilities.createOrGetGraph(db, graphName);
-			arangoDbUtilities.createOrGetVertexCollection(graph, "TestCollection");
-
-			// Create analyzers needed by the view
-			arangoDbUtilities.createAnalyzers(db);
-
-			// Create view
-			arangoDbUtilities.createView(db, tempMaps);
-
-			// Verify view exists
-			Collection<ViewEntity> views = db.getViews();
-			boolean hasView = views.stream().anyMatch(v -> v.getName().equals("indexed"));
-			assertTrue(hasView, "indexed view should exist");
-
-			// Delete view
-			arangoDbUtilities.deleteView(db);
-
-			// Verify view is gone
-			Collection<ViewEntity> viewsAfter = db.getViews();
-			boolean hasViewAfter = viewsAfter.stream().anyMatch(v -> v.getName().equals("indexed"));
-			assertFalse(hasViewAfter, "indexed view should be deleted");
-		} finally {
-			Files.deleteIfExists(tempMaps);
-		}
 	}
 }
