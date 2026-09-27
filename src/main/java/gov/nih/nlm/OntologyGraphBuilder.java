@@ -411,6 +411,7 @@ public class OntologyGraphBuilder {
         long startTime = System.nanoTime();
         System.out.println("Constructing edges using " + triples.size() + " triples");
         HashSet<String> edgeLabels = new HashSet<>();
+        EdgeLabelFilter edgeLabelFilter = new EdgeLabelFilter();
         int nEdges = 0;
         for (Triple triple : triples) {
 
@@ -432,10 +433,16 @@ public class OntologyGraphBuilder {
             if (isTaxonConstraintPredicate(pTuple.term())) {
                 continue;
             }
+
+            // Drop edges between cell types and anatomical structures whose label was not reviewed and kept, and
+            // leave their labels out of those collected
+            String idPair = subjectVTuple.id + "-" + objectVTuple.id;
+            if (!edgeLabelFilter.keep(idPair, normalizeEdgeLabel(pTuple.label()))) {
+                continue;
+            }
             edgeLabels.add(pTuple.label());
 
             // Create an edge collection, if needed
-            String idPair = subjectVTuple.id + "-" + objectVTuple.id;
             if (!edgeCollections.containsKey(idPair)) {
                 edgeCollections.put(idPair,
                         arangoDbUtilities.createOrGetEdgeCollection(graph, subjectVTuple.id, objectVTuple.id));
@@ -466,6 +473,7 @@ public class OntologyGraphBuilder {
             addOrPromoteAttribute(doc, "Source", normalizeEdgeSource(subjectVTuple.id));
         }
         long stopTime = System.nanoTime();
+        edgeLabelFilter.summarize().forEach(System.out::println);
         System.out.println("Constructed " + nEdges + " edges from " + triples.size() + " triples in " + (stopTime - startTime) / 1e9 + " s");
         return edgeLabels;
     }
