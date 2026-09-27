@@ -193,6 +193,18 @@ public class OntologyGraphBuilder {
     }
 
     /**
+     * Set the {@code _search} attribute of a vertex document from its collection and key, replacing any existing value.
+     * Uses {@code addAttribute}, which always sets the attribute; {@code updateAttribute} would silently do nothing for
+     * a document that does not yet have it.
+     *
+     * @param doc        Vertex document, whose key is set
+     * @param collection Vertex collection name
+     */
+    static void addSearchField(BaseDocument doc, String collection) {
+        doc.addAttribute("_search", SearchFieldBuilder.build(collection, doc.getKey()));
+    }
+
+    /**
      * Construct vertices using triples parsed from specified ontology files that contain a named subject and object
      * which contain an ontology ID contained in the valid vertices' collection.
      *
@@ -317,12 +329,14 @@ public class OntologyGraphBuilder {
                             deprecatedTermsWriter.write(id + "_" + number + "\n");
                             continue;
                         }
+                        addSearchField(doc, id);
                         try {
                             vertexCollection.insertVertex(doc);
                         } catch (Exception e) {
                             System.err.println("Error inserting vertex " + doc + ": " + e.getMessage());
                         }
                     } else {
+                        addSearchField(doc, id);
                         try {
                             vertexCollection.updateVertex(doc.getKey(), doc);
                         } catch (Exception e) {

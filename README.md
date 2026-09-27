@@ -395,3 +395,32 @@ $ poetry run src/flows/pipeline.py \
 
 Each phase is skipped automatically when its output already exists; the
 uppercase variants (`-O` / `-R` / `-A`) force the phase to re-run regardless.
+
+### Searching by identifier
+
+Every vertex carries a `_search` field: an array of the identifier forms by
+which the vertex can be found. OBO ontology terms (CHEBI, CL, GO, HP, HsapDv,
+MONDO, NCBITaxon, PATO, PR, UBERON) have three:
+
+```json
+["UBERON:0002405", "UBERON_0002405", "http://purl.obolibrary.org/obo/UBERON_0002405"]
+```
+
+All other vertices (e.g. CS, CSD, PUB, GS, CHEMBL, Orphanet) have the colon and
+underscore forms of their collection and key, e.g. `["CS:<key>", "CS_<key>"]`.
+The collection's case is preserved. The field is set by
+`SearchFieldBuilder` when vertices are inserted.
+
+The `indexed` view links `_search` with the `norm-lower` analyzer, which
+lowercases without tokenizing, so an identifier matches whatever case is typed.
+Queries must fold the input with the same analyzer:
+
+```aql
+FOR d IN indexed
+  SEARCH ANALYZER(d._search IN TOKENS(@q, "norm-lower"), "norm-lower")
+  RETURN d
+```
+
+This matches whole identifiers only; partial identifiers are not matched.
+Databases built before this field was added need a rebuild, and the view must
+be recreated, to gain it.
