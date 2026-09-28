@@ -21,6 +21,21 @@ class OntologyElementParserTest {
 
     private static final Path testOboDir = Paths.get(System.getProperty("user.dir")).resolve("src/test/data/obo");
 
+    // --- requireFiles tests ---
+
+    @Test
+    void requireFiles_throwsWhenNoFilesMatched() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+            () -> OntologyElementParser.requireFiles(List.of(), "/data/obo", ".*\\.owl"));
+        assertTrue(e.getMessage().contains("/data/obo"));
+        assertTrue(e.getMessage().contains(".*\\.owl"));
+    }
+
+    @Test
+    void requireFiles_acceptsNonEmptyList() {
+        OntologyElementParser.requireFiles(List.of(testOboDir.resolve("ro.owl")), "/data/obo", ".*\\.owl");
+    }
+
     // --- parseXmlFile tests ---
 
     @Test

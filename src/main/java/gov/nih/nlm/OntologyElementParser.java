@@ -230,11 +230,24 @@ public class OntologyElementParser {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        if (files.isEmpty()) {
-            System.out.println("No files found matching the pattern.");
-        } else {
-            parseOntologyElements(files);
-        }
+        requireFiles(files, directoryPath, filePattern);
+        parseOntologyElements(files);
         System.out.println("Parsed ontology elements from " + files.size() + " files.");
+    }
+
+    /**
+     * Fails when no ontology files matched, so a misconfigured directory does
+     * not exit 0 as if the parse had succeeded.
+     *
+     * @param files The files matching the pattern.
+     * @param directoryPath The directory that was searched.
+     * @param filePattern The pattern that was matched.
+     * @throws IllegalStateException if files is empty.
+     */
+    static void requireFiles(List<Path> files, String directoryPath, String filePattern) {
+        if (files.isEmpty()) {
+            throw new IllegalStateException(
+                "No files found in " + directoryPath + " matching pattern " + filePattern);
+        }
     }
 }

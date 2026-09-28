@@ -1325,12 +1325,11 @@ def nlm_ckn_etl(
             force_archive,
         ]
     ):
-        logger.warning(
+        raise ValueError(
             "No stage flags set — nothing to do.  Pass at least one of: "
             "run_ontology, force_ontology, run_results, force_results, "
             "run_archive, force_archive."
         )
-        return
 
     arango_db_password = _get_or_create_arango_password()
     arango_db_home = ARANGO_DB_HOME
