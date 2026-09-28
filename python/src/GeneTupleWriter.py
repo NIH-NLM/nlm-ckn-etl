@@ -114,8 +114,7 @@ def main():
     """
     gene_path = get_current_run().external_dir / "gene_transformed.json"
     if not gene_path.exists():
-        print(f"Gene results not found at {gene_path}")
-        return
+        raise FileNotFoundError(f"Gene results not found at {gene_path}")
 
     print(f"Creating Gene tuples from {gene_path}")
     with open(gene_path, "r") as fp:
