@@ -575,12 +575,22 @@ def export_graphs_and_analyzers(
         Dump directory produced by ``dump_arangodb``.
     arango_db_password:
         ArangoDB root password.
+
+    Raises
+    ------
+    RuntimeError
+        If any database's graphs or analyzers could not be exported.  A dump
+        without its sidecars restores to a database missing its named graphs
+        (starving the induced subgraph of ontology edges) and analyzers, so the
+        failure must stop the run before the dump is cached or promoted.  Every
+        database is attempted before raising so all failures are logged.
     """
     import base64
     import urllib.request
 
     logger = get_run_logger()
     dump_dir = Path(dump_dir)
+    failures: list[str] = []
 
     auth = base64.b64encode(f"root:{arango_db_password}".encode()).decode()
     headers = {"Authorization": f"Basic {auth}"}
@@ -611,7 +621,8 @@ def export_graphs_and_analyzers(
             )
             logger.info(f"Exported {len(graphs)} graph(s) → {db}/ckn-graphs.ndjson")
         except Exception as exc:
-            logger.warning(f"Could not export graphs for {db}: {exc}")
+            logger.error(f"Could not export graphs for {db}: {exc}")
+            failures.append(f"graphs for {db}")
 
         try:
             data = _get(f"/_db/{db}/_api/analyzer")
@@ -624,7 +635,11 @@ def export_graphs_and_analyzers(
                 f"Exported {len(analyzers)} analyzer(s) → {db}/ckn-analyzers.ndjson"
             )
         except Exception as exc:
-            logger.warning(f"Could not export analyzers for {db}: {exc}")
+            logger.error(f"Could not export analyzers for {db}: {exc}")
+            failures.append(f"analyzers for {db}")
+
+    if failures:
+        raise RuntimeError(f"Could not export {', '.join(failures)}")
 
 
 @task(name="import-graphs-from-sidecar", log_prints=True)
@@ -646,6 +661,13 @@ def import_graphs_from_sidecar(dump_dir: Path, arango_db_password: str) -> None:
         by ``export_graphs_and_analyzers``.
     arango_db_password:
         ArangoDB root password.
+
+    Raises
+    ------
+    RuntimeError
+        If any graph could not be recreated (an existing graph, HTTP 409, is
+        not a failure).  Continuing would build the results graph without the
+        ontology edge definitions.  Every graph is attempted before raising.
     """
     import base64
     import urllib.error
@@ -653,6 +675,7 @@ def import_graphs_from_sidecar(dump_dir: Path, arango_db_password: str) -> None:
 
     logger = get_run_logger()
     dump_dir = Path(dump_dir)
+    failures: list[str] = []
 
     auth = base64.b64encode(f"root:{arango_db_password}".encode()).decode()
     base_url = f"http://{ARANGO_DB_HOST}:{ARANGO_DB_PORT}"
@@ -699,9 +722,12 @@ def import_graphs_from_sidecar(dump_dir: Path, arango_db_password: str) -> None:
                     logger.info(f"Graph {db}/{name} already exists — skipping")
                 else:
                     detail = exc.read().decode(errors="ignore")
-                    logger.warning(
+                    logger.error(
                         f"Could not recreate graph {db}/{name}: {exc} {detail}"
                     )
+                    failures.append(f"{db}/{name}")
+    if failures:
+        raise RuntimeError(f"Could not recreate graph(s): {', '.join(failures)}")
     logger.info("Graph sidecar import complete")
 
 
