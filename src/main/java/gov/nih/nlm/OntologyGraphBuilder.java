@@ -304,17 +304,50 @@ public class OntologyGraphBuilder {
     }
 
     /**
+     * Outcome of inserting documents, counting what actually happened rather than what was attempted.
+     *
+     * @param attempted Documents considered
+     * @param inserted  Documents newly written
+     * @param updated   Documents that already existed and were updated
+     * @param skipped   Documents deliberately not written (deprecated vertices, edges with a missing endpoint)
+     * @param failed    Documents whose insert or update raised an error
+     */
+    public record InsertSummary(int attempted, int inserted, int updated, int skipped, int failed) {
+    }
+
+    /**
      * Insert all vertices after they have been constructed and updated to improve performance.
      *
      * @param vertexCollections ArangoDB vertex collections
      * @param vertexDocuments   ArangoDB vertex documents
+     * @return Counts of vertices inserted, updated, skipped, and failed
+     * @throws IllegalStateException if any vertex could not be inserted or updated, after all have been attempted
      */
-    public static void insertVertices(Map<String, ArangoVertexCollection> vertexCollections,
-                                      Map<String, Map<String, BaseDocument>> vertexDocuments) throws IOException {
+    public static InsertSummary insertVertices(Map<String, ArangoVertexCollection> vertexCollections,
+                                               Map<String, Map<String, BaseDocument>> vertexDocuments) throws IOException {
+        return insertVertices(vertexCollections, vertexDocuments, DEPRECATED_TERMS_FILE);
+    }
+
+    /**
+     * As {@link #insertVertices(Map, Map)}, writing skipped deprecated terms to the given file.
+     *
+     * @param vertexCollections   ArangoDB vertex collections
+     * @param vertexDocuments     ArangoDB vertex documents
+     * @param deprecatedTermsFile File to which the identifiers of skipped deprecated terms are written
+     * @return Counts of vertices inserted, updated, skipped, and failed
+     * @throws IllegalStateException if any vertex could not be inserted or updated, after all have been attempted
+     */
+    static InsertSummary insertVertices(Map<String, ArangoVertexCollection> vertexCollections,
+                                        Map<String, Map<String, BaseDocument>> vertexDocuments,
+                                        Path deprecatedTermsFile) throws IOException {
         System.out.println("Inserting vertices");
         long startTime = System.nanoTime();
         int nVertices = 0;
-        try (BufferedWriter deprecatedTermsWriter = Files.newBufferedWriter(DEPRECATED_TERMS_FILE,
+        int nInserted = 0;
+        int nUpdated = 0;
+        int nSkipped = 0;
+        int nFailed = 0;
+        try (BufferedWriter deprecatedTermsWriter = Files.newBufferedWriter(deprecatedTermsFile,
                 StandardCharsets.US_ASCII)) {
             for (String id : vertexDocuments.keySet()) {
                 ArangoVertexCollection vertexCollection = vertexCollections.get(id);
@@ -327,19 +360,24 @@ public class OntologyGraphBuilder {
                         if ((deprecated != null && deprecated.toString().contains("true")) || (label != null && label.toString().contains(
                                 "obsolete"))) {
                             deprecatedTermsWriter.write(id + "_" + number + "\n");
+                            nSkipped++;
                             continue;
                         }
                         addSearchField(doc, id);
                         try {
                             vertexCollection.insertVertex(doc);
+                            nInserted++;
                         } catch (Exception e) {
+                            nFailed++;
                             System.err.println("Error inserting vertex " + doc + ": " + e.getMessage());
                         }
                     } else {
                         addSearchField(doc, id);
                         try {
                             vertexCollection.updateVertex(doc.getKey(), doc);
+                            nUpdated++;
                         } catch (Exception e) {
+                            nFailed++;
                             System.err.println("Error updating vertex " + doc + ": " + e.getMessage());
                         }
                     }
@@ -347,7 +385,13 @@ public class OntologyGraphBuilder {
             }
         }
         long stopTime = System.nanoTime();
-        System.out.println("Inserted " + nVertices + " vertices in " + (stopTime - startTime) / 1e9 + " s");
+        System.out.println("Of " + nVertices + " vertices, inserted " + nInserted + ", updated " + nUpdated
+                + ", skipped " + nSkipped + " deprecated, failed " + nFailed + " in " + (stopTime - startTime) / 1e9
+                + " s");
+        if (nFailed > 0) {
+            throw new IllegalStateException(nFailed + " of " + nVertices + " vertices could not be inserted or updated");
+        }
+        return new InsertSummary(nVertices, nInserted, nUpdated, nSkipped, nFailed);
     }
 
     /**
@@ -514,13 +558,19 @@ public class OntologyGraphBuilder {
      * @param vertexCollections ArangoDB vertex collections
      * @param edgeCollections   ArangoDB edge collections
      * @param edgeDocuments     ArangoDB edge documents
+     * @return Counts of edges inserted, updated, skipped (an endpoint vertex is missing), and failed
+     * @throws IllegalStateException if any edge could not be inserted or updated, after all have been attempted
      */
-    public static void insertEdges(Map<String, ArangoVertexCollection> vertexCollections,
-                                   Map<String, ArangoEdgeCollection> edgeCollections,
-                                   Map<String, Map<String, BaseEdgeDocument>> edgeDocuments) {
+    public static InsertSummary insertEdges(Map<String, ArangoVertexCollection> vertexCollections,
+                                            Map<String, ArangoEdgeCollection> edgeCollections,
+                                            Map<String, Map<String, BaseEdgeDocument>> edgeDocuments) {
         System.out.println("Inserting edges");
         long startTime = System.nanoTime();
         int nEdges = 0;
+        int nInserted = 0;
+        int nUpdated = 0;
+        int nSkipped = 0;
+        int nFailed = 0;
         for (String idPair : edgeDocuments.keySet()) {
             ArangoEdgeCollection edgeCollection = edgeCollections.get(idPair);
             for (String key : edgeDocuments.get(idPair).keySet()) {
@@ -539,21 +589,33 @@ public class OntologyGraphBuilder {
                             BaseDocument.class) == null)) {
                         try {
                             edgeCollection.insertEdge(doc);
+                            nInserted++;
                         } catch (Exception e) {
+                            nFailed++;
                             System.err.println("Error inserting edge " + doc + ": " + e.getMessage());
                         }
+                    } else {
+                        nSkipped++;
                     }
                 } else {
                     try {
                         edgeCollection.updateEdge(docKey, doc);
+                        nUpdated++;
                     } catch (Exception e) {
+                        nFailed++;
                         System.err.println("Error updating edge " + doc + ": " + e.getMessage());
                     }
                 }
             }
         }
         long stopTime = System.nanoTime();
-        System.out.println("Inserted " + nEdges + " edges in " + (stopTime - startTime) / 1e9 + " s");
+        System.out.println("Of " + nEdges + " edges, inserted " + nInserted + ", updated " + nUpdated
+                + ", skipped " + nSkipped + " with a missing endpoint, failed " + nFailed + " in "
+                + (stopTime - startTime) / 1e9 + " s");
+        if (nFailed > 0) {
+            throw new IllegalStateException(nFailed + " of " + nEdges + " edges could not be inserted or updated");
+        }
+        return new InsertSummary(nEdges, nInserted, nUpdated, nSkipped, nFailed);
     }
 
     /**

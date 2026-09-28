@@ -1,14 +1,23 @@
 package gov.nih.nlm;
 
+import com.arangodb.ArangoEdgeCollection;
+import com.arangodb.ArangoVertexCollection;
 import com.arangodb.entity.BaseDocument;
+import com.arangodb.entity.BaseEdgeDocument;
 import org.apache.jena.graph.NodeFactory;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.lang.reflect.Proxy;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -21,6 +30,135 @@ class OntologyGraphBuilderTest {
     // Assign location of test ontology files
     private static final Path USR_DIR = Paths.get(System.getProperty("user.dir"));
     private static final Path OBO_DIR = USR_DIR.resolve("src/test/data/obo");
+
+    // --- insertVertices / insertEdges counting tests (in-memory collections, no ArangoDB needed) ---
+
+    /** A vertex collection holding the given keys; inserting or updating a key in failKeys throws. */
+    private static ArangoVertexCollection vertexCollection(Set<String> existing, Set<String> failKeys) {
+        return (ArangoVertexCollection) Proxy.newProxyInstance(
+            OntologyGraphBuilderTest.class.getClassLoader(), new Class<?>[]{ArangoVertexCollection.class},
+            (proxy, method, args) -> {
+                switch (method.getName()) {
+                    case "getVertex":
+                        return existing.contains((String) args[0]) ? new BaseDocument() : null;
+                    case "insertVertex":
+                        if (failKeys.contains(((BaseDocument) args[0]).getKey())) {
+                            throw new RuntimeException("insert refused");
+                        }
+                        return null;
+                    case "updateVertex":
+                        if (failKeys.contains((String) args[0])) {
+                            throw new RuntimeException("update refused");
+                        }
+                        return null;
+                    default:
+                        throw new UnsupportedOperationException(method.getName());
+                }
+            });
+    }
+
+    private static ArangoEdgeCollection edgeCollection(Set<String> existing, Set<String> failKeys) {
+        return (ArangoEdgeCollection) Proxy.newProxyInstance(
+            OntologyGraphBuilderTest.class.getClassLoader(), new Class<?>[]{ArangoEdgeCollection.class},
+            (proxy, method, args) -> {
+                switch (method.getName()) {
+                    case "getEdge":
+                        return existing.contains((String) args[0]) ? new BaseEdgeDocument() : null;
+                    case "insertEdge":
+                        if (failKeys.contains(((BaseEdgeDocument) args[0]).getKey())) {
+                            throw new RuntimeException("insert refused");
+                        }
+                        return null;
+                    case "updateEdge":
+                        if (failKeys.contains((String) args[0])) {
+                            throw new RuntimeException("update refused");
+                        }
+                        return null;
+                    default:
+                        throw new UnsupportedOperationException(method.getName());
+                }
+            });
+    }
+
+    private static BaseDocument vertex(String key, Object deprecated) {
+        BaseDocument doc = new BaseDocument();
+        doc.setKey(key);
+        doc.addAttribute("label", key);
+        if (deprecated != null) {
+            doc.addAttribute("deprecated", deprecated);
+        }
+        return doc;
+    }
+
+    private static Map<String, Map<String, BaseDocument>> vertexDocs(BaseDocument... docs) {
+        Map<String, BaseDocument> byNumber = new LinkedHashMap<>();
+        for (BaseDocument doc : docs) {
+            byNumber.put(doc.getKey(), doc);
+        }
+        return Map.of("CL", byNumber);
+    }
+
+    @Test
+    void insertVertices_countsInsertedUpdatedAndSkipped(@TempDir Path dir) throws IOException {
+        var collections = Map.of("CL", vertexCollection(Set.of("0000002"), Set.of()));
+        var docs = vertexDocs(vertex("0000001", null), vertex("0000002", null), vertex("0000003", "true"));
+
+        var summary = OntologyGraphBuilder.insertVertices(collections, docs, dir.resolve("deprecated.txt"));
+
+        assertEquals(new OntologyGraphBuilder.InsertSummary(3, 1, 1, 1, 0), summary);
+        assertEquals("CL_0000003\n", Files.readString(dir.resolve("deprecated.txt")));
+    }
+
+    @Test
+    void insertVertices_throwsAfterAttemptingAllWhenAnyFail(@TempDir Path dir) {
+        var collections = Map.of("CL", vertexCollection(Set.of(), Set.of("0000001")));
+        var docs = vertexDocs(vertex("0000001", null), vertex("0000002", null));
+
+        var e = assertThrows(IllegalStateException.class,
+            () -> OntologyGraphBuilder.insertVertices(collections, docs, dir.resolve("deprecated.txt")));
+
+        assertTrue(e.getMessage().contains("1 of 2 vertices"));
+    }
+
+    private static BaseEdgeDocument edge(String key, String from, String to) {
+        BaseEdgeDocument doc = new BaseEdgeDocument();
+        doc.setKey(key);
+        doc.setFrom(from);
+        doc.setTo(to);
+        return doc;
+    }
+
+    private static Map<String, Map<String, BaseEdgeDocument>> edgeDocs(BaseEdgeDocument... docs) {
+        Map<String, BaseEdgeDocument> byKey = new LinkedHashMap<>();
+        for (BaseEdgeDocument doc : docs) {
+            byKey.put(doc.getKey(), doc);
+        }
+        return Map.of("CL-CL", byKey);
+    }
+
+    @Test
+    void insertEdges_countsInsertedUpdatedAndSkippedForMissingEndpoint() {
+        // CL/1 and CL/2 exist as vertices; CL/9 does not (for example a deprecated term that was not inserted)
+        var vertices = Map.of("CL", vertexCollection(Set.of("1", "2"), Set.of()));
+        var edges = Map.of("CL-CL", edgeCollection(Set.of("e2"), Set.of()));
+        var docs = edgeDocs(edge("e1", "CL/1", "CL/2"), edge("e2", "CL/1", "CL/2"), edge("e3", "CL/1", "CL/9"));
+
+        var summary = OntologyGraphBuilder.insertEdges(vertices, edges, docs);
+
+        assertEquals(new OntologyGraphBuilder.InsertSummary(3, 1, 1, 1, 0), summary);
+    }
+
+    @Test
+    void insertEdges_throwsAfterAttemptingAllWhenAnyFail() {
+        var vertices = Map.of("CL", vertexCollection(Set.of("1", "2"), Set.of()));
+        var edges = Map.of("CL-CL", edgeCollection(Set.of(), Set.of("e1")));
+        var docs = edgeDocs(edge("e1", "CL/1", "CL/2"), edge("e2", "CL/2", "CL/1"));
+
+        var e = assertThrows(IllegalStateException.class,
+            () -> OntologyGraphBuilder.insertEdges(vertices, edges, docs));
+
+        assertTrue(e.getMessage().contains("1 of 2 edges"));
+    }
 
     // --- createVTuple tests (no ArangoDB needed) ---
 
