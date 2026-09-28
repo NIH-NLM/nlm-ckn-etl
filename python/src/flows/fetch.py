@@ -287,7 +287,7 @@ def record_fetch_artifact(run_name: str = "", validated: bool = True) -> None:
             pass
 
     # Prefect UI artifact — summary table visible in the flow-run page
-    outcome_icon = {"ok": "✓", "failed": "✗", "skipped": "⏭"}
+    outcome_icon = {"ok": "✓", "partial": "◐", "failed": "✗", "skipped": "⏭"}
     file_rows = "\n".join(
         f"| `{name}` | {size:,} bytes |"
         if size is not None

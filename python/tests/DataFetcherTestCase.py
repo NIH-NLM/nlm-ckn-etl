@@ -214,6 +214,90 @@ class DataFetcherCheckpointTestCase(unittest.TestCase):
         self.assertFalse(self.checkpoint_path.exists())
 
 
+class DataFetcherFailureRetryTestCase(unittest.TestCase):
+    """Failed IDs are retried on later runs, up to a cap."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.output_path = Path(self.tmpdir) / "results.json"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _fetcher(self, fetch_errors=None):
+        fetcher = FakeFetcher(fetch_errors=fetch_errors)
+        fetcher.output_path = self.output_path
+        return fetcher
+
+    def test_failed_id_is_retried_on_next_run(self):
+        """A fallback stored for a failed ID does not count as fetched."""
+        context = {"ids": ["a", "b"]}
+        first = self._fetcher(fetch_errors={"b"})
+        first.run(context)
+        self.assertEqual(first.n_failed, 1)
+        self.assertEqual(first.n_retryable, 1)
+
+        second = self._fetcher()
+        results = second.run(context)
+
+        self.assertEqual(second.fetched_ids, ["b"])
+        self.assertEqual(results["b"], {"data": "b"})
+        self.assertEqual(second.n_retryable, 0)
+        self.assertFalse(second.failures_path.exists())
+
+    def test_failed_id_gives_up_at_cap(self):
+        """After max_fetch_attempts failures the ID is no longer retried."""
+        context = {"ids": ["a", "b"]}
+        cap = DataFetcher.max_fetch_attempts
+        for _ in range(cap):
+            fetcher = self._fetcher(fetch_errors={"b"})
+            fetcher.run(context)
+        self.assertEqual(fetcher.n_retryable, 0)
+        self.assertEqual(fetcher.n_exhausted, 1)
+
+        after = self._fetcher()
+        results = after.run(context)
+
+        self.assertEqual(after.fetched_ids, [])
+        self.assertEqual(results["b"], {})
+        self.assertEqual(after.n_exhausted, 1)
+
+    def test_failure_counts_accumulate(self):
+        """Each failed run adds one attempt to the failed ID."""
+        context = {"ids": ["b"]}
+        self._fetcher(fetch_errors={"b"}).run(context)
+        fetcher = self._fetcher(fetch_errors={"b"})
+        fetcher.run(context)
+        self.assertEqual(
+            json.loads(fetcher.failures_path.read_text()),
+            {"b": 2},
+        )
+
+    def test_force_clears_failures(self):
+        """Force discards recorded failures along with the results."""
+        context = {"ids": ["b"]}
+        self._fetcher(fetch_errors={"b"}).run(context)
+
+        fetcher = self._fetcher()
+        fetcher.run(context, force=True)
+
+        self.assertEqual(fetcher.fetched_ids, ["b"])
+        self.assertFalse(fetcher.failures_path.exists())
+
+    def test_failures_for_dropped_ids_are_pruned(self):
+        """IDs no longer requested are removed from the failures file."""
+        self._fetcher(fetch_errors={"b"}).run({"ids": ["a", "b"]})
+        fetcher = self._fetcher()
+        fetcher.run({"ids": ["a"]})
+        self.assertFalse(fetcher.failures_path.exists())
+
+    def test_failures_sidecar_is_not_a_json_file(self):
+        """Cache cleaning globs *.json, so the sidecar must not match."""
+        fetcher = self._fetcher(fetch_errors={"b"})
+        fetcher.run({"ids": ["b"]})
+        self.assertNotEqual(fetcher.failures_path.suffix, ".json")
+
+
 class DataFetcherRetryTestCase(unittest.TestCase):
     """Tests for _fetch_with_retry 429 handling."""
 
