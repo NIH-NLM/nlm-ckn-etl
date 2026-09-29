@@ -201,8 +201,25 @@ class CellxGeneTransformer(BaseTransformer):
                 if m:
                     entry["Link_to_CELLxGENE_collection"] = m.group(1)
 
-            # Dataset metadata
-            entry["Link_to_CELLxGENE_dataset"] = dataset_json["assets"][0]["url"]
+            # Dataset metadata. Prefer the H5AD asset: a dataset can list other
+            # assay files first (e.g. ATAC fragments), and assets[0] is not
+            # guaranteed to be the h5ad (see NIH-NLM/nlm-ckn#342).
+            h5ad_asset = next(
+                (a for a in dataset_json.get("assets", []) if a.get("filetype") == "H5AD"),
+                None,
+            )
+            if h5ad_asset is not None:
+                entry["Link_to_CELLxGENE_dataset"] = h5ad_asset["url"]
+            else:
+                entry["Link_to_CELLxGENE_dataset"] = get_value_or_none(
+                    dataset_json, ["assets", 0, "url"]
+                )
+                if entry["Link_to_CELLxGENE_dataset"] is not None:
+                    print(
+                        f"WARNING: No H5AD asset for dataset"
+                        f" {dataset_version_id}; using assets[0]"
+                        f" ({dataset_json['assets'][0].get('filetype')})"
+                    )
             entry["Dataset_name"] = get_value_or_none(dataset_json, ["title"])
             entry["Number_of_cells"] = get_value_or_none(dataset_json, ["cell_count"])
             entry["Organism"] = get_values_or_none(dataset_json, "organism", ["label"])
