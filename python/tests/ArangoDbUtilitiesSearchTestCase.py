@@ -35,6 +35,20 @@ class ArangoDbUtilitiesSearchTestCase(unittest.TestCase):
         deleted = [c.args[0] for c in self.db.delete_analyzer.call_args_list]
         self.assertIn("test-db::norm-lower", deleted)
 
+    def test_create_analyzers_includes_wildcard_lower(self):
+        adb.create_analyzers("test-db")
+        created = {c.kwargs["name"]: c.kwargs for c in self.db.create_analyzer.mock_calls}
+        self.assertIn("wildcard-lower", created)
+        self.assertEqual(created["wildcard-lower"]["analyzer_type"], "wildcard")
+        inner = created["wildcard-lower"]["properties"]["analyzer"]
+        self.assertEqual(inner["type"], "norm")
+        self.assertEqual(inner["properties"]["case"], "lower")
+
+    def test_delete_analyzers_includes_wildcard_lower(self):
+        adb.delete_analyzers("test-db")
+        deleted = [c.args[0] for c in self.db.delete_analyzer.call_args_list]
+        self.assertIn("test-db::wildcard-lower", deleted)
+
     def test_create_view_indexes_search_with_norm_lower(self):
         adb.create_view("test-db", collection_maps_name=COLLECTION_MAPS)
         properties = self.db.create_view.call_args.kwargs["properties"]

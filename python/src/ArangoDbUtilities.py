@@ -269,7 +269,7 @@ def print_summary(database_name):
 
 
 def create_analyzers(database_name):
-    """Create n-gram, text, and norm analyzers in the named database.
+    """Create n-gram, text, norm, and wildcard analyzers in the named database.
 
     Parameters
     ----------
@@ -322,10 +322,28 @@ def create_analyzers(database_name):
         },
         features=["frequency", "position", "norm"],
     )
+    # Index n-grams of the lowercased whole value, so that LIKE matches a
+    # prefix or substring of a field regardless of the case typed
+    db.create_analyzer(
+        name="wildcard-lower",
+        analyzer_type="wildcard",
+        properties={
+            "ngramSize": 3,
+            "analyzer": {
+                "type": "norm",
+                "properties": {
+                    "locale": "en",
+                    "case": "lower",
+                    "accent": False,
+                },
+            },
+        },
+        features=["frequency", "position", "norm"],
+    )
 
 
 def delete_analyzers(database_name):
-    """Delete n-gram, text, and norm analyzers in the named database.
+    """Delete n-gram, text, norm, and wildcard analyzers in the named database.
 
     Parameters
     ----------
@@ -340,6 +358,7 @@ def delete_analyzers(database_name):
     db.delete_analyzer(f"{database_name}::n-gram", ignore_missing=True)
     db.delete_analyzer(f"{database_name}::text_en_no_stem", ignore_missing=True)
     db.delete_analyzer(f"{database_name}::norm-lower", ignore_missing=True)
+    db.delete_analyzer(f"{database_name}::wildcard-lower", ignore_missing=True)
 
 
 def create_view(database_name, collection_maps_name):
