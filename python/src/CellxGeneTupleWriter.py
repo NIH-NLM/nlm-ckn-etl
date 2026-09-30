@@ -144,8 +144,7 @@ def main():
     """
     cellxgene_path = get_current_run().external_dir / "cellxgene_transformed.json"
     if not cellxgene_path.exists():
-        print(f"CELLxGENE results not found at {cellxgene_path}")
-        return
+        raise FileNotFoundError(f"CELLxGENE results not found at {cellxgene_path}")
 
     print(f"Creating CELLxGENE tuples from {cellxgene_path}")
     with open(cellxgene_path, "r") as fp:

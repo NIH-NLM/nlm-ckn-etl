@@ -74,8 +74,7 @@ def main():
     """
     uniprot_path = get_current_run().external_dir / "uniprot_transformed.json"
     if not uniprot_path.exists():
-        print(f"UniProt results not found at {uniprot_path}")
-        return
+        raise FileNotFoundError(f"UniProt results not found at {uniprot_path}")
 
     print(f"Creating UniProt tuples from {uniprot_path}")
     with open(uniprot_path, "r") as fp:

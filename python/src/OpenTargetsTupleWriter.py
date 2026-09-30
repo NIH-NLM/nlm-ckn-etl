@@ -381,14 +381,11 @@ def main():
     gene_path = external_dir / "gene_transformed.json"
     uniprot_path = external_dir / "uniprot_transformed.json"
     if not opentargets_path.exists():
-        print(f"Open Targets results not found at {opentargets_path}")
-        return
+        raise FileNotFoundError(f"Open Targets results not found at {opentargets_path}")
     if not gene_path.exists():
-        print(f"Gene results not found at {gene_path}")
-        return
+        raise FileNotFoundError(f"Gene results not found at {gene_path}")
     if not uniprot_path.exists():
-        print(f"UniProt results not found at {uniprot_path}")
-        return
+        raise FileNotFoundError(f"UniProt results not found at {uniprot_path}")
 
     print(f"Creating Open Targets tuples from {opentargets_path}")
     with open(opentargets_path, "r") as fp:
