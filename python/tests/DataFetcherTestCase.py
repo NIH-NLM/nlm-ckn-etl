@@ -1,4 +1,5 @@
 import base64
+from datetime import datetime, timedelta, timezone
 import gzip
 import json
 from pathlib import Path
@@ -19,6 +20,7 @@ from DataFetcher import (
     HuBMAPFetcher,
     OpenTargetsFetcher,
     UniProtFetcher,
+    _is_freshness_skip,
 )
 
 
@@ -212,6 +214,184 @@ class DataFetcherCheckpointTestCase(unittest.TestCase):
         self.assertIn("a", fetcher.fetched_ids)
         self.assertEqual(results["a"], {"data": "a"})
         self.assertFalse(self.checkpoint_path.exists())
+
+
+class DataFetcherFailureRetryTestCase(unittest.TestCase):
+    """Failed IDs are retried on later runs, up to a cap."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.output_path = Path(self.tmpdir) / "results.json"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _fetcher(self, fetch_errors=None):
+        fetcher = FakeFetcher(fetch_errors=fetch_errors)
+        fetcher.output_path = self.output_path
+        return fetcher
+
+    def test_failed_id_is_retried_on_next_run(self):
+        """A fallback stored for a failed ID does not count as fetched."""
+        context = {"ids": ["a", "b"]}
+        first = self._fetcher(fetch_errors={"b"})
+        first.run(context)
+        self.assertEqual(first.n_failed, 1)
+        self.assertEqual(first.n_retryable, 1)
+
+        second = self._fetcher()
+        results = second.run(context)
+
+        self.assertEqual(second.fetched_ids, ["b"])
+        self.assertEqual(results["b"], {"data": "b"})
+        self.assertEqual(second.n_retryable, 0)
+        self.assertFalse(second.failures_path.exists())
+
+    def test_failed_id_gives_up_at_cap(self):
+        """After max_fetch_attempts failures the ID is no longer retried."""
+        context = {"ids": ["a", "b"]}
+        cap = DataFetcher.max_fetch_attempts
+        for _ in range(cap):
+            fetcher = self._fetcher(fetch_errors={"b"})
+            fetcher.run(context)
+        self.assertEqual(fetcher.n_retryable, 0)
+        self.assertEqual(fetcher.n_exhausted, 1)
+
+        after = self._fetcher()
+        results = after.run(context)
+
+        self.assertEqual(after.fetched_ids, [])
+        self.assertEqual(results["b"], {})
+        self.assertEqual(after.n_exhausted, 1)
+
+    def test_failure_counts_accumulate(self):
+        """Each failed run adds one attempt to the failed ID."""
+        context = {"ids": ["b"]}
+        self._fetcher(fetch_errors={"b"}).run(context)
+        fetcher = self._fetcher(fetch_errors={"b"})
+        fetcher.run(context)
+        self.assertEqual(
+            json.loads(fetcher.failures_path.read_text()),
+            {"b": 2},
+        )
+
+    def test_force_clears_failures(self):
+        """Force discards recorded failures along with the results."""
+        context = {"ids": ["b"]}
+        self._fetcher(fetch_errors={"b"}).run(context)
+
+        fetcher = self._fetcher()
+        fetcher.run(context, force=True)
+
+        self.assertEqual(fetcher.fetched_ids, ["b"])
+        self.assertFalse(fetcher.failures_path.exists())
+
+    def test_failures_for_dropped_ids_are_pruned(self):
+        """IDs no longer requested are removed from the failures file."""
+        self._fetcher(fetch_errors={"b"}).run({"ids": ["a", "b"]})
+        fetcher = self._fetcher()
+        fetcher.run({"ids": ["a"]})
+        self.assertFalse(fetcher.failures_path.exists())
+
+    def test_failures_sidecar_is_not_a_json_file(self):
+        """Cache cleaning globs *.json, so the sidecar must not match."""
+        fetcher = self._fetcher(fetch_errors={"b"})
+        fetcher.run({"ids": ["b"]})
+        self.assertNotEqual(fetcher.failures_path.suffix, ".json")
+
+    def test_failures_committed_before_checkpoint_write(self):
+        """A crash between the two writes must not lose failure evidence.
+
+        Failures are saved first, so by the time the checkpoint write
+        happens the failed ID's attempt count is already durable
+        (CodeRabbit review on #103).
+        """
+        fetcher = self._fetcher(fetch_errors={"b"})
+        original_save_checkpoint = fetcher._save_checkpoint
+        seen = {}
+
+        def save_checkpoint_and_capture(batch):
+            seen["failures_on_disk"] = json.loads(
+                fetcher.failures_path.read_text()
+            )
+            original_save_checkpoint(batch)
+
+        fetcher._save_checkpoint = save_checkpoint_and_capture
+        fetcher.run({"ids": ["a", "b"]})
+
+        self.assertEqual(seen["failures_on_disk"], {"b": 1})
+
+    def test_unreadable_failures_sidecar_raises(self):
+        """A damaged sidecar must fail the run, not silently reset it.
+
+        Treating it as "no failures" would let a cached on_fetch_error
+        fallback be accepted as fetched, and the run would then overwrite
+        the sidecar with an empty one, erasing the evidence needed to
+        retry it (CodeRabbit review on #103).
+        """
+        fetcher = self._fetcher()
+        fetcher.failures_path.parent.mkdir(parents=True, exist_ok=True)
+        fetcher.failures_path.write_text("{not valid json")
+
+        with self.assertRaises(RuntimeError):
+            fetcher.run({"ids": ["a"]}, force=False)
+
+        # The damaged file is left in place for inspection, not replaced.
+        self.assertEqual(fetcher.failures_path.read_text(), "{not valid json")
+
+    def test_save_failures_leaves_no_partial_temp_file(self):
+        """_save_failures writes via a temp file and os.replace."""
+        fetcher = self._fetcher(fetch_errors={"b"})
+        fetcher.run({"ids": ["a", "b"]})
+        tmp_path = fetcher.failures_path.with_suffix(
+            fetcher.failures_path.suffix + ".tmp"
+        )
+        self.assertFalse(tmp_path.exists())
+
+
+class FreshnessSkipTestCase(unittest.TestCase):
+    """Tests for _is_freshness_skip, the source-skip decision in main()."""
+
+    def test_partial_outcome_is_never_skipped(self):
+        """A source with retryable failures is retried even if its stale
+        last_success_at (kept on purpose — see DataFetcher.run) is still
+        within the freshness window (CodeRabbit review on #103)."""
+        now = datetime.now(timezone.utc)
+        status = {"last_outcome": "partial", "last_success_at": now.isoformat()}
+
+        skip, age_hours = _is_freshness_skip(status, 24, now)
+
+        self.assertFalse(skip)
+        self.assertIsNone(age_hours)
+
+    def test_recent_ok_outcome_is_skipped(self):
+        now = datetime.now(timezone.utc)
+        status = {
+            "last_outcome": "ok",
+            "last_success_at": (now - timedelta(hours=1)).isoformat(),
+        }
+
+        skip, age_hours = _is_freshness_skip(status, 24, now)
+
+        self.assertTrue(skip)
+        self.assertAlmostEqual(age_hours, 1.0, places=1)
+
+    def test_stale_ok_outcome_is_not_skipped(self):
+        now = datetime.now(timezone.utc)
+        status = {
+            "last_outcome": "ok",
+            "last_success_at": (now - timedelta(hours=48)).isoformat(),
+        }
+
+        skip, _ = _is_freshness_skip(status, 24, now)
+
+        self.assertFalse(skip)
+
+    def test_no_prior_success_is_not_skipped(self):
+        skip, age_hours = _is_freshness_skip({}, 24, datetime.now(timezone.utc))
+
+        self.assertFalse(skip)
+        self.assertIsNone(age_hours)
 
 
 class DataFetcherRetryTestCase(unittest.TestCase):

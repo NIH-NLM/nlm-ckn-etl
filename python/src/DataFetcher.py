@@ -31,6 +31,7 @@ from LoaderUtilities import (
 REQUEST_TIMEOUT = 30  # seconds
 MAX_RETRIES = 3
 DEFAULT_RETRY_AFTER = 5  # seconds
+MAX_FETCH_ATTEMPTS = 3  # per-ID attempts, across runs, before giving up
 
 
 class DataFetcher:
@@ -43,7 +44,16 @@ class DataFetcher:
     max_per_second: int = 5
     request_timeout: int = REQUEST_TIMEOUT
 
+    max_fetch_attempts: int = MAX_FETCH_ATTEMPTS
+
     _output_path_override = None
+
+    # Outcome of the most recent run(), read by main() to derive the
+    # source's status. n_retryable counts failed IDs still under the
+    # attempt cap, which the next run will re-fetch.
+    n_failed = 0
+    n_retryable = 0
+    n_exhausted = 0
 
     @property
     def output_path(self):
@@ -156,6 +166,15 @@ class DataFetcher:
         """Path to the JSONL checkpoint file."""
         return self.output_path.with_suffix(".jsonl")
 
+    @property
+    def failures_path(self):
+        """Path to the sidecar mapping each failed ID to its attempt count.
+
+        The suffix is deliberately not ``.json`` so that cache cleaning and
+        validation, which glob ``*.json``, do not mistake it for a result.
+        """
+        return self.output_path.with_suffix(".failures")
+
     def run(self, context, force=False):
         """Execute the fetch loop with batch-save checkpointing.
 
@@ -179,16 +198,29 @@ class DataFetcher:
         """
         if force:
             results = {}
+            failures = {}
             if self.checkpoint_path.exists():
                 self.checkpoint_path.unlink()
+            if self.failures_path.exists():
+                self.failures_path.unlink()
         else:
             results = self._load()
+            failures = self._load_failures()
 
         ids = self.get_ids(context)
-        pending_ids = [id_val for id_val in ids if id_val not in results]
+        # An ID that failed holds its on_fetch_error fallback in results, so
+        # it is pending again until it succeeds or reaches the attempt cap.
+        pending_ids = [
+            id_val
+            for id_val in ids
+            if id_val not in results
+            or failures.get(id_val, 0) in range(1, self.max_fetch_attempts)
+        ]
         total = len(ids)
 
+        self.n_failed = 0
         if not pending_ids:
+            self._summarize_failures(failures, ids)
             print(f"[{self.name}] All {total} IDs already fetched")
             return results
 
@@ -215,6 +247,7 @@ class DataFetcher:
 
                     try:
                         result = future.result()
+                        failures.pop(id_value, None)
                     except (
                         requests.RequestException,
                         ValueError,
@@ -223,12 +256,16 @@ class DataFetcher:
                     ) as exc:
                         print(f"[{self.name}] Error fetching {id_value}: {exc}")
                         result = self.on_fetch_error(id_value)
+                        failures[id_value] = failures.get(id_value, 0) + 1
+                        self.n_failed += 1
                     except Exception as exc:
                         warnings.warn(
                             f"[{self.name}] Unexpected error fetching"
                             f" {id_value}: {exc!r}"
                         )
                         result = self.on_fetch_error(id_value)
+                        failures[id_value] = failures.get(id_value, 0) + 1
+                        self.n_failed += 1
 
                     results[id_value] = result
                     batch[id_value] = result
@@ -240,10 +277,101 @@ class DataFetcher:
                     f"/{total} total"
                 )
 
+                # Failures are saved first: if a crash lands between the two
+                # writes, the worst case is a batch re-fetched next run, not a
+                # fallback silently accepted as fetched (CodeRabbit #103).
+                # This does not cover retrying a *completed* prior run (results
+                # loaded from output_path, not the checkpoint) that is then
+                # itself interrupted in the same window; closing that would
+                # mean storing the attempt count on each result rather than
+                # in a separate sidecar.
+                self._save_failures(failures)
                 self._save_checkpoint(batch)
 
+        self._summarize_failures(failures, ids)
         self._save_final(results, ids)
         return results
+
+    def _summarize_failures(self, failures, ids):
+        """Set the failure counters for this run and report IDs left failed.
+
+        Parameters
+        ----------
+        failures : dict
+            Mapping of ID to failed-attempt count
+        ids : list
+            The current list of IDs; failures for IDs no longer wanted are
+            dropped
+        """
+        wanted = set(ids)
+        for id_value in [k for k in failures if k not in wanted]:
+            del failures[id_value]
+        self.n_retryable = sum(
+            1 for n in failures.values() if n < self.max_fetch_attempts
+        )
+        self.n_exhausted = len(failures) - self.n_retryable
+        self._save_failures(failures)
+        if failures:
+            print(
+                f"[{self.name}] {len(failures)} failed IDs:"
+                f" {self.n_retryable} will be retried,"
+                f" {self.n_exhausted} gave up after"
+                f" {self.max_fetch_attempts} attempts"
+            )
+
+    def _load_failures(self):
+        """Load the failed-attempt counts written by an earlier run.
+
+        An existing sidecar that cannot be parsed raises rather than being
+        treated as "no failures": silently discarding it would let cached
+        on_fetch_error fallbacks be treated as fetched, and the run would
+        then overwrite the sidecar with an empty one (CodeRabbit #103),
+        erasing the evidence needed to retry them.
+
+        Returns
+        -------
+        dict
+            Mapping of ID to failed-attempt count, or empty dict if no
+            sidecar exists
+
+        Raises
+        ------
+        RuntimeError
+            If the sidecar exists but cannot be read or parsed
+        """
+        if not self.failures_path.exists():
+            return {}
+        try:
+            with open(self.failures_path, "r") as fp:
+                return {k: int(v) for k, v in json.load(fp).items()}
+        except (OSError, ValueError, AttributeError) as exc:
+            raise RuntimeError(
+                f"[{self.name}] Could not read {self.failures_path}: {exc}."
+                " Fix or remove the file, then re-run; the fetcher will not"
+                " guess which cached results are actually failures."
+            ) from exc
+
+    def _save_failures(self, failures):
+        """Write the failed-attempt counts, or remove the file if none.
+
+        Writes via a temp file and ``os.replace`` so a crash mid-write never
+        leaves a partially-written (unparseable) sidecar behind.
+
+        Parameters
+        ----------
+        failures : dict
+            Mapping of ID to failed-attempt count
+        """
+        if failures:
+            self.failures_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self.failures_path.with_suffix(
+                self.failures_path.suffix + ".tmp"
+            )
+            with open(tmp_path, "w") as fp:
+                json.dump(failures, fp)
+            os.replace(tmp_path, self.failures_path)
+        elif self.failures_path.exists():
+            self.failures_path.unlink()
 
     def _load(self):
         """Load results from the JSONL checkpoint (if an incomplete run
@@ -695,6 +823,40 @@ def _save_fetch_status(path: Path, status: dict) -> None:
     path.write_text(json.dumps(status, indent=2))
 
 
+def _is_freshness_skip(source_status, max_age_hours, now_utc):
+    """Decide whether a source's freshness check should skip a live fetch.
+
+    A source whose last outcome is "partial" still has failed IDs under the
+    retry cap; its last_success_at is deliberately left stale (see
+    DataFetcher.run) precisely so those retries are not skipped here
+    (CodeRabbit #103). A forced run that leaves a source partial can
+    therefore still have an old, otherwise-fresh last_success_at, so the
+    outcome is checked before the age.
+
+    Parameters
+    ----------
+    source_status : dict
+        This source's entry in fetch-status.json (``last_outcome``,
+        ``last_success_at``)
+    max_age_hours : float
+        Skip threshold in hours
+    now_utc : datetime
+        Current time, timezone-aware UTC
+
+    Returns
+    -------
+    tuple[bool, float | None]
+        Whether to skip, and the age in hours (None if not applicable)
+    """
+    if source_status.get("last_outcome") == "partial":
+        return False, None
+    last_success = source_status.get("last_success_at")
+    if not last_success:
+        return False, None
+    age_hours = (now_utc - datetime.fromisoformat(last_success)).total_seconds() / 3600
+    return age_hours < max_age_hours, age_hours
+
+
 FETCHER_REGISTRY = [
     CellxGeneFetcher(),
     OpenTargetsFetcher(),
@@ -803,26 +965,25 @@ def main():
         force_flag = f"force_{fetcher.name}"
         force = getattr(args, force_flag, False) or args.force_all
 
-        # Freshness check: skip sources that succeeded recently (unless forced)
+        # Freshness check: skip sources that succeeded recently (unless forced
+        # or left with retryable failures — see _is_freshness_skip)
         if not force and args.max_source_age_hours > 0:
-            last_success = status.get(fetcher.name, {}).get("last_success_at")
-            if last_success:
-                age_hours = (
-                    now_utc - datetime.fromisoformat(last_success)
-                ).total_seconds() / 3600
-                if age_hours < args.max_source_age_hours:
-                    print(
-                        f"[{fetcher.name}] Skipping — last success"
-                        f" {age_hours:.1f}h ago (max age: {args.max_source_age_hours}h)"
-                    )
-                    status.setdefault(fetcher.name, {})["last_outcome"] = "skipped"
-                    _save_fetch_status(status_path, status)
-                    # Load cached results so downstream fetchers (e.g. uniprot → gene) still work
-                    if fetcher.output_path.is_dir():
-                        context[f"{fetcher.name}_results"] = {}
-                    else:
-                        context[f"{fetcher.name}_results"] = fetcher._load()
-                    continue
+            skip, age_hours = _is_freshness_skip(
+                status.get(fetcher.name, {}), args.max_source_age_hours, now_utc
+            )
+            if skip:
+                print(
+                    f"[{fetcher.name}] Skipping — last success"
+                    f" {age_hours:.1f}h ago (max age: {args.max_source_age_hours}h)"
+                )
+                status.setdefault(fetcher.name, {})["last_outcome"] = "skipped"
+                _save_fetch_status(status_path, status)
+                # Load cached results so downstream fetchers (e.g. uniprot → gene) still work
+                if fetcher.output_path.is_dir():
+                    context[f"{fetcher.name}_results"] = {}
+                else:
+                    context[f"{fetcher.name}_results"] = fetcher._load()
+                continue
 
         # Check cache before attempting a live fetch when context is incomplete.
         # Fetchers like opentargets and gene require gene_data; if BioMart failed,
@@ -852,8 +1013,18 @@ def main():
         try:
             result = fetcher.run(context, force=force)
             context[f"{fetcher.name}_results"] = result
-            status[fetcher.name]["last_success_at"] = now_iso
-            status[fetcher.name]["last_outcome"] = "ok"
+            if fetcher.n_retryable:
+                # Failed IDs remain under the attempt cap. Leave
+                # last_success_at alone so the freshness check does not skip
+                # this source before they are retried.
+                print(
+                    f"[{fetcher.name}] Partial: {fetcher.n_retryable} failed"
+                    " IDs will be retried on the next run"
+                )
+                status[fetcher.name]["last_outcome"] = "partial"
+            else:
+                status[fetcher.name]["last_success_at"] = now_iso
+                status[fetcher.name]["last_outcome"] = "ok"
             _save_fetch_status(status_path, status)
         except Exception as exc:
             print(f"ERROR: Fetcher '{fetcher.name}' failed and will be skipped: {exc}")
