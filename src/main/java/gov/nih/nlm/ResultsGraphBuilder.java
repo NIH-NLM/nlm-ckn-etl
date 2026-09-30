@@ -378,62 +378,68 @@ public class ResultsGraphBuilder {
         }
         ontologyElementMaps = parseOntologyElements(oboFiles);
 
-        // Create the database and graph
-        String ontologyDatabaseName = "Cell-KN-Ontologies";
-        ArangoDatabase ontologyDb = db().createOrGetDatabase(ontologyDatabaseName);
-        String ontologyGraphName = "KN-Ontologies-v2.0";
-        ArangoGraph ontologyGraph = db().createOrGetGraph(ontologyDb, ontologyGraphName);
+        // Every insert/build step runs inside a try so a failure (e.g. an
+        // IllegalStateException from insertVertices/insertEdges) still
+        // disconnects from ArangoDB rather than leaking the connection.
+        try {
+            // Create the database and graph
+            String ontologyDatabaseName = "Cell-KN-Ontologies";
+            ArangoDatabase ontologyDb = db().createOrGetDatabase(ontologyDatabaseName);
+            String ontologyGraphName = "KN-Ontologies-v2.0";
+            ArangoGraph ontologyGraph = db().createOrGetGraph(ontologyDb, ontologyGraphName);
 
-        // Collect vertex keys for each vertex collection to prevent constructing
-        // duplicate vertices in the vertex collection
-        Map<String, Set<String>> ontologyVertexKeys = new HashMap<>();
+            // Collect vertex keys for each vertex collection to prevent constructing
+            // duplicate vertices in the vertex collection
+            Map<String, Set<String>> ontologyVertexKeys = new HashMap<>();
 
-        // Collect edge keys in each edge collection to prevent constructing duplicate
-        // edges in the edge collection
-        Map<String, Set<String>> ontologyEdgeKeys = new HashMap<>();
+            // Collect edge keys in each edge collection to prevent constructing duplicate
+            // edges in the edge collection
+            Map<String, Set<String>> ontologyEdgeKeys = new HashMap<>();
 
-        // Collect all vertices and edges before inserting them into the graph for improved performance
-        Map<String, ArangoVertexCollection> ontologyVertexCollections = new HashMap<>();
-        Map<String, Map<String, BaseDocument>> ontologyVertexDocuments = new HashMap<>();
-        Map<String, ArangoEdgeCollection> ontologyEdgeCollections = new HashMap<>();
-        Map<String, Map<String, BaseEdgeDocument>> ontologyEdgeDocuments = new HashMap<>();
+            // Collect all vertices and edges before inserting them into the graph for improved performance
+            Map<String, ArangoVertexCollection> ontologyVertexCollections = new HashMap<>();
+            Map<String, Map<String, BaseDocument>> ontologyVertexDocuments = new HashMap<>();
+            Map<String, ArangoEdgeCollection> ontologyEdgeCollections = new HashMap<>();
+            Map<String, Map<String, BaseEdgeDocument>> ontologyEdgeDocuments = new HashMap<>();
 
-        // Read the results tuples files
-        for (Path tuplesFile : tuplesFiles) {
-            System.out.println("Processing tuples file " + tuplesFile);
-            ArrayList<ArrayList<Node>> tuplesArrayList;
+            // Read the results tuples files
+            for (Path tuplesFile : tuplesFiles) {
+                System.out.println("Processing tuples file " + tuplesFile);
+                ArrayList<ArrayList<Node>> tuplesArrayList;
+                try {
+                    tuplesArrayList = readJsonFile(tuplesFile.toString());
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+                // Construct, and update vertices
+                constructVertices(tuplesArrayList,
+                        ontologyGraph,
+                        ontologyVertexKeys,
+                        ontologyVertexCollections,
+                        ontologyVertexDocuments);
+                updateVertices(tuplesArrayList, ontologyElementMaps, ontologyVertexDocuments);
+
+                // Construct, and update edges
+                constructEdges(tuplesArrayList,
+                        ontologyElementMaps,
+                        ontologyGraph,
+                        ontologyEdgeKeys,
+                        ontologyEdgeCollections,
+                        ontologyEdgeDocuments);
+                updateEdges(tuplesArrayList, ontologyElementMaps, ontologyEdgeDocuments);
+            }
+            // Insert vertices, and edges
             try {
-                tuplesArrayList = readJsonFile(tuplesFile.toString());
+                insertVertices(ontologyVertexCollections, ontologyVertexDocuments);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
+            insertEdges(ontologyVertexCollections, ontologyEdgeCollections, ontologyEdgeDocuments);
 
-            // Construct, and update vertices
-            constructVertices(tuplesArrayList,
-                    ontologyGraph,
-                    ontologyVertexKeys,
-                    ontologyVertexCollections,
-                    ontologyVertexDocuments);
-            updateVertices(tuplesArrayList, ontologyElementMaps, ontologyVertexDocuments);
-
-            // Construct, and update edges
-            constructEdges(tuplesArrayList,
-                    ontologyElementMaps,
-                    ontologyGraph,
-                    ontologyEdgeKeys,
-                    ontologyEdgeCollections,
-                    ontologyEdgeDocuments);
-            updateEdges(tuplesArrayList, ontologyElementMaps, ontologyEdgeDocuments);
+        } finally {
+            // Disconnect from a local ArangoDB server instance
+            db().arangoDB.shutdown();
         }
-        // Insert vertices, and edges
-        try {
-            insertVertices(ontologyVertexCollections, ontologyVertexDocuments);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        insertEdges(ontologyVertexCollections, ontologyEdgeCollections, ontologyEdgeDocuments);
-
-        // Disconnect from a local ArangoDB server instance
-        db().arangoDB.shutdown();
     }
 }
