@@ -641,84 +641,90 @@ public class OntologyGraphBuilder {
         String ontologyDatabaseName = "Cell-KN-Ontologies";
         String ontologyGraphName = "KN-Ontologies-v2.0";
         ArangoDbUtilities arangoDbUtilities = new ArangoDbUtilities();
-        arangoDbUtilities.deleteDatabase(ontologyDatabaseName);
-        ArangoDatabase ontologyDb = arangoDbUtilities.createOrGetDatabase(ontologyDatabaseName);
-        arangoDbUtilities.deleteGraph(ontologyDb, ontologyGraphName);
-        ArangoGraph ontologyGraph = arangoDbUtilities.createOrGetGraph(ontologyDb, ontologyGraphName);
+        // Every insert/build step runs inside a try so a failure (e.g. an
+        // IllegalStateException from insertVertices/insertEdges) still
+        // disconnects from ArangoDB rather than leaking the connection.
+        try {
+            arangoDbUtilities.deleteDatabase(ontologyDatabaseName);
+            ArangoDatabase ontologyDb = arangoDbUtilities.createOrGetDatabase(ontologyDatabaseName);
+            arangoDbUtilities.deleteGraph(ontologyDb, ontologyGraphName);
+            ArangoGraph ontologyGraph = arangoDbUtilities.createOrGetGraph(ontologyDb, ontologyGraphName);
 
-        // Create, update, and insert the vertices
-        Map<String, ArangoVertexCollection> ontologyVertexCollections = new HashMap<>();
-        Map<String, Map<String, BaseDocument>> ontologyVertexDocuments = new HashMap<>();
-        constructVertices(ontologyTriples,
-                arangoDbUtilities,
-                ontologyGraph,
-                ontologyVertexCollections,
-                ontologyVertexDocuments);
-        updateVertices(ontologyTriples, ontologyElementMaps, ontologyVertexDocuments);
-        insertVertices(ontologyVertexCollections, ontologyVertexDocuments);
+            // Create, update, and insert the vertices
+            Map<String, ArangoVertexCollection> ontologyVertexCollections = new HashMap<>();
+            Map<String, Map<String, BaseDocument>> ontologyVertexDocuments = new HashMap<>();
+            constructVertices(ontologyTriples,
+                    arangoDbUtilities,
+                    ontologyGraph,
+                    ontologyVertexCollections,
+                    ontologyVertexDocuments);
+            updateVertices(ontologyTriples, ontologyElementMaps, ontologyVertexDocuments);
+            insertVertices(ontologyVertexCollections, ontologyVertexDocuments);
 
-        // Create, and insert the edges, capturing unique labels
-        Map<String, ArangoEdgeCollection> ontologyEdgeCollections = new HashMap<>();
-        Map<String, Map<String, BaseEdgeDocument>> ontologyEdgeDocuments = new HashMap<>();
-        HashSet<String> edgeLabels = new HashSet<>(constructEdges(ontologyTriples,
-                ontologyElementMaps,
-                arangoDbUtilities,
-                ontologyGraph,
-                ontologyEdgeCollections,
-                ontologyEdgeDocuments));
-        insertEdges(ontologyVertexCollections, ontologyEdgeCollections, ontologyEdgeDocuments);
+            // Create, and insert the edges, capturing unique labels
+            Map<String, ArangoEdgeCollection> ontologyEdgeCollections = new HashMap<>();
+            Map<String, Map<String, BaseEdgeDocument>> ontologyEdgeDocuments = new HashMap<>();
+            HashSet<String> edgeLabels = new HashSet<>(constructEdges(ontologyTriples,
+                    ontologyElementMaps,
+                    arangoDbUtilities,
+                    ontologyGraph,
+                    ontologyEdgeCollections,
+                    ontologyEdgeDocuments));
+            insertEdges(ontologyVertexCollections, ontologyEdgeCollections, ontologyEdgeDocuments);
 
-        // Document unique labels, and their normalized values
-        try (BufferedWriter edgeLabelsWriter = Files.newBufferedWriter(EDGE_LABELS_FILE, StandardCharsets.US_ASCII)) {
-            for (String label : edgeLabels) {
-                edgeLabelsWriter.write(label + ": " + normalizeEdgeLabel(label) + "\n");
+            // Document unique labels, and their normalized values
+            try (BufferedWriter edgeLabelsWriter = Files.newBufferedWriter(EDGE_LABELS_FILE, StandardCharsets.US_ASCII)) {
+                for (String label : edgeLabels) {
+                    edgeLabelsWriter.write(label + ": " + normalizeEdgeLabel(label) + "\n");
+                }
             }
+
+            // List the Cell Ontology file
+            oboPattern = "cl.owl";
+            oboFiles = listFilesMatchingPattern(oboPath, oboPattern);
+            if (oboFiles.isEmpty()) {
+                throw new RuntimeException("No CL files found matching the pattern " + oboPattern);
+            }
+
+            // Parse Cell Ontology elements, and collect unique triples
+            Map<String, OntologyElementMap> phenotypeElementMaps = parseOntologyElements(oboFiles);
+            phenotypeElementMaps.put("ro", ontologyElementMaps.get("ro"));
+            HashSet<Triple> phenotypeTriples = collectUniqueTriples(oboFiles, false);
+
+            // Initialize the phenotype database and subgraph
+            String phenotypeDatabaseName = "Cell-KN-Phenotypes";
+            String phenotypeGraphName = "KN-Phenotypes-v2.0";
+            arangoDbUtilities.deleteDatabase(phenotypeDatabaseName);
+            ArangoDatabase phenotypeDb = arangoDbUtilities.createOrGetDatabase(phenotypeDatabaseName);
+            arangoDbUtilities.deleteGraph(phenotypeDb, phenotypeGraphName);
+            ArangoGraph phenotypeGraph = arangoDbUtilities.createOrGetGraph(phenotypeDb, phenotypeGraphName);
+
+            // Create, update, and insert the vertices
+            Map<String, ArangoVertexCollection> phenotypeVertexCollections = new HashMap<>();
+            Map<String, Map<String, BaseDocument>> phenotypeVertexDocuments = new HashMap<>();
+            constructVertices(phenotypeTriples,
+                    arangoDbUtilities,
+                    phenotypeGraph,
+                    phenotypeVertexCollections,
+                    phenotypeVertexDocuments);
+            updateVertices(phenotypeTriples, phenotypeElementMaps, phenotypeVertexDocuments);
+            insertVertices(phenotypeVertexCollections, phenotypeVertexDocuments);
+
+            // Create, and insert the edges, capturing unique labels
+            Map<String, ArangoEdgeCollection> phenotypeEdgeCollections = new HashMap<>();
+            Map<String, Map<String, BaseEdgeDocument>> phenotypeEdgeDocuments = new HashMap<>();
+            edgeLabels.addAll(constructEdges(phenotypeTriples,
+                    phenotypeElementMaps,
+                    arangoDbUtilities,
+                    phenotypeGraph,
+                    phenotypeEdgeCollections,
+                    phenotypeEdgeDocuments));
+            insertEdges(phenotypeVertexCollections, phenotypeEdgeCollections, phenotypeEdgeDocuments);
+
+        } finally {
+            // Disconnect from a local ArangoDB server instance
+            arangoDbUtilities.arangoDB.shutdown();
         }
-
-        // List the Cell Ontology file
-        oboPattern = "cl.owl";
-        oboFiles = listFilesMatchingPattern(oboPath, oboPattern);
-        if (oboFiles.isEmpty()) {
-            throw new RuntimeException("No CL files found matching the pattern " + oboPattern);
-        }
-
-        // Parse Cell Ontology elements, and collect unique triples
-        Map<String, OntologyElementMap> phenotypeElementMaps = parseOntologyElements(oboFiles);
-        phenotypeElementMaps.put("ro", ontologyElementMaps.get("ro"));
-        HashSet<Triple> phenotypeTriples = collectUniqueTriples(oboFiles, false);
-
-        // Initialize the phenotype database and subgraph
-        String phenotypeDatabaseName = "Cell-KN-Phenotypes";
-        String phenotypeGraphName = "KN-Phenotypes-v2.0";
-        arangoDbUtilities.deleteDatabase(phenotypeDatabaseName);
-        ArangoDatabase phenotypeDb = arangoDbUtilities.createOrGetDatabase(phenotypeDatabaseName);
-        arangoDbUtilities.deleteGraph(phenotypeDb, phenotypeGraphName);
-        ArangoGraph phenotypeGraph = arangoDbUtilities.createOrGetGraph(phenotypeDb, phenotypeGraphName);
-
-        // Create, update, and insert the vertices
-        Map<String, ArangoVertexCollection> phenotypeVertexCollections = new HashMap<>();
-        Map<String, Map<String, BaseDocument>> phenotypeVertexDocuments = new HashMap<>();
-        constructVertices(phenotypeTriples,
-                arangoDbUtilities,
-                phenotypeGraph,
-                phenotypeVertexCollections,
-                phenotypeVertexDocuments);
-        updateVertices(phenotypeTriples, phenotypeElementMaps, phenotypeVertexDocuments);
-        insertVertices(phenotypeVertexCollections, phenotypeVertexDocuments);
-
-        // Create, and insert the edges, capturing unique labels
-        Map<String, ArangoEdgeCollection> phenotypeEdgeCollections = new HashMap<>();
-        Map<String, Map<String, BaseEdgeDocument>> phenotypeEdgeDocuments = new HashMap<>();
-        edgeLabels.addAll(constructEdges(phenotypeTriples,
-                phenotypeElementMaps,
-                arangoDbUtilities,
-                phenotypeGraph,
-                phenotypeEdgeCollections,
-                phenotypeEdgeDocuments));
-        insertEdges(phenotypeVertexCollections, phenotypeEdgeCollections, phenotypeEdgeDocuments);
-
-        // Disconnect from a local ArangoDB server instance
-        arangoDbUtilities.arangoDB.shutdown();
     }
 
     // Define a record describing a vertex
