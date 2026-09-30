@@ -188,6 +188,41 @@ class CellxGeneTransformerTestCase(unittest.TestCase):
             "https://cellxgene.cziscience.com/e/dv-1.cxg/",
         )
 
+    def test_transform_leaves_link_unset_when_tagged_assets_have_no_h5ad(self):
+        """A tagged asset list with no H5AD must not fall back to assets[0].
+
+        An ATAC-only dataset (no H5AD asset at all) would otherwise get an
+        ATAC file silently assigned as its "dataset" link, reproducing the
+        class of bug this fix addresses rather than just this one instance
+        of it.
+        """
+        transformer = CellxGeneTransformer()
+        raw = {
+            "dv-1": {
+                "dataset_json": {
+                    "citation": None,
+                    "assets": [
+                        {
+                            "filetype": "ATAC_FRAGMENT",
+                            "url": "https://cellxgene.cziscience.com/e/dv-1-fragment.tsv.bgz",
+                        },
+                        {
+                            "filetype": "ATAC_INDEX",
+                            "url": "https://cellxgene.cziscience.com/e/dv-1-fragment.tsv.bgz.tbi",
+                        },
+                    ],
+                },
+                "collection_json": {
+                    "doi": "10.1038/s41467-025-59997-4",
+                    "citation": None,
+                    "publisher_metadata": {"authors": [{"family": "Reck"}]},
+                },
+            }
+        }
+        result = transformer.transform(raw)
+
+        self.assertIsNone(result["dv-1"]["Link_to_CELLxGENE_dataset"])
+
 
 class OpenTargetsTransformerTestCase(unittest.TestCase):
     """Tests for OpenTargetsTransformer using fixture data."""
