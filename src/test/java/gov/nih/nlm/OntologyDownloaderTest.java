@@ -139,6 +139,24 @@ class OntologyDownloaderTest {
     }
 
     @Test
+    void installDownload_unreadableCurrentVersionArchiveTagsAreUnique(@TempDir Path dir) throws IOException {
+        // Two installs back-to-back, each with an unreadable current version,
+        // must not collide on the same ".archive" path even within the same
+        // millisecond (System.currentTimeMillis() resolution).
+        write(dir.resolve("t.owl"), null);
+        write(dir.resolve("t-new.owl"), null);
+        OntologyDownloader.installDownload(dir.resolve("t-new.owl"), dir, "t", ".owl");
+
+        write(dir.resolve("t-new.owl"), null);
+        OntologyDownloader.installDownload(dir.resolve("t-new.owl"), dir, "t", ".owl");
+
+        try (var archived = Files.list(dir.resolve(".archive"))) {
+            assertEquals(
+                    2, archived.filter(p -> p.getFileName().toString().startsWith("t-unversioned-")).count());
+        }
+    }
+
+    @Test
     void installDownload_noCurrentFileInstallsNew(@TempDir Path dir) throws IOException {
         write(dir.resolve("t-new.owl"), null);
 

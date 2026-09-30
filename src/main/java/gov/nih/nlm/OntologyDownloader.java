@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -175,14 +176,27 @@ public class OntologyDownloader {
 
         Path archiveDir = downloadDir.resolve(".archive");
         Files.createDirectories(archiveDir);
-        String archiveTag = versionCur != null ? versionCur : "unversioned-" + System.currentTimeMillis();
+        String archiveTag = versionCur != null
+                ? versionCur
+                : "unversioned-" + System.currentTimeMillis() + "-" + UUID.randomUUID();
         Path oldFile = archiveDir.resolve(stem + "-" + archiveTag + suffix);
 
         System.out.println("Renaming " + curFile + " to " + oldFile);
         Files.move(curFile, oldFile);
 
         System.out.println("Renaming " + newFile + " to " + curFile);
-        Files.move(newFile, curFile);
+        try {
+            Files.move(newFile, curFile);
+        } catch (IOException e) {
+            // The download is intact at newFile; restore the archived file so a
+            // failed rename does not also leave curFile missing entirely.
+            try {
+                Files.move(oldFile, curFile);
+            } catch (IOException restoreFailed) {
+                e.addSuppressed(restoreFailed);
+            }
+            throw e;
+        }
     }
 
     /**
