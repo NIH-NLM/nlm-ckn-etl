@@ -1,7 +1,8 @@
 name: CI
 
 # Runs Java and Python tests together on every push or PR that touches
-# source code or build configuration.  build-image.yml gates on this
+# source code, build configuration, or the collection maps the search view
+# is built from.  build-image.yml gates on this
 # workflow completing successfully (workflow_run trigger), so the image
 # is never built from a commit where tests are failing.
 #
@@ -17,6 +18,7 @@ on:
       - 'python/**'
       - 'Dockerfile'
       - 'release.json'
+      - 'data/nlm-ckn-collection-maps.json'
       - '.github/workflows/build-image.yml'
       - '.github/workflows/ci.yml'
       - '.github/workflows/java-build.yml'
@@ -28,6 +30,7 @@ on:
       - 'python/**'
       - 'Dockerfile'
       - 'release.json'
+      - 'data/nlm-ckn-collection-maps.json'
       - '.github/workflows/build-image.yml'
       - '.github/workflows/ci.yml'
       - '.github/workflows/java-build.yml'
