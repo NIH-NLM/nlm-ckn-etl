@@ -161,12 +161,15 @@ def create_tuples(
                 )
             )
 
-            # Edge annotation: score
+            # Edge annotation: score. Subject/predicate/object must match the
+            # relationship triple above so the annotation addresses the same
+            # edge (is_associated_with = RO_0004029, since ckn-schema
+            # v0.0.0-alpha.6 renamed GeneIsGeneticBasisForDisease).
             gs_term = f"GS_{gene_name}"
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{gs_term}"),
-                    URIRef(f"{PURLBASE}/RO_0004010"),
+                    URIRef(f"{PURLBASE}/RO_0004029"),
                     URIRef(f"{PURLBASE}/{mondo_term}"),
                     URIRef(f"{RDFSBASE}#Score"),
                     Literal(str(disease["score"])),

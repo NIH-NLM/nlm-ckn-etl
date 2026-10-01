@@ -131,6 +131,19 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
         score_quints = [t for t in tuples if len(t) == 5 and "Score" in str(t[3])]
         self.assertGreater(len(score_quints), 0)
 
+        # The score annotation must address the same edge as the
+        # relationship triple it describes -- same subject, predicate, and
+        # object -- or it silently orphans onto an edge that does not exist.
+        relationship_triples = [
+            t for t in tuples if len(t) == 3 and "RO_0004029" in str(t[1])
+        ]
+        self.assertEqual(len(relationship_triples), 1)
+        subject, predicate, obj = relationship_triples[0]
+        quint_subject, quint_predicate, quint_object = score_quints[0][:3]
+        self.assertEqual(quint_subject, subject)
+        self.assertEqual(quint_predicate, predicate)
+        self.assertEqual(quint_object, obj)
+
     def test_skips_low_score_diseases(self):
         ot = self._make_ot_base()
         ot["ENSG00000001626"]["diseases"] = [self._make_disease(score=0.2)]
@@ -138,7 +151,7 @@ class OpenTargetsTupleWriterTestCase(unittest.TestCase):
             ot, self._make_gene_results(), self._make_uniprot_results()
         )
         preds = [str(t[1]) for t in tuples if len(t) == 3]
-        self.assertFalse(any("RO_0004010" in p for p in preds))
+        self.assertFalse(any("RO_0004029" in p for p in preds))
 
     # ----- Drug tests -----
 
