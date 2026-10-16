@@ -257,6 +257,61 @@ class InducedSubgraphFinderTest {
                 "UBERON-UBERON PART_OF edge should be added by hierarchy enrichment");
     }
 
+    // -- UBERON hierarchy labels --
+
+    /**
+     * UBERON/1 is reached from CS/1; the walk then continues over UBERON-UBERON edges whose labels are given.
+     *
+     *   CS/1 --[CS-UBERON]--> UBERON/1
+     *   UBERON/1 --[CONTRIBUTES_TO_MORPHOLOGY_OF]--> UBERON/2 --[PART_OF]--> UBERON/3
+     *   UBERON/1 --[DEVELOPS_FROM]--> UBERON/4  (a label the walk does not follow)
+     *   UBERON/1 --[no Label]--> UBERON/5
+     */
+    private DirectedPseudograph<ArangoVertex, ArangoEdge> uberonLabelGraph() {
+        DirectedPseudograph<ArangoVertex, ArangoEdge> g = new DirectedPseudograph<>(ArangoEdge.class);
+        ArangoVertex cs1 = vertex("CS", "1");
+        ArangoVertex[] u = new ArangoVertex[6];
+        for (int i = 1; i <= 5; i++) {
+            u[i] = vertex("UBERON", String.valueOf(i));
+            g.addVertex(u[i]);
+        }
+        g.addVertex(cs1);
+        g.addEdge(cs1, u[1], edge("c1", cs1, u[1], "CS-UBERON"));
+        g.addEdge(u[1], u[2], edge("m1", u[1], u[2], "UBERON-UBERON", Map.of("Label", "CONTRIBUTES_TO_MORPHOLOGY_OF")));
+        g.addEdge(u[2], u[3], edge("p1", u[2], u[3], "UBERON-UBERON", Map.of("Label", "PART_OF")));
+        g.addEdge(u[1], u[4], edge("d1", u[1], u[4], "UBERON-UBERON", Map.of("Label", "DEVELOPS_FROM")));
+        g.addEdge(u[1], u[5], edge("n1", u[1], u[5], "UBERON-UBERON"));
+        return g;
+    }
+
+    @Test
+    void addOntologyHierarchyPaths_uberonFollowsContributesToMorphologyOf() {
+        DirectedPseudograph<ArangoVertex, ArangoEdge> g = uberonLabelGraph();
+        DirectedPseudograph<ArangoVertex, ArangoEdge> induced = finder.find(g, "CS", 10);
+        finder.addOntologyHierarchyPaths(g, induced);
+        assertTrue(vertexIds(induced).contains("UBERON/2"), "UBERON/2 via CONTRIBUTES_TO_MORPHOLOGY_OF");
+        assertTrue(edgeKeys(induced).contains("m1"));
+    }
+
+    @Test
+    void addOntologyHierarchyPaths_uberonMixesLabelsInOneWalk() {
+        DirectedPseudograph<ArangoVertex, ArangoEdge> g = uberonLabelGraph();
+        DirectedPseudograph<ArangoVertex, ArangoEdge> induced = finder.find(g, "CS", 10);
+        finder.addOntologyHierarchyPaths(g, induced);
+        assertTrue(vertexIds(induced).contains("UBERON/3"),
+                "PART_OF parent of a CONTRIBUTES_TO_MORPHOLOGY_OF target should be reached");
+        assertTrue(edgeKeys(induced).contains("p1"));
+    }
+
+    @Test
+    void addOntologyHierarchyPaths_uberonIgnoresOtherAndMissingLabels() {
+        DirectedPseudograph<ArangoVertex, ArangoEdge> g = uberonLabelGraph();
+        DirectedPseudograph<ArangoVertex, ArangoEdge> induced = finder.find(g, "CS", 10);
+        finder.addOntologyHierarchyPaths(g, induced);
+        assertFalse(vertexIds(induced).contains("UBERON/4"), "DEVELOPS_FROM is not followed");
+        assertFalse(vertexIds(induced).contains("UBERON/5"), "an edge without a Label is not followed");
+    }
+
     @Test
     void addOntologyHierarchyPaths_allStrategyIncludesEntireCollection() {
         TestGraph tg = buildTestGraph();
