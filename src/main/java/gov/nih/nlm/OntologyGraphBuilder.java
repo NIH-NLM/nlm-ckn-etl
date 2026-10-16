@@ -425,7 +425,7 @@ public class OntologyGraphBuilder {
             case "exactMatch" -> "EXACT_MATCH";
             case "equivalentClass" -> "EQUIVALENT_CLASS";
             case "seeAlso" -> "SEE_ALSO";
-            case "wasAttributedTo" -> "WAS_ATTRIBUTED_TO";
+            case "source" -> "DESCRIBED_IN";
             default -> label.toUpperCase().replace(" ", "_");
         };
     }

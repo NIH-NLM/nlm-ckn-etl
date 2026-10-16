@@ -443,8 +443,8 @@ class OntologyGraphBuilderTest {
     }
 
     @Test
-    void normalizeEdgeLabel_wasAttributedTo() {
-        assertEquals("WAS_ATTRIBUTED_TO", OntologyGraphBuilder.normalizeEdgeLabel("wasAttributedTo"));
+    void normalizeEdgeLabel_source() {
+        assertEquals("DESCRIBED_IN", OntologyGraphBuilder.normalizeEdgeLabel("source"));
     }
 
     @Test
