@@ -1,6 +1,6 @@
 """Create tuples from CELLxGENE fetched metadata using schema entities.
 
-Produces CellSetDataset was attributed to Publication associations and
+Produces CellSetDataset described in Publication associations and
 annotations from CELLxGENE curation API metadata.
 """
 
@@ -38,7 +38,7 @@ def create_tuples(
     """Create tuples from CELLxGENE metadata.
 
     Produces:
-    - CellSetDatasetWasAttributedToPublication
+    - CellSetDatasetDescribedInPublication
     - CSD and PUB vertex annotations
 
     Publications are keyed by DOI, so the datasets of a paper all share
@@ -46,7 +46,7 @@ def create_tuples(
 
     A source dataset filtered for several organs yields one cell set dataset
     vertex per organ (matching the summary-driven writers), so the publication
-    is attributed to each filtered dataset.  ``dataset_organs`` supplies the
+    is linked to each filtered dataset.  ``dataset_organs`` supplies the
     source-to-organs map; a source absent from it (or with no organ) yields a
     single vertex keyed on the source id alone.
 
@@ -75,7 +75,7 @@ def create_tuples(
     dataset_organs = dataset_organs or {}
     reference_dataset_version_ids = reference_dataset_version_ids or set()
 
-    # CellSetDataset was_attributed_to Publication
+    # CellSetDataset described_in Publication
     for dataset_version_id, metadata in cellxgene_results.items():
         # One vertex per organ the source was filtered for; the source id
         # alone when there is no organ, so the two writers agree on the key.
@@ -121,9 +121,9 @@ def create_tuples(
             )
             ctx = {"dataset_version_id": dataset_version_id}
 
-            assoc = ASSOCIATION_CLASSES["CellSetDatasetWasAttributedToPublication"](
+            assoc = ASSOCIATION_CLASSES["CellSetDatasetDescribedInPublication"](
                 subject=csd,
-                predicate="nlm-ckn:was_attributed_to",
+                predicate="nlm-ckn:described_in",
                 object=pub,
             )
             tuples.extend(association_to_tuples(assoc, ctx, source="CELLxGENE"))
