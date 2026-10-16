@@ -443,8 +443,8 @@ class OntologyGraphBuilderTest {
     }
 
     @Test
-    void normalizeEdgeLabel_source() {
-        assertEquals("DESCRIBED_IN", OntologyGraphBuilder.normalizeEdgeLabel("source"));
+    void normalizeEdgeLabel_describedIn() {
+        assertEquals("DESCRIBED_IN", OntologyGraphBuilder.normalizeEdgeLabel("describedIn"));
     }
 
     @Test

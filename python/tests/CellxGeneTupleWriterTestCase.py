@@ -43,7 +43,7 @@ class CellxGeneTupleWriterTestCase(unittest.TestCase):
         return {
             (str(t[0]).rsplit("/", 1)[-1], str(t[2]).rsplit("/", 1)[-1])
             for t in tuples
-            if str(t[1]).endswith("terms/source")
+            if str(t[1]).endswith("describedIn")
         }
 
     def _annotations(self, tuples, prefix, attribute):
