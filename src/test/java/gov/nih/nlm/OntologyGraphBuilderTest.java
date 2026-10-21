@@ -510,7 +510,8 @@ class OntologyGraphBuilderTest {
         OntologyGraphBuilder.addSearchField(doc, "UBERON");
         assertEquals(List.of("UBERON:0002405",
                 "UBERON_0002405",
-                "http://purl.obolibrary.org/obo/UBERON_0002405"), doc.getAttribute("_search"));
+                "http://purl.obolibrary.org/obo/UBERON_0002405",
+                "https://purl.obolibrary.org/obo/UBERON_0002405"), doc.getAttribute("_search"));
     }
 
     @Test
