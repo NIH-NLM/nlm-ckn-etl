@@ -47,6 +47,8 @@ class InducedSubgraphFinderTest {
      *   CL/1 --[CL-GO]--> GO/1  (GO blocked: excluded from the induced phenotype
      *       graph entirely — GO terms and associations do not provide
      *       meaningful biological information there; Springbok-LLC/nlm-ckn-etl#119)
+     *   CL/1 --[CL-PATO]--> PATO/1 and CL/1 --[CL-HsapDv]--> HsapDv/1  (PATO and HsapDv
+     *       blocked like GO; Springbok-LLC/nlm-ckn-etl#155)
      *   CS/1 --[CS-UBERON]--> UBERON/1
      *   UBERON/1 --[UBERON-UBERON, PART_OF]--> UBERON/2  (self-referential)
      */
@@ -72,11 +74,13 @@ class InducedSubgraphFinderTest {
         ArangoVertex chebi1 = vertex("CHEBI", "1");
         ArangoVertex nct1 = vertex("NCT", "1");
         ArangoVertex go1 = vertex("GO", "1");
+        ArangoVertex pato1 = vertex("PATO", "1");
+        ArangoVertex hsapdv1 = vertex("HsapDv", "1");
         ArangoVertex uberon1 = vertex("UBERON", "1");
         ArangoVertex uberon2 = vertex("UBERON", "2");
 
         for (ArangoVertex v : new ArangoVertex[]{cs1, cl1, cl2, mondo1, mondo2, chembl1, pr1, pr2,
-                chebi1, nct1, go1, uberon1, uberon2}) {
+                chebi1, nct1, go1, pato1, hsapdv1, uberon1, uberon2}) {
             g.addVertex(v);
         }
 
@@ -93,6 +97,8 @@ class InducedSubgraphFinderTest {
         g.addEdge(uberon1, uberon2, edge("e11", uberon1, uberon2, "UBERON-UBERON",
                 Map.of("Label", "PART_OF")));
         g.addEdge(cl1, go1, edge("e12", cl1, go1, "CL-GO"));
+        g.addEdge(cl1, pato1, edge("e13", cl1, pato1, "CL-PATO"));
+        g.addEdge(cl1, hsapdv1, edge("e14", cl1, hsapdv1, "CL-HsapDv"));
 
         return new TestGraph(g, cs1, cl1, cl2, mondo1, mondo2, chembl1, pr1, pr2, chebi1, nct1, go1,
                 uberon1, uberon2);
@@ -140,6 +146,18 @@ class InducedSubgraphFinderTest {
         TestGraph tg = buildTestGraph();
         DirectedPseudograph<ArangoVertex, ArangoEdge> induced = finder.find(tg.graph(), "CS", 10);
         assertFalse(vertexIds(induced).contains("NCT/1"), "NCT vertices should be excluded");
+    }
+
+    @Test
+    void find_ignoredCollections_hsapdvAndPatoExcluded() {
+        // Like GO, HsapDv and PATO do not provide meaningful biological information in the
+        // induced phenotype graph (Springbok-LLC/nlm-ckn-etl#155).
+        TestGraph tg = buildTestGraph();
+        DirectedPseudograph<ArangoVertex, ArangoEdge> induced = finder.find(tg.graph(), "CS", 10);
+        assertFalse(vertexIds(induced).contains("PATO/1"), "PATO vertices should be excluded");
+        assertFalse(vertexIds(induced).contains("HsapDv/1"), "HsapDv vertices should be excluded");
+        assertFalse(edgeKeys(induced).contains("e13"), "CL-PATO edge should be excluded");
+        assertFalse(edgeKeys(induced).contains("e14"), "CL-HsapDv edge should be excluded");
     }
 
     @Test
@@ -244,6 +262,17 @@ class InducedSubgraphFinderTest {
         finder.addOntologyHierarchyPaths(tg.graph(), induced);
         assertFalse(vertexIds(induced).contains("GO/1"),
                 "GO/1 should not be added by hierarchy enrichment");
+    }
+
+    @Test
+    void addOntologyHierarchyPaths_doesNotBackfillHsapdvOrPato() {
+        // Neither has a HIERARCHY_CONFIG entry, as for GO; confirm enrichment does not
+        // reintroduce them.
+        TestGraph tg = buildTestGraph();
+        DirectedPseudograph<ArangoVertex, ArangoEdge> induced = finder.find(tg.graph(), "CS", 10);
+        finder.addOntologyHierarchyPaths(tg.graph(), induced);
+        assertFalse(vertexIds(induced).contains("PATO/1"));
+        assertFalse(vertexIds(induced).contains("HsapDv/1"));
     }
 
     @Test

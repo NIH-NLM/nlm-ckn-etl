@@ -138,6 +138,21 @@ class ArangoDbUtilitiesSearchTestCase(unittest.TestCase):
         self.assertNotIn("GO", properties["links"])
         self.assertIn("CL", properties["links"])
 
+    def test_create_view_excludes_hsapdv_and_pato_for_cell_kn_phenotypes(self):
+        """HsapDv and PATO are excluded from the induced phenotype graph like
+        GO, so its search view must not link them either
+        (Springbok-LLC/nlm-ckn-etl#155)."""
+        self.db.collections.return_value = [
+            {"name": "CL"},
+            {"name": "HsapDv"},
+            {"name": "PATO"},
+        ]
+        adb.create_view("Cell-KN-Phenotypes", collection_maps_name=COLLECTION_MAPS)
+        properties = self.db.create_view.call_args.kwargs["properties"]
+        self.assertNotIn("HsapDv", properties["links"])
+        self.assertNotIn("PATO", properties["links"])
+        self.assertIn("CL", properties["links"])
+
 
 if __name__ == "__main__":
     unittest.main()

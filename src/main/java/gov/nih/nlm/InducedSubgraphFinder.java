@@ -14,23 +14,23 @@ import java.util.stream.Collectors;
 
 public class InducedSubgraphFinder {
 
-    // Vertex collections to skip during BFS traversal. GO is excluded because GO terms and
-    // associations, as carried into the induced phenotype graph, do not provide meaningful
-    // biological information (decided in the team's weekly meeting; Springbok-LLC/nlm-ckn-etl#119).
-    private static final Set<String> IGNORED_VERTEX_COLLECTIONS = Set.of("CHEBI", "GO", "NCT");
+    // Vertex collections to skip during BFS traversal. GO, HsapDv and PATO are excluded because
+    // their terms and associations, as carried into the induced phenotype graph, do not provide
+    // meaningful biological information (GO: Springbok-LLC/nlm-ckn-etl#119; HsapDv and PATO:
+    // Springbok-LLC/nlm-ckn-etl#155).
+    private static final Set<String> IGNORED_VERTEX_COLLECTIONS =
+            Set.of("CHEBI", "GO", "HsapDv", "NCT", "PATO");
 
     // Edge collections to skip entirely during BFS traversal. Use this to cut specific
     // high-fanout connections (e.g., PR-NCBITaxon pulls in most of UniProt's PR vertices
     // because every protein is annotated with its source organism).
     private static final Set<String> IGNORED_EDGE_COLLECTIONS = Set.of("PR-NCBITaxon");
-    // No entry for GO: it is excluded above, so it never reaches the induced graph for
-    // this config to apply to.
+    // No entry for GO, HsapDv or PATO: they are excluded above, so they never reach the induced
+    // graph for this config to apply to.
     private static final Map<String, HierarchyConfig> HIERARCHY_CONFIG = Map.ofEntries(Map.entry("CL",
                     new HierarchyConfig("all", Set.of())),
             Map.entry("MONDO", new HierarchyConfig("walk", Set.of("SUB_CLASS_OF"))),
             Map.entry("HP", new HierarchyConfig("walk", Set.of("SUB_CLASS_OF"))),
-            Map.entry("PATO", new HierarchyConfig("walk", Set.of("SUB_CLASS_OF"))),
-            Map.entry("HsapDv", new HierarchyConfig("walk", Set.of("SUB_CLASS_OF"))),
             Map.entry("NCBITaxon", new HierarchyConfig("walk", Set.of("SUB_CLASS_OF"))),
             Map.entry("Orphanet", new HierarchyConfig("walk", Set.of("SUB_CLASS_OF"))),
             Map.entry("PR", new HierarchyConfig("none", Set.of())),
