@@ -66,6 +66,30 @@ class CellxGeneTupleWriterTestCase(unittest.TestCase):
         subjects = {s for s, _ in self._described_in_edges(tuples)}
         self.assertEqual(subjects, {"CSD_dvid-001"})
 
+    def test_skips_cached_dataset_absent_from_the_summaries(self):
+        # The cache outlives a dataset a release drops; with a map in hand,
+        # a source no summary mentions gets no vertex and no edge.
+        data = self._make_multi_dataset_data()
+        dataset_organs = {"dvid-001": {"kidney"}, "dvid-003": {"liver"}}
+        tuples = create_tuples(data, dataset_organs)
+        self.assertEqual(
+            self._described_in_edges(tuples),
+            {
+                ("CSD_dvid-001__kidney", "PUB_10.1234-test"),
+                ("CSD_dvid-003__liver", "PUB_10.5678-other"),
+            },
+        )
+        self.assertFalse(
+            any("dvid-002" in str(term) for t in tuples for term in t),
+        )
+
+    def test_dataset_in_summaries_without_organ_keeps_source_keyed_vertex(self):
+        # Present in the map with no organ: still the source id alone.
+        dataset_organs = {"dvid-001": set()}
+        tuples = create_tuples(self._make_data(), dataset_organs)
+        subjects = {s for s, _ in self._described_in_edges(tuples)}
+        self.assertEqual(subjects, {"CSD_dvid-001"})
+
     def test_fans_out_one_vertex_per_organ(self):
         # A source filtered for two organs is attributed to the publication
         # once per organ, each with a composite (source__organ) key.

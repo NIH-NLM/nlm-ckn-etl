@@ -47,8 +47,10 @@ def create_tuples(
     A source dataset filtered for several organs yields one cell set dataset
     vertex per organ (matching the summary-driven writers), so the publication
     is linked to each filtered dataset.  ``dataset_organs`` supplies the
-    source-to-organs map; a source absent from it (or with no organ) yields a
-    single vertex keyed on the source id alone.
+    source-to-organs map; a source in it with no organ yields a single vertex
+    keyed on the source id alone.  When the map is given, a source absent from
+    it is skipped: the cached metadata can outlive the dataset (it is reused
+    across releases), and no summary mentions it any more.
 
     Parameters
     ----------
@@ -59,7 +61,7 @@ def create_tuples(
     dataset_organs : dict, optional
         Mapping from ``dataset_version_id`` to the set of organs it was
         filtered for, from ``LoaderUtilities.get_dataset_organs_map``.  When
-        omitted, every dataset yields a single source-keyed vertex.
+        omitted or empty, every dataset yields a single source-keyed vertex.
     reference_dataset_version_ids : set[str], optional
         Dataset version ids backed by a cluster_cid_mapping file, as
         returned by ``LoaderUtilities.get_reference_dataset_version_ids``.
@@ -77,6 +79,14 @@ def create_tuples(
 
     # CellSetDataset described_in Publication
     for dataset_version_id, metadata in cellxgene_results.items():
+        # Skip cached datasets that no summary mentions (Springbok-LLC/
+        # nlm-ckn-etl#171).
+        if dataset_organs and dataset_version_id not in dataset_organs:
+            print(
+                f"Skipping CELLxGENE dataset {dataset_version_id}: "
+                "not in any master dataset summary"
+            )
+            continue
         # One vertex per organ the source was filtered for; the source id
         # alone when there is no organ, so the two writers agree on the key.
         organs = sorted(dataset_organs.get(dataset_version_id) or [])
