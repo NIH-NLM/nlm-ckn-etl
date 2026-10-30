@@ -544,6 +544,39 @@ _FETCH_CODE_FILES = (
 )
 
 
+# Sources a run can refresh on their own: the names both ``DataFetcher.py``
+# (``--force-<name>``) and ``DataTransformer.py`` (positional) register.
+REFRESHABLE_SOURCES = ("cellxgene", "opentargets", "gene", "uniprot")
+
+# How a release treats the cached external fetch: ``auto`` decides from its age
+# and the fetch code hash (see ``should_force_fetch``); ``resume`` reuses it
+# whatever the hash, re-fetching only what is missing or in
+# ``refresh_sources``.
+FETCH_MODES = ("auto", "resume")
+
+
+def parse_refresh_sources(value) -> list[str]:
+    """Return the sources named by a comma-separated string or a list.
+
+    Raises ``ValueError`` for a name that is not in ``REFRESHABLE_SOURCES``.
+    Empty input, and duplicates, are dropped.
+    """
+    if not value:
+        return []
+    names = value.split(",") if isinstance(value, str) else list(value)
+    sources = []
+    for name in (str(n).strip() for n in names):
+        if not name or name in sources:
+            continue
+        if name not in REFRESHABLE_SOURCES:
+            raise ValueError(
+                f"Unknown source {name!r}; expected one of "
+                f"{', '.join(REFRESHABLE_SOURCES)}"
+            )
+        sources.append(name)
+    return sources
+
+
 def _fetch_code_hash() -> str:
     """Return a 16-char SHA-256 prefix over the fetch code files.
 

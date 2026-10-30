@@ -47,6 +47,7 @@ from _common import (
     _fetch_code_hash,
     _run_python_script,
     clean_empty_external_files,
+    parse_refresh_sources,
     promote_external_staging,
     should_force_fetch,
     sync_external_from_s3,
@@ -125,6 +126,7 @@ def fetch_external_api_results(
     force: bool = False,
     max_source_age_hours: float = 0.0,
     run_name: str = "",
+    force_sources: list[str] | None = None,
 ) -> None:
     """Run ``DataFetcher.py`` using the host Python interpreter.
 
@@ -145,10 +147,15 @@ def fetch_external_api_results(
     run_name:
         Run name passed as ``--run-name`` to ``DataFetcher.py`` (selects
         ``data/results-<name>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
+    force_sources:
+        Sources to re-fetch from scratch while the rest of the cache is kept
+        (``--force-<name>``).  Redundant with ``force``.
     """
     logger = get_run_logger()
     if force:
         logger.info("Force mode: ignoring on-disk cache, re-fetching all sources")
+    elif force_sources:
+        logger.info(f"Re-fetching from scratch: {', '.join(force_sources)}")
     if max_source_age_hours > 0:
         logger.info(
             f"Source max age: {max_source_age_hours}h — fresh sources will be skipped"
@@ -157,6 +164,8 @@ def fetch_external_api_results(
     extra_args = []
     if force:
         extra_args.append("--force-all")
+    else:
+        extra_args.extend(f"--force-{name}" for name in force_sources or [])
     if max_source_age_hours > 0:
         extra_args.extend(["--max-source-age-hours", str(max_source_age_hours)])
     if run_name:
@@ -178,6 +187,7 @@ def transform_external_api_results(
     arango_db_password: str = "",
     force: bool = False,
     run_name: str = "",
+    force_sources: list[str] | None = None,
 ) -> None:
     """Run ``DataTransformer.py`` to convert raw fetcher JSON into
     ``*_transformed.json`` files consumed by the tuple writers.
@@ -191,6 +201,11 @@ def transform_external_api_results(
     force:
         Pass ``--force`` to re-run all transformers even when outputs are
         up to date.
+    force_sources:
+        Sources whose transformer is re-run even when its output looks up to
+        date, and no other.  An output restored from S3 can look newer than
+        the raw data it was made from, so a source whose raw data was just
+        re-fetched is named here.  Redundant with ``force``.
     run_name:
         Run name passed as ``--run-name`` (selects ``data/results-<name>/``).
         Defaults to ``$CKN_RUN`` or ``'full'``.
@@ -200,6 +215,8 @@ def transform_external_api_results(
     extra_args = []
     if force:
         extra_args.append("--force")
+    elif force_sources:
+        extra_args.extend([*force_sources, "--force"])
     if run_name:
         extra_args.extend(["--run-name", run_name])
     _run_python_script(
@@ -345,6 +362,7 @@ def nlm_ckn_fetch(
     max_source_age_hours: float = 0.0,
     max_fetch_age_hours: float = 0.0,
     run_name: str = "",
+    refresh_sources: list[str] | None = None,
 ) -> None:
     """NLM-CKN external API fetch flow.
 
@@ -389,8 +407,13 @@ def nlm_ckn_fetch(
     run_name:
         Run name passed to ``DataFetcher.py`` (selects
         ``data/results-<name>/``).  Defaults to ``$CKN_RUN`` or ``'full'``.
+    refresh_sources:
+        Sources (``cellxgene``, ``opentargets``, ``gene``, ``uniprot``) to
+        re-fetch and re-transform from scratch while the rest of the cache is
+        reused.  Redundant with ``force``.
     """
     logger = get_run_logger()
+    refresh_sources = parse_refresh_sources(refresh_sources)
 
     # Validate here too (not only in the CLI): Prefect-deployment runs call the
     # flow directly and would otherwise bypass the argparse check.
@@ -449,11 +472,13 @@ def nlm_ckn_fetch(
         force=force,
         max_source_age_hours=max_source_age_hours,
         run_name=run_name,
+        force_sources=refresh_sources,
     )
     transform_external_api_results(
         arango_db_password=arango_db_password,
         force=force,
         run_name=run_name,
+        force_sources=refresh_sources,
     )
     # Record the artifact even when validation fails, so the fetched data is not
     # discarded: the next run resumes + re-validates (see should_force_fetch)
@@ -540,8 +565,20 @@ def _parse_args(argv=None):
             "Defaults to $CKN_RUN or 'full'."
         ),
     )
+    parser.add_argument(
+        "--refresh-sources",
+        default="",
+        help=(
+            "Comma-separated sources (cellxgene, opentargets, gene, uniprot) to "
+            "re-fetch and re-transform from scratch, keeping the rest of the cache."
+        ),
+    )
     args = parser.parse_args(argv)
 
+    try:
+        args.refresh_sources = parse_refresh_sources(args.refresh_sources)
+    except ValueError as exc:
+        parser.error(f"--refresh-sources: {exc}")
     if args.max_source_age_hours < 0:
         parser.error("--max-source-age-hours must be non-negative")
     if args.max_fetch_age_hours < 0:
@@ -565,4 +602,5 @@ if __name__ == "__main__":
         max_source_age_hours=args.max_source_age_hours,
         max_fetch_age_hours=args.max_fetch_age_hours,
         run_name=args.run_name,
+        refresh_sources=args.refresh_sources,
     )

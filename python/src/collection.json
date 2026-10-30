@@ -1,0 +1,3555 @@
+{
+  "collection_id": "4c6eaf5c-6d57-4c76-b1e9-60df8c655f1e",
+  "collection_url": "https://cellxgene.cziscience.com/collections/4c6eaf5c-6d57-4c76-b1e9-60df8c655f1e",
+  "collection_version_id": "5d3ae1ad-9aa8-445c-9778-12718d400efa",
+  "consortia": [
+    "CZI Cell Science",
+    "Human Cell Atlas (HCA)"
+  ],
+  "contact_email": "ruichen@bcm.edu",
+  "contact_name": "Rui Chen",
+  "created_at": "2026-06-10T13:29:34+00:00",
+  "curator_name": "Jennifer Zamanian",
+  "datasets": [
+    {
+      "assay": [
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 482211227,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/6b6c4c49-8c20-48ca-a4af-e3d6ea6279d4.h5ad"
+        }
+      ],
+      "cell_count": 20587,
+      "cell_type": [
+        {
+          "label": "OFF parasol ganglion cell",
+          "ontology_term_id": "CL:4033051"
+        },
+        {
+          "label": "ON parasol ganglion cell",
+          "ontology_term_id": "CL:4033052"
+        },
+        {
+          "label": "retinal ganglion cell",
+          "ontology_term_id": "CL:0000740"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1038/s41588-025-02454-1 Dataset Version: https://datasets.cellxgene.cziscience.com/6b6c4c49-8c20-48ca-a4af-e3d6ea6279d4.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/4c6eaf5c-6d57-4c76-b1e9-60df8c655f1e",
+      "dataset_id": "e404d417-56e4-40a5-b3c6-69e9f92d8cbd",
+      "dataset_version_id": "6b6c4c49-8c20-48ca-a4af-e3d6ea6279d4",
+      "default_embedding": "X_umap",
+      "development_stage": [
+        {
+          "label": "21-year-old stage",
+          "ontology_term_id": "HsapDv:0000115"
+        },
+        {
+          "label": "27-year-old stage",
+          "ontology_term_id": "HsapDv:0000121"
+        },
+        {
+          "label": "30-year-old stage",
+          "ontology_term_id": "HsapDv:0000124"
+        },
+        {
+          "label": "32-year-old stage",
+          "ontology_term_id": "HsapDv:0000126"
+        },
+        {
+          "label": "34-year-old stage",
+          "ontology_term_id": "HsapDv:0000128"
+        },
+        {
+          "label": "43-year-old stage",
+          "ontology_term_id": "HsapDv:0000137"
+        },
+        {
+          "label": "47-year-old stage",
+          "ontology_term_id": "HsapDv:0000141"
+        },
+        {
+          "label": "52-year-old stage",
+          "ontology_term_id": "HsapDv:0000146"
+        },
+        {
+          "label": "60-79 year-old stage",
+          "ontology_term_id": "HsapDv:0000272"
+        },
+        {
+          "label": "60-year-old stage",
+          "ontology_term_id": "HsapDv:0000154"
+        },
+        {
+          "label": "62-year-old stage",
+          "ontology_term_id": "HsapDv:0000156"
+        },
+        {
+          "label": "63-year-old stage",
+          "ontology_term_id": "HsapDv:0000157"
+        },
+        {
+          "label": "64-year-old stage",
+          "ontology_term_id": "HsapDv:0000158"
+        },
+        {
+          "label": "65-year-old stage",
+          "ontology_term_id": "HsapDv:0000159"
+        },
+        {
+          "label": "66-year-old stage",
+          "ontology_term_id": "HsapDv:0000160"
+        },
+        {
+          "label": "67-year-old stage",
+          "ontology_term_id": "HsapDv:0000161"
+        },
+        {
+          "label": "68-year-old stage",
+          "ontology_term_id": "HsapDv:0000162"
+        },
+        {
+          "label": "69-year-old stage",
+          "ontology_term_id": "HsapDv:0000163"
+        },
+        {
+          "label": "71-year-old stage",
+          "ontology_term_id": "HsapDv:0000165"
+        },
+        {
+          "label": "72-year-old stage",
+          "ontology_term_id": "HsapDv:0000166"
+        },
+        {
+          "label": "73-year-old stage",
+          "ontology_term_id": "HsapDv:0000167"
+        },
+        {
+          "label": "74-year-old stage",
+          "ontology_term_id": "HsapDv:0000168"
+        },
+        {
+          "label": "75-year-old stage",
+          "ontology_term_id": "HsapDv:0000169"
+        },
+        {
+          "label": "76-year-old stage",
+          "ontology_term_id": "HsapDv:0000170"
+        },
+        {
+          "label": "77-year-old stage",
+          "ontology_term_id": "HsapDv:0000171"
+        },
+        {
+          "label": "78-year-old stage",
+          "ontology_term_id": "HsapDv:0000172"
+        },
+        {
+          "label": "81-year-old stage",
+          "ontology_term_id": "HsapDv:0000207"
+        },
+        {
+          "label": "83-year-old stage",
+          "ontology_term_id": "HsapDv:0000209"
+        },
+        {
+          "label": "84-year-old stage",
+          "ontology_term_id": "HsapDv:0000210"
+        },
+        {
+          "label": "85-year-old stage",
+          "ontology_term_id": "HsapDv:0000211"
+        },
+        {
+          "label": "86-year-old stage",
+          "ontology_term_id": "HsapDv:0000212"
+        },
+        {
+          "label": "88-year-old stage",
+          "ontology_term_id": "HsapDv:0000214"
+        },
+        {
+          "label": "90 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000274"
+        },
+        {
+          "label": "eighth decade stage",
+          "ontology_term_id": "HsapDv:0000242"
+        },
+        {
+          "label": "late adult stage",
+          "ontology_term_id": "HsapDv:0000227"
+        },
+        {
+          "label": "prime adult stage",
+          "ontology_term_id": "HsapDv:0000226"
+        }
+      ],
+      "disease": [
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "Chen_19_D013",
+        "Chen_19_D014",
+        "Chen_19_D015",
+        "Chen_19_D010",
+        "Chen_19_D011",
+        "Chen_D009_13",
+        "Chen_D013_13",
+        "Chen_D021_13",
+        "Chen_D027_13",
+        "Chen_19_D007",
+        "Chen_19_D016",
+        "19-D008",
+        "19-D009",
+        "BCM_22_0183",
+        "pooled [BCM_22_0200,BCM_23_0491]",
+        "BCM_22_0200",
+        "BCM_22_0389",
+        "BCM_22_0434",
+        "BCM_22_0784",
+        "BCM_23_0334",
+        "BCM_23_0358",
+        "BCM_23_1401",
+        "MMD_22_02443",
+        "MMD_22_13066",
+        "MMD_22_14307",
+        "MMD_22_16477",
+        "MMD_22_16860",
+        "MMD_22_17017",
+        "MMD_22_17464",
+        "MMD_22_17939",
+        "MMD_22_18633",
+        "MMD_22_20357",
+        "MMD_22_20137",
+        "MMD_22_20372",
+        "MMD_22_21878",
+        "MMD_22_25357",
+        "MMD_22_32888",
+        "MMD_22_33472",
+        "MMD_22_37089",
+        "MMD_22_37117",
+        "MMD_22_38453",
+        "MMD_23_01524",
+        "Hu0326",
+        "Hu0355",
+        "Hu0564",
+        "Hu0869",
+        "Hu0887",
+        "Hu1059",
+        "Hu0218",
+        "Hu0220",
+        "Hu0235",
+        "pooled [0150-19,0194-19,0978-18]",
+        "pooled [1017-17,1053-17,1005-17]",
+        "pooled [Hu0326,Hu0355]",
+        "pooled [Hu0869,Hu0887]"
+      ],
+      "embeddings": [
+        "X_scVI",
+        "X_umap"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/e404d417-56e4-40a5-b3c6-69e9f92d8cbd.cxg/",
+      "feature_biotype": [
+        "gene"
+      ],
+      "feature_count": 35475,
+      "feature_reference": [
+        "NCBITaxon:9606"
+      ],
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        false
+      ],
+      "mean_genes_per_cell": 5150.499489969398,
+      "organism": [
+        {
+          "label": "Homo sapiens",
+          "ontology_term_id": "NCBITaxon:9606"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 0,
+      "published_at": "2025-10-17T21:11:06+00:00",
+      "raw_data_location": "raw.X",
+      "revised_at": "2026-06-11T16:53:37+00:00",
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "African American",
+          "ontology_term_id": "HANCESTRO:0568"
+        },
+        {
+          "label": "Asian",
+          "ontology_term_id": "HANCESTRO:0847"
+        },
+        {
+          "label": "European American",
+          "ontology_term_id": "HANCESTRO:0590"
+        },
+        {
+          "label": "Hispanic or Latin",
+          "ontology_term_id": "HANCESTRO:0612"
+        },
+        {
+          "label": "South Asian",
+          "ontology_term_id": "HANCESTRO:0848"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "sex": [
+        {
+          "label": "female",
+          "ontology_term_id": "PATO:0000383"
+        },
+        {
+          "label": "male",
+          "ontology_term_id": "PATO:0000384"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "nucleus"
+      ],
+      "tissue": [
+        {
+          "label": "fovea centralis",
+          "ontology_term_id": "UBERON:0001786",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea",
+          "ontology_term_id": "UBERON:0000053",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea proper",
+          "ontology_term_id": "UBERON:0002822",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "peripheral region of retina",
+          "ontology_term_id": "UBERON:0013682",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "snRNA-seq of human retina - retinal ganglion cell subset - excluding midget cells",
+      "tombstone": false,
+      "x_approximate_distribution": null
+    },
+    {
+      "assay": [
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 37673332249,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/25f1558d-c1f8-49f8-addc-b778d8cbd4aa.h5ad"
+        }
+      ],
+      "cell_count": 3177310,
+      "cell_type": [
+        {
+          "label": "GABAergic amacrine cell",
+          "ontology_term_id": "CL:4030027"
+        },
+        {
+          "label": "H1 horizontal cell",
+          "ontology_term_id": "CL:0004217"
+        },
+        {
+          "label": "H2 horizontal cell",
+          "ontology_term_id": "CL:0004218"
+        },
+        {
+          "label": "Mueller cell",
+          "ontology_term_id": "CL:0000636"
+        },
+        {
+          "label": "OFF midget ganglion cell",
+          "ontology_term_id": "CL:4033047"
+        },
+        {
+          "label": "OFF parasol ganglion cell",
+          "ontology_term_id": "CL:4033051"
+        },
+        {
+          "label": "OFFx cell",
+          "ontology_term_id": "CL:4033036"
+        },
+        {
+          "label": "ON midget ganglion cell",
+          "ontology_term_id": "CL:4033046"
+        },
+        {
+          "label": "ON parasol ganglion cell",
+          "ontology_term_id": "CL:4033052"
+        },
+        {
+          "label": "ON-blue cone bipolar cell",
+          "ontology_term_id": "CL:4033019"
+        },
+        {
+          "label": "S cone cell",
+          "ontology_term_id": "CL:0003050"
+        },
+        {
+          "label": "amacrine cell",
+          "ontology_term_id": "CL:0000561"
+        },
+        {
+          "label": "astrocyte",
+          "ontology_term_id": "CL:0000127"
+        },
+        {
+          "label": "diffuse bipolar 1 cell",
+          "ontology_term_id": "CL:4033027"
+        },
+        {
+          "label": "diffuse bipolar 2 cell",
+          "ontology_term_id": "CL:4033028"
+        },
+        {
+          "label": "diffuse bipolar 3a cell",
+          "ontology_term_id": "CL:4033029"
+        },
+        {
+          "label": "diffuse bipolar 3b cell",
+          "ontology_term_id": "CL:4033030"
+        },
+        {
+          "label": "diffuse bipolar 4 cell",
+          "ontology_term_id": "CL:4033031"
+        },
+        {
+          "label": "diffuse bipolar 6 cell",
+          "ontology_term_id": "CL:4033032"
+        },
+        {
+          "label": "flat midget bipolar cell",
+          "ontology_term_id": "CL:4033033"
+        },
+        {
+          "label": "giant bipolar cell",
+          "ontology_term_id": "CL:4033035"
+        },
+        {
+          "label": "glycinergic amacrine cell",
+          "ontology_term_id": "CL:4030028"
+        },
+        {
+          "label": "invaginating midget bipolar cell",
+          "ontology_term_id": "CL:4033034"
+        },
+        {
+          "label": "microglial cell",
+          "ontology_term_id": "CL:0000129"
+        },
+        {
+          "label": "retinal bipolar neuron",
+          "ontology_term_id": "CL:0000748"
+        },
+        {
+          "label": "retinal cone cell",
+          "ontology_term_id": "CL:0000573"
+        },
+        {
+          "label": "retinal ganglion cell",
+          "ontology_term_id": "CL:0000740"
+        },
+        {
+          "label": "retinal pigment epithelial cell",
+          "ontology_term_id": "CL:0002586"
+        },
+        {
+          "label": "retinal rod cell",
+          "ontology_term_id": "CL:0000604"
+        },
+        {
+          "label": "rod bipolar cell",
+          "ontology_term_id": "CL:0000751"
+        },
+        {
+          "label": "starburst amacrine cell",
+          "ontology_term_id": "CL:0004232"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1038/s41588-025-02454-1 Dataset Version: https://datasets.cellxgene.cziscience.com/25f1558d-c1f8-49f8-addc-b778d8cbd4aa.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/4c6eaf5c-6d57-4c76-b1e9-60df8c655f1e",
+      "dataset_id": "d6505c89-c43d-4c28-8c4f-7351a5fd5528",
+      "dataset_version_id": "25f1558d-c1f8-49f8-addc-b778d8cbd4aa",
+      "default_embedding": "X_umap",
+      "development_stage": [
+        {
+          "label": "10-year-old stage",
+          "ontology_term_id": "HsapDv:0000104"
+        },
+        {
+          "label": "11-year-old stage",
+          "ontology_term_id": "HsapDv:0000105"
+        },
+        {
+          "label": "15-year-old stage",
+          "ontology_term_id": "HsapDv:0000109"
+        },
+        {
+          "label": "16-year-old stage",
+          "ontology_term_id": "HsapDv:0000110"
+        },
+        {
+          "label": "17-year-old stage",
+          "ontology_term_id": "HsapDv:0000111"
+        },
+        {
+          "label": "18-year-old stage",
+          "ontology_term_id": "HsapDv:0000112"
+        },
+        {
+          "label": "21-year-old stage",
+          "ontology_term_id": "HsapDv:0000115"
+        },
+        {
+          "label": "24-year-old stage",
+          "ontology_term_id": "HsapDv:0000118"
+        },
+        {
+          "label": "25-year-old stage",
+          "ontology_term_id": "HsapDv:0000119"
+        },
+        {
+          "label": "27-year-old stage",
+          "ontology_term_id": "HsapDv:0000121"
+        },
+        {
+          "label": "3-year-old stage",
+          "ontology_term_id": "HsapDv:0000097"
+        },
+        {
+          "label": "30-year-old stage",
+          "ontology_term_id": "HsapDv:0000124"
+        },
+        {
+          "label": "32-year-old stage",
+          "ontology_term_id": "HsapDv:0000126"
+        },
+        {
+          "label": "34-year-old stage",
+          "ontology_term_id": "HsapDv:0000128"
+        },
+        {
+          "label": "41-year-old stage",
+          "ontology_term_id": "HsapDv:0000135"
+        },
+        {
+          "label": "43-year-old stage",
+          "ontology_term_id": "HsapDv:0000137"
+        },
+        {
+          "label": "46-year-old stage",
+          "ontology_term_id": "HsapDv:0000140"
+        },
+        {
+          "label": "47-year-old stage",
+          "ontology_term_id": "HsapDv:0000141"
+        },
+        {
+          "label": "50-year-old stage",
+          "ontology_term_id": "HsapDv:0000144"
+        },
+        {
+          "label": "52-year-old stage",
+          "ontology_term_id": "HsapDv:0000146"
+        },
+        {
+          "label": "53-year-old stage",
+          "ontology_term_id": "HsapDv:0000147"
+        },
+        {
+          "label": "58-year-old stage",
+          "ontology_term_id": "HsapDv:0000152"
+        },
+        {
+          "label": "60-79 year-old stage",
+          "ontology_term_id": "HsapDv:0000272"
+        },
+        {
+          "label": "60-year-old stage",
+          "ontology_term_id": "HsapDv:0000154"
+        },
+        {
+          "label": "62-year-old stage",
+          "ontology_term_id": "HsapDv:0000156"
+        },
+        {
+          "label": "63-year-old stage",
+          "ontology_term_id": "HsapDv:0000157"
+        },
+        {
+          "label": "64-year-old stage",
+          "ontology_term_id": "HsapDv:0000158"
+        },
+        {
+          "label": "65-year-old stage",
+          "ontology_term_id": "HsapDv:0000159"
+        },
+        {
+          "label": "66-year-old stage",
+          "ontology_term_id": "HsapDv:0000160"
+        },
+        {
+          "label": "67-year-old stage",
+          "ontology_term_id": "HsapDv:0000161"
+        },
+        {
+          "label": "68-year-old stage",
+          "ontology_term_id": "HsapDv:0000162"
+        },
+        {
+          "label": "69-year-old stage",
+          "ontology_term_id": "HsapDv:0000163"
+        },
+        {
+          "label": "70-year-old stage",
+          "ontology_term_id": "HsapDv:0000164"
+        },
+        {
+          "label": "71-year-old stage",
+          "ontology_term_id": "HsapDv:0000165"
+        },
+        {
+          "label": "72-year-old stage",
+          "ontology_term_id": "HsapDv:0000166"
+        },
+        {
+          "label": "73-year-old stage",
+          "ontology_term_id": "HsapDv:0000167"
+        },
+        {
+          "label": "74-year-old stage",
+          "ontology_term_id": "HsapDv:0000168"
+        },
+        {
+          "label": "75-year-old stage",
+          "ontology_term_id": "HsapDv:0000169"
+        },
+        {
+          "label": "76-year-old stage",
+          "ontology_term_id": "HsapDv:0000170"
+        },
+        {
+          "label": "77-year-old stage",
+          "ontology_term_id": "HsapDv:0000171"
+        },
+        {
+          "label": "78-year-old stage",
+          "ontology_term_id": "HsapDv:0000172"
+        },
+        {
+          "label": "80 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000095"
+        },
+        {
+          "label": "80-year-old stage",
+          "ontology_term_id": "HsapDv:0000206"
+        },
+        {
+          "label": "81-year-old stage",
+          "ontology_term_id": "HsapDv:0000207"
+        },
+        {
+          "label": "82-year-old stage",
+          "ontology_term_id": "HsapDv:0000208"
+        },
+        {
+          "label": "83-year-old stage",
+          "ontology_term_id": "HsapDv:0000209"
+        },
+        {
+          "label": "84-year-old stage",
+          "ontology_term_id": "HsapDv:0000210"
+        },
+        {
+          "label": "85-year-old stage",
+          "ontology_term_id": "HsapDv:0000211"
+        },
+        {
+          "label": "86-year-old stage",
+          "ontology_term_id": "HsapDv:0000212"
+        },
+        {
+          "label": "88-year-old stage",
+          "ontology_term_id": "HsapDv:0000214"
+        },
+        {
+          "label": "90 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000274"
+        },
+        {
+          "label": "eighth decade stage",
+          "ontology_term_id": "HsapDv:0000242"
+        },
+        {
+          "label": "late adult stage",
+          "ontology_term_id": "HsapDv:0000227"
+        },
+        {
+          "label": "prime adult stage",
+          "ontology_term_id": "HsapDv:0000226"
+        }
+      ],
+      "disease": [
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "Chen_19_D003",
+        "19-D005",
+        "Chen_19_D006",
+        "Chen_19_D007",
+        "19-D008",
+        "19-D009",
+        "Chen_19_D010",
+        "Chen_19_D011",
+        "Chen_19_D019",
+        "Chen_D005_13",
+        "Chen_D009_13",
+        "Chen_D013_13",
+        "pooled [Chen_D018_13,Chen_D017_13]",
+        "pooled [Chen_D018_13,Chen_D026_13]",
+        "Chen_D026_13",
+        "Chen_D019_13",
+        "Chen_D021_13",
+        "Chen_D027_13",
+        "Chen_D028_13",
+        "Chen_D030_13",
+        "Chen_17_D013",
+        "Chen_19_D013",
+        "Chen_19_D014",
+        "Chen_19_D015",
+        "Chen_19_D016",
+        "Chen_D017_13",
+        "Chen_D018_13",
+        "Chen_19_D017",
+        "A23_5566_Atlanta",
+        "BCM_22_0047",
+        "BCM_22_0183",
+        "pooled [BCM_22_0200,BCM_23_0491]",
+        "BCM_22_0200",
+        "BCM_22_0389",
+        "BCM_22_0395",
+        "BCM_22_0434",
+        "BCM_22_0458",
+        "BCM_22_0500",
+        "BCM_22_0769",
+        "BCM_22_0784",
+        "BCM_22_0849",
+        "BCM_22_0867",
+        "BCM_22_0890",
+        "BCM_22_0896",
+        "BCM_23_0131",
+        "BCM_23_0231",
+        "BCM_23_0313",
+        "BCM_23_0334",
+        "BCM_23_0358",
+        "BCM_23_0574",
+        "BCM_23_0578",
+        "BCM_23_0792",
+        "BCM_23_1340",
+        "BCM_23_1401",
+        "BCM_23_1448",
+        "BCM_23_1556",
+        "BCM_24_0080",
+        "MMD_22_02443",
+        "MMD_22_13066",
+        "MMD_22_14307",
+        "MMD_22_16477",
+        "MMD_22_16608",
+        "MMD_22_16860",
+        "MMD_22_17017",
+        "MMD_22_17464",
+        "MMD_22_17939",
+        "MMD_22_18633",
+        "MMD_22_20357",
+        "MMD_22_20137",
+        "MMD_22_20372",
+        "MMD_22_21878",
+        "MMD_22_25357",
+        "MMD_22_32888",
+        "MMD_22_33472",
+        "MMD_22_34032",
+        "MMD_22_37089",
+        "MMD_22_37117",
+        "MMD_22_38029",
+        "MMD_22_38453",
+        "MMD_23_01524",
+        "MMD_23_02177",
+        "MMD_23_16055",
+        "MMD_23_17738",
+        "MMD_23_20181",
+        "MMD_23_21623",
+        "MMD_23_21999",
+        "MMD_23_22486",
+        "Hu0326",
+        "Hu0355",
+        "Hu0563",
+        "Hu0564",
+        "sanes2022_Hu082219",
+        "Hu0869",
+        "Hu0887",
+        "Hu1059",
+        "Hu0218",
+        "pooled [Hu0220,Hu0235]",
+        "Hu0220",
+        "Hu0235",
+        "pooled [0150-19,0194-19,0978-18]",
+        "pooled [1017-17,1053-17,1005-17]",
+        "pooled [Hu0564,Hu1059]",
+        "pooled [Hu0326,Hu0355]",
+        "pooled [Hu0869,Hu0887]"
+      ],
+      "embeddings": [
+        "X_scVI",
+        "X_umap"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/d6505c89-c43d-4c28-8c4f-7351a5fd5528.cxg/",
+      "feature_biotype": [
+        "gene"
+      ],
+      "feature_count": 35475,
+      "feature_reference": [
+        "NCBITaxon:9606"
+      ],
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        true,
+        false
+      ],
+      "mean_genes_per_cell": 2596.757442616553,
+      "organism": [
+        {
+          "label": "Homo sapiens",
+          "ontology_term_id": "NCBITaxon:9606"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 2907910,
+      "published_at": "2023-11-10T21:54:15+00:00",
+      "raw_data_location": "raw.X",
+      "revised_at": "2026-06-11T16:53:37+00:00",
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "African American",
+          "ontology_term_id": "HANCESTRO:0568"
+        },
+        {
+          "label": "Asian",
+          "ontology_term_id": "HANCESTRO:0847"
+        },
+        {
+          "label": "European American",
+          "ontology_term_id": "HANCESTRO:0590"
+        },
+        {
+          "label": "Hispanic or Latin",
+          "ontology_term_id": "HANCESTRO:0612"
+        },
+        {
+          "label": "Indian",
+          "ontology_term_id": "HANCESTRO:0487"
+        },
+        {
+          "label": "South Asian",
+          "ontology_term_id": "HANCESTRO:0848"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "sex": [
+        {
+          "label": "female",
+          "ontology_term_id": "PATO:0000383"
+        },
+        {
+          "label": "male",
+          "ontology_term_id": "PATO:0000384"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "nucleus"
+      ],
+      "tissue": [
+        {
+          "label": "fovea centralis",
+          "ontology_term_id": "UBERON:0001786",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea",
+          "ontology_term_id": "UBERON:0000053",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea proper",
+          "ontology_term_id": "UBERON:0002822",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "peripheral region of retina",
+          "ontology_term_id": "UBERON:0013682",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "snRNA-seq of human retina - all cells",
+      "tombstone": false,
+      "x_approximate_distribution": null
+    },
+    {
+      "assay": [
+        {
+          "label": "10x 3' v2",
+          "ontology_term_id": "EFO:0009899"
+        },
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 2539032977,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/9847a0f8-18a0-411c-bff9-827a607e7fcf.h5ad"
+        }
+      ],
+      "cell_count": 265767,
+      "cell_type": [
+        {
+          "label": "GABAergic amacrine cell",
+          "ontology_term_id": "CL:4030027"
+        },
+        {
+          "label": "H1 horizontal cell",
+          "ontology_term_id": "CL:0004217"
+        },
+        {
+          "label": "H2 horizontal cell",
+          "ontology_term_id": "CL:0004218"
+        },
+        {
+          "label": "Mueller cell",
+          "ontology_term_id": "CL:0000636"
+        },
+        {
+          "label": "S cone cell",
+          "ontology_term_id": "CL:0003050"
+        },
+        {
+          "label": "amacrine cell",
+          "ontology_term_id": "CL:0000561"
+        },
+        {
+          "label": "astrocyte",
+          "ontology_term_id": "CL:0000127"
+        },
+        {
+          "label": "glycinergic amacrine cell",
+          "ontology_term_id": "CL:4030028"
+        },
+        {
+          "label": "microglial cell",
+          "ontology_term_id": "CL:0000129"
+        },
+        {
+          "label": "midget ganglion cell of retina",
+          "ontology_term_id": "CL:4023188"
+        },
+        {
+          "label": "parasol ganglion cell of retina",
+          "ontology_term_id": "CL:4023189"
+        },
+        {
+          "label": "retinal bipolar neuron",
+          "ontology_term_id": "CL:0000748"
+        },
+        {
+          "label": "retinal cone cell",
+          "ontology_term_id": "CL:0000573"
+        },
+        {
+          "label": "retinal ganglion cell",
+          "ontology_term_id": "CL:0000740"
+        },
+        {
+          "label": "retinal pigment epithelial cell",
+          "ontology_term_id": "CL:0002586"
+        },
+        {
+          "label": "retinal rod cell",
+          "ontology_term_id": "CL:0000604"
+        },
+        {
+          "label": "rod bipolar cell",
+          "ontology_term_id": "CL:0000751"
+        },
+        {
+          "label": "starburst amacrine cell",
+          "ontology_term_id": "CL:0004232"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1038/s41588-025-02454-1 Dataset Version: https://datasets.cellxgene.cziscience.com/9847a0f8-18a0-411c-bff9-827a607e7fcf.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/4c6eaf5c-6d57-4c76-b1e9-60df8c655f1e",
+      "dataset_id": "be41a86a-b606-4b1c-8055-32f334898775",
+      "dataset_version_id": "9847a0f8-18a0-411c-bff9-827a607e7fcf",
+      "default_embedding": "X_umap",
+      "development_stage": [
+        {
+          "label": "42-year-old stage",
+          "ontology_term_id": "HsapDv:0000136"
+        },
+        {
+          "label": "53-year-old stage",
+          "ontology_term_id": "HsapDv:0000147"
+        },
+        {
+          "label": "54-year-old stage",
+          "ontology_term_id": "HsapDv:0000148"
+        },
+        {
+          "label": "60-year-old stage",
+          "ontology_term_id": "HsapDv:0000154"
+        },
+        {
+          "label": "64-year-old stage",
+          "ontology_term_id": "HsapDv:0000158"
+        },
+        {
+          "label": "65-year-old stage",
+          "ontology_term_id": "HsapDv:0000159"
+        },
+        {
+          "label": "68-year-old stage",
+          "ontology_term_id": "HsapDv:0000162"
+        },
+        {
+          "label": "69-year-old stage",
+          "ontology_term_id": "HsapDv:0000163"
+        },
+        {
+          "label": "71-year-old stage",
+          "ontology_term_id": "HsapDv:0000165"
+        },
+        {
+          "label": "74-year-old stage",
+          "ontology_term_id": "HsapDv:0000168"
+        },
+        {
+          "label": "78-year-old stage",
+          "ontology_term_id": "HsapDv:0000172"
+        },
+        {
+          "label": "80-year-old stage",
+          "ontology_term_id": "HsapDv:0000206"
+        },
+        {
+          "label": "82-year-old stage",
+          "ontology_term_id": "HsapDv:0000208"
+        },
+        {
+          "label": "86-year-old stage",
+          "ontology_term_id": "HsapDv:0000212"
+        },
+        {
+          "label": "89-year-old stage",
+          "ontology_term_id": "HsapDv:0000215"
+        },
+        {
+          "label": "adult stage",
+          "ontology_term_id": "HsapDv:0000258"
+        }
+      ],
+      "disease": [
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "donor1-hafler",
+        "donor2-hafler",
+        "donor3-hafler",
+        "R-00646_01",
+        "R-00646_03",
+        "R-00646_04",
+        "R-00646_07",
+        "Hu11",
+        "H1",
+        "Pt2",
+        "H3",
+        "H4",
+        "H5",
+        "H9",
+        "donor1-scheetz",
+        "donor2-scheetz",
+        "donor3-scheetz",
+        "17-010",
+        "SC",
+        "17-011"
+      ],
+      "embeddings": [
+        "X_scVI",
+        "X_umap"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/be41a86a-b606-4b1c-8055-32f334898775.cxg/",
+      "feature_biotype": [
+        "gene"
+      ],
+      "feature_count": 35475,
+      "feature_reference": [
+        "NCBITaxon:9606"
+      ],
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        true,
+        false
+      ],
+      "mean_genes_per_cell": 2033.8625412485374,
+      "organism": [
+        {
+          "label": "Homo sapiens",
+          "ontology_term_id": "NCBITaxon:9606"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 6061,
+      "published_at": "2023-12-07T20:19:40+00:00",
+      "raw_data_location": "raw.X",
+      "revised_at": "2026-06-11T16:53:37+00:00",
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "European American",
+          "ontology_term_id": "HANCESTRO:0590"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "sex": [
+        {
+          "label": "female",
+          "ontology_term_id": "PATO:0000383"
+        },
+        {
+          "label": "male",
+          "ontology_term_id": "PATO:0000384"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "cell"
+      ],
+      "tissue": [
+        {
+          "label": "chorioretinal region",
+          "ontology_term_id": "UBERON:0019207",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "fovea centralis",
+          "ontology_term_id": "UBERON:0001786",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea proper",
+          "ontology_term_id": "UBERON:0002822",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "peripheral region of retina",
+          "ontology_term_id": "UBERON:0013682",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "retinal neural layer",
+          "ontology_term_id": "UBERON:0003902",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "scRNA-seq of human retina - all cells",
+      "tombstone": false,
+      "x_approximate_distribution": null
+    },
+    {
+      "assay": [
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 6990850926,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/6c9f72ef-bc79-4a98-a323-d26252cf5dab.h5ad"
+        }
+      ],
+      "cell_count": 691008,
+      "cell_type": [
+        {
+          "label": "OFFx cell",
+          "ontology_term_id": "CL:4033036"
+        },
+        {
+          "label": "ON-blue cone bipolar cell",
+          "ontology_term_id": "CL:4033019"
+        },
+        {
+          "label": "diffuse bipolar 1 cell",
+          "ontology_term_id": "CL:4033027"
+        },
+        {
+          "label": "diffuse bipolar 2 cell",
+          "ontology_term_id": "CL:4033028"
+        },
+        {
+          "label": "diffuse bipolar 3a cell",
+          "ontology_term_id": "CL:4033029"
+        },
+        {
+          "label": "diffuse bipolar 3b cell",
+          "ontology_term_id": "CL:4033030"
+        },
+        {
+          "label": "diffuse bipolar 4 cell",
+          "ontology_term_id": "CL:4033031"
+        },
+        {
+          "label": "diffuse bipolar 6 cell",
+          "ontology_term_id": "CL:4033032"
+        },
+        {
+          "label": "flat midget bipolar cell",
+          "ontology_term_id": "CL:4033033"
+        },
+        {
+          "label": "giant bipolar cell",
+          "ontology_term_id": "CL:4033035"
+        },
+        {
+          "label": "invaginating midget bipolar cell",
+          "ontology_term_id": "CL:4033034"
+        },
+        {
+          "label": "retinal bipolar neuron",
+          "ontology_term_id": "CL:0000748"
+        },
+        {
+          "label": "rod bipolar cell",
+          "ontology_term_id": "CL:0000751"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1038/s41588-025-02454-1 Dataset Version: https://datasets.cellxgene.cziscience.com/6c9f72ef-bc79-4a98-a323-d26252cf5dab.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/4c6eaf5c-6d57-4c76-b1e9-60df8c655f1e",
+      "dataset_id": "975fd2d3-1982-47a1-9ef7-8cde3345f219",
+      "dataset_version_id": "6c9f72ef-bc79-4a98-a323-d26252cf5dab",
+      "default_embedding": "X_umap",
+      "development_stage": [
+        {
+          "label": "10-year-old stage",
+          "ontology_term_id": "HsapDv:0000104"
+        },
+        {
+          "label": "11-year-old stage",
+          "ontology_term_id": "HsapDv:0000105"
+        },
+        {
+          "label": "15-year-old stage",
+          "ontology_term_id": "HsapDv:0000109"
+        },
+        {
+          "label": "16-year-old stage",
+          "ontology_term_id": "HsapDv:0000110"
+        },
+        {
+          "label": "17-year-old stage",
+          "ontology_term_id": "HsapDv:0000111"
+        },
+        {
+          "label": "18-year-old stage",
+          "ontology_term_id": "HsapDv:0000112"
+        },
+        {
+          "label": "21-year-old stage",
+          "ontology_term_id": "HsapDv:0000115"
+        },
+        {
+          "label": "24-year-old stage",
+          "ontology_term_id": "HsapDv:0000118"
+        },
+        {
+          "label": "25-year-old stage",
+          "ontology_term_id": "HsapDv:0000119"
+        },
+        {
+          "label": "27-year-old stage",
+          "ontology_term_id": "HsapDv:0000121"
+        },
+        {
+          "label": "3-year-old stage",
+          "ontology_term_id": "HsapDv:0000097"
+        },
+        {
+          "label": "30-year-old stage",
+          "ontology_term_id": "HsapDv:0000124"
+        },
+        {
+          "label": "32-year-old stage",
+          "ontology_term_id": "HsapDv:0000126"
+        },
+        {
+          "label": "34-year-old stage",
+          "ontology_term_id": "HsapDv:0000128"
+        },
+        {
+          "label": "41-year-old stage",
+          "ontology_term_id": "HsapDv:0000135"
+        },
+        {
+          "label": "43-year-old stage",
+          "ontology_term_id": "HsapDv:0000137"
+        },
+        {
+          "label": "46-year-old stage",
+          "ontology_term_id": "HsapDv:0000140"
+        },
+        {
+          "label": "47-year-old stage",
+          "ontology_term_id": "HsapDv:0000141"
+        },
+        {
+          "label": "50-year-old stage",
+          "ontology_term_id": "HsapDv:0000144"
+        },
+        {
+          "label": "52-year-old stage",
+          "ontology_term_id": "HsapDv:0000146"
+        },
+        {
+          "label": "53-year-old stage",
+          "ontology_term_id": "HsapDv:0000147"
+        },
+        {
+          "label": "58-year-old stage",
+          "ontology_term_id": "HsapDv:0000152"
+        },
+        {
+          "label": "60-79 year-old stage",
+          "ontology_term_id": "HsapDv:0000272"
+        },
+        {
+          "label": "60-year-old stage",
+          "ontology_term_id": "HsapDv:0000154"
+        },
+        {
+          "label": "62-year-old stage",
+          "ontology_term_id": "HsapDv:0000156"
+        },
+        {
+          "label": "63-year-old stage",
+          "ontology_term_id": "HsapDv:0000157"
+        },
+        {
+          "label": "64-year-old stage",
+          "ontology_term_id": "HsapDv:0000158"
+        },
+        {
+          "label": "65-year-old stage",
+          "ontology_term_id": "HsapDv:0000159"
+        },
+        {
+          "label": "66-year-old stage",
+          "ontology_term_id": "HsapDv:0000160"
+        },
+        {
+          "label": "67-year-old stage",
+          "ontology_term_id": "HsapDv:0000161"
+        },
+        {
+          "label": "68-year-old stage",
+          "ontology_term_id": "HsapDv:0000162"
+        },
+        {
+          "label": "69-year-old stage",
+          "ontology_term_id": "HsapDv:0000163"
+        },
+        {
+          "label": "70-year-old stage",
+          "ontology_term_id": "HsapDv:0000164"
+        },
+        {
+          "label": "71-year-old stage",
+          "ontology_term_id": "HsapDv:0000165"
+        },
+        {
+          "label": "72-year-old stage",
+          "ontology_term_id": "HsapDv:0000166"
+        },
+        {
+          "label": "73-year-old stage",
+          "ontology_term_id": "HsapDv:0000167"
+        },
+        {
+          "label": "74-year-old stage",
+          "ontology_term_id": "HsapDv:0000168"
+        },
+        {
+          "label": "75-year-old stage",
+          "ontology_term_id": "HsapDv:0000169"
+        },
+        {
+          "label": "76-year-old stage",
+          "ontology_term_id": "HsapDv:0000170"
+        },
+        {
+          "label": "77-year-old stage",
+          "ontology_term_id": "HsapDv:0000171"
+        },
+        {
+          "label": "78-year-old stage",
+          "ontology_term_id": "HsapDv:0000172"
+        },
+        {
+          "label": "80 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000095"
+        },
+        {
+          "label": "80-year-old stage",
+          "ontology_term_id": "HsapDv:0000206"
+        },
+        {
+          "label": "81-year-old stage",
+          "ontology_term_id": "HsapDv:0000207"
+        },
+        {
+          "label": "82-year-old stage",
+          "ontology_term_id": "HsapDv:0000208"
+        },
+        {
+          "label": "83-year-old stage",
+          "ontology_term_id": "HsapDv:0000209"
+        },
+        {
+          "label": "84-year-old stage",
+          "ontology_term_id": "HsapDv:0000210"
+        },
+        {
+          "label": "85-year-old stage",
+          "ontology_term_id": "HsapDv:0000211"
+        },
+        {
+          "label": "86-year-old stage",
+          "ontology_term_id": "HsapDv:0000212"
+        },
+        {
+          "label": "88-year-old stage",
+          "ontology_term_id": "HsapDv:0000214"
+        },
+        {
+          "label": "90 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000274"
+        },
+        {
+          "label": "eighth decade stage",
+          "ontology_term_id": "HsapDv:0000242"
+        },
+        {
+          "label": "late adult stage",
+          "ontology_term_id": "HsapDv:0000227"
+        },
+        {
+          "label": "prime adult stage",
+          "ontology_term_id": "HsapDv:0000226"
+        }
+      ],
+      "disease": [
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "Chen_19_D003",
+        "19-D005",
+        "Chen_19_D006",
+        "Chen_19_D007",
+        "19-D008",
+        "19-D009",
+        "Chen_19_D010",
+        "Chen_19_D011",
+        "Chen_19_D019",
+        "Chen_D005_13",
+        "Chen_D009_13",
+        "Chen_D013_13",
+        "pooled [Chen_D018_13,Chen_D017_13]",
+        "pooled [Chen_D018_13,Chen_D026_13]",
+        "Chen_D026_13",
+        "Chen_D019_13",
+        "Chen_D021_13",
+        "Chen_D027_13",
+        "Chen_D028_13",
+        "Chen_D030_13",
+        "Chen_17_D013",
+        "Chen_19_D013",
+        "Chen_19_D014",
+        "Chen_19_D015",
+        "Chen_19_D016",
+        "Chen_D017_13",
+        "Chen_D018_13",
+        "Chen_19_D017",
+        "A23_5566_Atlanta",
+        "BCM_22_0047",
+        "BCM_22_0183",
+        "pooled [BCM_22_0200,BCM_23_0491]",
+        "BCM_22_0200",
+        "BCM_22_0389",
+        "BCM_22_0395",
+        "BCM_22_0434",
+        "BCM_22_0458",
+        "BCM_22_0500",
+        "BCM_22_0769",
+        "BCM_22_0784",
+        "BCM_22_0849",
+        "BCM_22_0867",
+        "BCM_22_0890",
+        "BCM_22_0896",
+        "BCM_23_0131",
+        "BCM_23_0231",
+        "BCM_23_0313",
+        "BCM_23_0334",
+        "BCM_23_0358",
+        "BCM_23_0574",
+        "BCM_23_0578",
+        "BCM_23_0792",
+        "BCM_23_1340",
+        "BCM_23_1401",
+        "BCM_23_1448",
+        "BCM_23_1556",
+        "BCM_24_0080",
+        "MMD_22_02443",
+        "MMD_22_13066",
+        "MMD_22_14307",
+        "MMD_22_16477",
+        "MMD_22_16608",
+        "MMD_22_16860",
+        "MMD_22_17017",
+        "MMD_22_17464",
+        "MMD_22_17939",
+        "MMD_22_18633",
+        "MMD_22_20357",
+        "MMD_22_20137",
+        "MMD_22_20372",
+        "MMD_22_21878",
+        "MMD_22_25357",
+        "MMD_22_32888",
+        "MMD_22_33472",
+        "MMD_22_34032",
+        "MMD_22_37089",
+        "MMD_22_37117",
+        "MMD_22_38029",
+        "MMD_22_38453",
+        "MMD_23_01524",
+        "MMD_23_02177",
+        "MMD_23_16055",
+        "MMD_23_17738",
+        "MMD_23_20181",
+        "MMD_23_21623",
+        "MMD_23_21999",
+        "MMD_23_22486",
+        "Hu0326",
+        "Hu0355",
+        "Hu0563",
+        "Hu0564",
+        "sanes2022_Hu082219",
+        "Hu0869",
+        "Hu0887",
+        "Hu1059",
+        "Hu0218",
+        "pooled [Hu0220,Hu0235]",
+        "Hu0220",
+        "Hu0235",
+        "pooled [0150-19,0194-19,0978-18]",
+        "pooled [1017-17,1053-17,1005-17]",
+        "pooled [Hu0564,Hu1059]",
+        "pooled [Hu0326,Hu0355]",
+        "pooled [Hu0869,Hu0887]"
+      ],
+      "embeddings": [
+        "X_scVI",
+        "X_umap"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/975fd2d3-1982-47a1-9ef7-8cde3345f219.cxg/",
+      "feature_biotype": [
+        "gene"
+      ],
+      "feature_count": 35475,
+      "feature_reference": [
+        "NCBITaxon:9606"
+      ],
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        false
+      ],
+      "mean_genes_per_cell": 2177.118913239789,
+      "organism": [
+        {
+          "label": "Homo sapiens",
+          "ontology_term_id": "NCBITaxon:9606"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 0,
+      "published_at": "2023-11-10T21:54:15+00:00",
+      "raw_data_location": "raw.X",
+      "revised_at": "2026-06-11T16:53:37+00:00",
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "African American",
+          "ontology_term_id": "HANCESTRO:0568"
+        },
+        {
+          "label": "Asian",
+          "ontology_term_id": "HANCESTRO:0847"
+        },
+        {
+          "label": "European American",
+          "ontology_term_id": "HANCESTRO:0590"
+        },
+        {
+          "label": "Hispanic or Latin",
+          "ontology_term_id": "HANCESTRO:0612"
+        },
+        {
+          "label": "Indian",
+          "ontology_term_id": "HANCESTRO:0487"
+        },
+        {
+          "label": "South Asian",
+          "ontology_term_id": "HANCESTRO:0848"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "sex": [
+        {
+          "label": "female",
+          "ontology_term_id": "PATO:0000383"
+        },
+        {
+          "label": "male",
+          "ontology_term_id": "PATO:0000384"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "nucleus"
+      ],
+      "tissue": [
+        {
+          "label": "fovea centralis",
+          "ontology_term_id": "UBERON:0001786",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea",
+          "ontology_term_id": "UBERON:0000053",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea proper",
+          "ontology_term_id": "UBERON:0002822",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "peripheral region of retina",
+          "ontology_term_id": "UBERON:0013682",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "snRNA-seq of human retina - bipolar cell subset",
+      "tombstone": false,
+      "x_approximate_distribution": null
+    },
+    {
+      "assay": [
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 7337437943,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/3a22048d-c63a-4117-9945-ccf96c063ac3.h5ad"
+        }
+      ],
+      "cell_count": 372816,
+      "cell_type": [
+        {
+          "label": "OFF midget ganglion cell",
+          "ontology_term_id": "CL:4033047"
+        },
+        {
+          "label": "OFF parasol ganglion cell",
+          "ontology_term_id": "CL:4033051"
+        },
+        {
+          "label": "ON midget ganglion cell",
+          "ontology_term_id": "CL:4033046"
+        },
+        {
+          "label": "ON parasol ganglion cell",
+          "ontology_term_id": "CL:4033052"
+        },
+        {
+          "label": "retinal ganglion cell",
+          "ontology_term_id": "CL:0000740"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1038/s41588-025-02454-1 Dataset Version: https://datasets.cellxgene.cziscience.com/3a22048d-c63a-4117-9945-ccf96c063ac3.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/4c6eaf5c-6d57-4c76-b1e9-60df8c655f1e",
+      "dataset_id": "95ce06a0-7de9-4ab2-bcd1-a6625f55e7e3",
+      "dataset_version_id": "3a22048d-c63a-4117-9945-ccf96c063ac3",
+      "default_embedding": "X_umap",
+      "development_stage": [
+        {
+          "label": "10-year-old stage",
+          "ontology_term_id": "HsapDv:0000104"
+        },
+        {
+          "label": "11-year-old stage",
+          "ontology_term_id": "HsapDv:0000105"
+        },
+        {
+          "label": "15-year-old stage",
+          "ontology_term_id": "HsapDv:0000109"
+        },
+        {
+          "label": "16-year-old stage",
+          "ontology_term_id": "HsapDv:0000110"
+        },
+        {
+          "label": "17-year-old stage",
+          "ontology_term_id": "HsapDv:0000111"
+        },
+        {
+          "label": "18-year-old stage",
+          "ontology_term_id": "HsapDv:0000112"
+        },
+        {
+          "label": "21-year-old stage",
+          "ontology_term_id": "HsapDv:0000115"
+        },
+        {
+          "label": "24-year-old stage",
+          "ontology_term_id": "HsapDv:0000118"
+        },
+        {
+          "label": "25-year-old stage",
+          "ontology_term_id": "HsapDv:0000119"
+        },
+        {
+          "label": "27-year-old stage",
+          "ontology_term_id": "HsapDv:0000121"
+        },
+        {
+          "label": "3-year-old stage",
+          "ontology_term_id": "HsapDv:0000097"
+        },
+        {
+          "label": "30-year-old stage",
+          "ontology_term_id": "HsapDv:0000124"
+        },
+        {
+          "label": "32-year-old stage",
+          "ontology_term_id": "HsapDv:0000126"
+        },
+        {
+          "label": "34-year-old stage",
+          "ontology_term_id": "HsapDv:0000128"
+        },
+        {
+          "label": "41-year-old stage",
+          "ontology_term_id": "HsapDv:0000135"
+        },
+        {
+          "label": "43-year-old stage",
+          "ontology_term_id": "HsapDv:0000137"
+        },
+        {
+          "label": "46-year-old stage",
+          "ontology_term_id": "HsapDv:0000140"
+        },
+        {
+          "label": "47-year-old stage",
+          "ontology_term_id": "HsapDv:0000141"
+        },
+        {
+          "label": "50-year-old stage",
+          "ontology_term_id": "HsapDv:0000144"
+        },
+        {
+          "label": "52-year-old stage",
+          "ontology_term_id": "HsapDv:0000146"
+        },
+        {
+          "label": "53-year-old stage",
+          "ontology_term_id": "HsapDv:0000147"
+        },
+        {
+          "label": "58-year-old stage",
+          "ontology_term_id": "HsapDv:0000152"
+        },
+        {
+          "label": "60-79 year-old stage",
+          "ontology_term_id": "HsapDv:0000272"
+        },
+        {
+          "label": "60-year-old stage",
+          "ontology_term_id": "HsapDv:0000154"
+        },
+        {
+          "label": "62-year-old stage",
+          "ontology_term_id": "HsapDv:0000156"
+        },
+        {
+          "label": "63-year-old stage",
+          "ontology_term_id": "HsapDv:0000157"
+        },
+        {
+          "label": "64-year-old stage",
+          "ontology_term_id": "HsapDv:0000158"
+        },
+        {
+          "label": "65-year-old stage",
+          "ontology_term_id": "HsapDv:0000159"
+        },
+        {
+          "label": "66-year-old stage",
+          "ontology_term_id": "HsapDv:0000160"
+        },
+        {
+          "label": "67-year-old stage",
+          "ontology_term_id": "HsapDv:0000161"
+        },
+        {
+          "label": "68-year-old stage",
+          "ontology_term_id": "HsapDv:0000162"
+        },
+        {
+          "label": "69-year-old stage",
+          "ontology_term_id": "HsapDv:0000163"
+        },
+        {
+          "label": "70-year-old stage",
+          "ontology_term_id": "HsapDv:0000164"
+        },
+        {
+          "label": "71-year-old stage",
+          "ontology_term_id": "HsapDv:0000165"
+        },
+        {
+          "label": "72-year-old stage",
+          "ontology_term_id": "HsapDv:0000166"
+        },
+        {
+          "label": "73-year-old stage",
+          "ontology_term_id": "HsapDv:0000167"
+        },
+        {
+          "label": "74-year-old stage",
+          "ontology_term_id": "HsapDv:0000168"
+        },
+        {
+          "label": "75-year-old stage",
+          "ontology_term_id": "HsapDv:0000169"
+        },
+        {
+          "label": "76-year-old stage",
+          "ontology_term_id": "HsapDv:0000170"
+        },
+        {
+          "label": "77-year-old stage",
+          "ontology_term_id": "HsapDv:0000171"
+        },
+        {
+          "label": "78-year-old stage",
+          "ontology_term_id": "HsapDv:0000172"
+        },
+        {
+          "label": "80 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000095"
+        },
+        {
+          "label": "80-year-old stage",
+          "ontology_term_id": "HsapDv:0000206"
+        },
+        {
+          "label": "81-year-old stage",
+          "ontology_term_id": "HsapDv:0000207"
+        },
+        {
+          "label": "82-year-old stage",
+          "ontology_term_id": "HsapDv:0000208"
+        },
+        {
+          "label": "83-year-old stage",
+          "ontology_term_id": "HsapDv:0000209"
+        },
+        {
+          "label": "84-year-old stage",
+          "ontology_term_id": "HsapDv:0000210"
+        },
+        {
+          "label": "85-year-old stage",
+          "ontology_term_id": "HsapDv:0000211"
+        },
+        {
+          "label": "86-year-old stage",
+          "ontology_term_id": "HsapDv:0000212"
+        },
+        {
+          "label": "88-year-old stage",
+          "ontology_term_id": "HsapDv:0000214"
+        },
+        {
+          "label": "90 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000274"
+        },
+        {
+          "label": "eighth decade stage",
+          "ontology_term_id": "HsapDv:0000242"
+        },
+        {
+          "label": "late adult stage",
+          "ontology_term_id": "HsapDv:0000227"
+        },
+        {
+          "label": "prime adult stage",
+          "ontology_term_id": "HsapDv:0000226"
+        }
+      ],
+      "disease": [
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "Chen_19_D003",
+        "19-D005",
+        "Chen_19_D006",
+        "Chen_19_D007",
+        "19-D008",
+        "19-D009",
+        "Chen_19_D010",
+        "Chen_19_D011",
+        "Chen_19_D019",
+        "Chen_D005_13",
+        "Chen_D009_13",
+        "Chen_D013_13",
+        "pooled [Chen_D018_13,Chen_D017_13]",
+        "pooled [Chen_D018_13,Chen_D026_13]",
+        "Chen_D026_13",
+        "Chen_D019_13",
+        "Chen_D021_13",
+        "Chen_D027_13",
+        "Chen_D028_13",
+        "Chen_D030_13",
+        "Chen_17_D013",
+        "Chen_19_D013",
+        "Chen_19_D014",
+        "Chen_19_D015",
+        "Chen_19_D016",
+        "Chen_D017_13",
+        "Chen_D018_13",
+        "Chen_19_D017",
+        "A23_5566_Atlanta",
+        "BCM_22_0047",
+        "BCM_22_0183",
+        "pooled [BCM_22_0200,BCM_23_0491]",
+        "BCM_22_0200",
+        "BCM_22_0389",
+        "BCM_22_0395",
+        "BCM_22_0434",
+        "BCM_22_0458",
+        "BCM_22_0500",
+        "BCM_22_0769",
+        "BCM_22_0784",
+        "BCM_22_0849",
+        "BCM_22_0867",
+        "BCM_22_0890",
+        "BCM_22_0896",
+        "BCM_23_0131",
+        "BCM_23_0231",
+        "BCM_23_0313",
+        "BCM_23_0334",
+        "BCM_23_0358",
+        "BCM_23_0574",
+        "BCM_23_0578",
+        "BCM_23_0792",
+        "BCM_23_1340",
+        "BCM_23_1401",
+        "BCM_23_1448",
+        "BCM_23_1556",
+        "BCM_24_0080",
+        "MMD_22_02443",
+        "MMD_22_13066",
+        "MMD_22_14307",
+        "MMD_22_16477",
+        "MMD_22_16608",
+        "MMD_22_16860",
+        "MMD_22_17017",
+        "MMD_22_17464",
+        "MMD_22_17939",
+        "MMD_22_18633",
+        "MMD_22_20357",
+        "MMD_22_20137",
+        "MMD_22_20372",
+        "MMD_22_21878",
+        "MMD_22_25357",
+        "MMD_22_32888",
+        "MMD_22_33472",
+        "MMD_22_34032",
+        "MMD_22_37089",
+        "MMD_22_37117",
+        "MMD_22_38029",
+        "MMD_22_38453",
+        "MMD_23_01524",
+        "MMD_23_02177",
+        "MMD_23_16055",
+        "MMD_23_17738",
+        "MMD_23_21623",
+        "MMD_23_21999",
+        "MMD_23_22486",
+        "Hu0326",
+        "Hu0355",
+        "Hu0563",
+        "Hu0564",
+        "sanes2022_Hu082219",
+        "Hu0869",
+        "Hu0887",
+        "Hu1059",
+        "Hu0218",
+        "pooled [Hu0220,Hu0235]",
+        "Hu0220",
+        "Hu0235",
+        "pooled [0150-19,0194-19,0978-18]",
+        "pooled [1017-17,1053-17,1005-17]",
+        "pooled [Hu0564,Hu1059]",
+        "pooled [Hu0326,Hu0355]",
+        "pooled [Hu0869,Hu0887]"
+      ],
+      "embeddings": [
+        "X_scVI",
+        "X_umap"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/95ce06a0-7de9-4ab2-bcd1-a6625f55e7e3.cxg/",
+      "feature_biotype": [
+        "gene"
+      ],
+      "feature_count": 35475,
+      "feature_reference": [
+        "NCBITaxon:9606"
+      ],
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        false
+      ],
+      "mean_genes_per_cell": 4409.9533576885115,
+      "organism": [
+        {
+          "label": "Homo sapiens",
+          "ontology_term_id": "NCBITaxon:9606"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 0,
+      "published_at": "2023-11-10T21:54:15+00:00",
+      "raw_data_location": "raw.X",
+      "revised_at": "2026-06-11T16:53:37+00:00",
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "African American",
+          "ontology_term_id": "HANCESTRO:0568"
+        },
+        {
+          "label": "Asian",
+          "ontology_term_id": "HANCESTRO:0847"
+        },
+        {
+          "label": "European American",
+          "ontology_term_id": "HANCESTRO:0590"
+        },
+        {
+          "label": "Hispanic or Latin",
+          "ontology_term_id": "HANCESTRO:0612"
+        },
+        {
+          "label": "Indian",
+          "ontology_term_id": "HANCESTRO:0487"
+        },
+        {
+          "label": "South Asian",
+          "ontology_term_id": "HANCESTRO:0848"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "sex": [
+        {
+          "label": "female",
+          "ontology_term_id": "PATO:0000383"
+        },
+        {
+          "label": "male",
+          "ontology_term_id": "PATO:0000384"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "nucleus"
+      ],
+      "tissue": [
+        {
+          "label": "fovea centralis",
+          "ontology_term_id": "UBERON:0001786",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea",
+          "ontology_term_id": "UBERON:0000053",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea proper",
+          "ontology_term_id": "UBERON:0002822",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "peripheral region of retina",
+          "ontology_term_id": "UBERON:0013682",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "snRNA-seq of human retina - retinal ganglion cell subset",
+      "tombstone": false,
+      "x_approximate_distribution": null
+    },
+    {
+      "assay": [
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 7758244648,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/7710a02a-55b2-4a81-a3d4-aba6b217386e.h5ad"
+        }
+      ],
+      "cell_count": 571579,
+      "cell_type": [
+        {
+          "label": "GABAergic amacrine cell",
+          "ontology_term_id": "CL:4030027"
+        },
+        {
+          "label": "amacrine cell",
+          "ontology_term_id": "CL:0000561"
+        },
+        {
+          "label": "glycinergic amacrine cell",
+          "ontology_term_id": "CL:4030028"
+        },
+        {
+          "label": "starburst amacrine cell",
+          "ontology_term_id": "CL:0004232"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1038/s41588-025-02454-1 Dataset Version: https://datasets.cellxgene.cziscience.com/7710a02a-55b2-4a81-a3d4-aba6b217386e.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/4c6eaf5c-6d57-4c76-b1e9-60df8c655f1e",
+      "dataset_id": "8c0a3574-b0ad-4e4f-b5d3-d1a743b00d4a",
+      "dataset_version_id": "7710a02a-55b2-4a81-a3d4-aba6b217386e",
+      "default_embedding": "X_umap",
+      "development_stage": [
+        {
+          "label": "10-year-old stage",
+          "ontology_term_id": "HsapDv:0000104"
+        },
+        {
+          "label": "11-year-old stage",
+          "ontology_term_id": "HsapDv:0000105"
+        },
+        {
+          "label": "15-year-old stage",
+          "ontology_term_id": "HsapDv:0000109"
+        },
+        {
+          "label": "16-year-old stage",
+          "ontology_term_id": "HsapDv:0000110"
+        },
+        {
+          "label": "17-year-old stage",
+          "ontology_term_id": "HsapDv:0000111"
+        },
+        {
+          "label": "18-year-old stage",
+          "ontology_term_id": "HsapDv:0000112"
+        },
+        {
+          "label": "21-year-old stage",
+          "ontology_term_id": "HsapDv:0000115"
+        },
+        {
+          "label": "24-year-old stage",
+          "ontology_term_id": "HsapDv:0000118"
+        },
+        {
+          "label": "25-year-old stage",
+          "ontology_term_id": "HsapDv:0000119"
+        },
+        {
+          "label": "27-year-old stage",
+          "ontology_term_id": "HsapDv:0000121"
+        },
+        {
+          "label": "3-year-old stage",
+          "ontology_term_id": "HsapDv:0000097"
+        },
+        {
+          "label": "30-year-old stage",
+          "ontology_term_id": "HsapDv:0000124"
+        },
+        {
+          "label": "32-year-old stage",
+          "ontology_term_id": "HsapDv:0000126"
+        },
+        {
+          "label": "34-year-old stage",
+          "ontology_term_id": "HsapDv:0000128"
+        },
+        {
+          "label": "41-year-old stage",
+          "ontology_term_id": "HsapDv:0000135"
+        },
+        {
+          "label": "43-year-old stage",
+          "ontology_term_id": "HsapDv:0000137"
+        },
+        {
+          "label": "46-year-old stage",
+          "ontology_term_id": "HsapDv:0000140"
+        },
+        {
+          "label": "47-year-old stage",
+          "ontology_term_id": "HsapDv:0000141"
+        },
+        {
+          "label": "50-year-old stage",
+          "ontology_term_id": "HsapDv:0000144"
+        },
+        {
+          "label": "52-year-old stage",
+          "ontology_term_id": "HsapDv:0000146"
+        },
+        {
+          "label": "53-year-old stage",
+          "ontology_term_id": "HsapDv:0000147"
+        },
+        {
+          "label": "58-year-old stage",
+          "ontology_term_id": "HsapDv:0000152"
+        },
+        {
+          "label": "60-79 year-old stage",
+          "ontology_term_id": "HsapDv:0000272"
+        },
+        {
+          "label": "60-year-old stage",
+          "ontology_term_id": "HsapDv:0000154"
+        },
+        {
+          "label": "62-year-old stage",
+          "ontology_term_id": "HsapDv:0000156"
+        },
+        {
+          "label": "63-year-old stage",
+          "ontology_term_id": "HsapDv:0000157"
+        },
+        {
+          "label": "64-year-old stage",
+          "ontology_term_id": "HsapDv:0000158"
+        },
+        {
+          "label": "65-year-old stage",
+          "ontology_term_id": "HsapDv:0000159"
+        },
+        {
+          "label": "66-year-old stage",
+          "ontology_term_id": "HsapDv:0000160"
+        },
+        {
+          "label": "67-year-old stage",
+          "ontology_term_id": "HsapDv:0000161"
+        },
+        {
+          "label": "68-year-old stage",
+          "ontology_term_id": "HsapDv:0000162"
+        },
+        {
+          "label": "69-year-old stage",
+          "ontology_term_id": "HsapDv:0000163"
+        },
+        {
+          "label": "70-year-old stage",
+          "ontology_term_id": "HsapDv:0000164"
+        },
+        {
+          "label": "71-year-old stage",
+          "ontology_term_id": "HsapDv:0000165"
+        },
+        {
+          "label": "72-year-old stage",
+          "ontology_term_id": "HsapDv:0000166"
+        },
+        {
+          "label": "73-year-old stage",
+          "ontology_term_id": "HsapDv:0000167"
+        },
+        {
+          "label": "74-year-old stage",
+          "ontology_term_id": "HsapDv:0000168"
+        },
+        {
+          "label": "75-year-old stage",
+          "ontology_term_id": "HsapDv:0000169"
+        },
+        {
+          "label": "76-year-old stage",
+          "ontology_term_id": "HsapDv:0000170"
+        },
+        {
+          "label": "77-year-old stage",
+          "ontology_term_id": "HsapDv:0000171"
+        },
+        {
+          "label": "78-year-old stage",
+          "ontology_term_id": "HsapDv:0000172"
+        },
+        {
+          "label": "80 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000095"
+        },
+        {
+          "label": "80-year-old stage",
+          "ontology_term_id": "HsapDv:0000206"
+        },
+        {
+          "label": "81-year-old stage",
+          "ontology_term_id": "HsapDv:0000207"
+        },
+        {
+          "label": "82-year-old stage",
+          "ontology_term_id": "HsapDv:0000208"
+        },
+        {
+          "label": "83-year-old stage",
+          "ontology_term_id": "HsapDv:0000209"
+        },
+        {
+          "label": "84-year-old stage",
+          "ontology_term_id": "HsapDv:0000210"
+        },
+        {
+          "label": "85-year-old stage",
+          "ontology_term_id": "HsapDv:0000211"
+        },
+        {
+          "label": "86-year-old stage",
+          "ontology_term_id": "HsapDv:0000212"
+        },
+        {
+          "label": "88-year-old stage",
+          "ontology_term_id": "HsapDv:0000214"
+        },
+        {
+          "label": "90 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000274"
+        },
+        {
+          "label": "eighth decade stage",
+          "ontology_term_id": "HsapDv:0000242"
+        },
+        {
+          "label": "late adult stage",
+          "ontology_term_id": "HsapDv:0000227"
+        },
+        {
+          "label": "prime adult stage",
+          "ontology_term_id": "HsapDv:0000226"
+        }
+      ],
+      "disease": [
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "Chen_19_D003",
+        "19-D005",
+        "Chen_19_D006",
+        "Chen_19_D007",
+        "19-D008",
+        "19-D009",
+        "Chen_19_D010",
+        "Chen_19_D011",
+        "Chen_19_D019",
+        "Chen_D005_13",
+        "Chen_D009_13",
+        "Chen_D013_13",
+        "pooled [Chen_D018_13,Chen_D017_13]",
+        "pooled [Chen_D018_13,Chen_D026_13]",
+        "Chen_D026_13",
+        "Chen_D019_13",
+        "Chen_D021_13",
+        "Chen_D027_13",
+        "Chen_D028_13",
+        "Chen_D030_13",
+        "Chen_17_D013",
+        "Chen_19_D013",
+        "Chen_19_D014",
+        "Chen_19_D015",
+        "Chen_19_D016",
+        "Chen_D017_13",
+        "Chen_D018_13",
+        "Chen_19_D017",
+        "A23_5566_Atlanta",
+        "BCM_22_0047",
+        "BCM_22_0183",
+        "pooled [BCM_22_0200,BCM_23_0491]",
+        "BCM_22_0200",
+        "BCM_22_0389",
+        "BCM_22_0395",
+        "BCM_22_0434",
+        "BCM_22_0458",
+        "BCM_22_0500",
+        "BCM_22_0769",
+        "BCM_22_0784",
+        "BCM_22_0849",
+        "BCM_22_0867",
+        "BCM_22_0890",
+        "BCM_22_0896",
+        "BCM_23_0131",
+        "BCM_23_0231",
+        "BCM_23_0313",
+        "BCM_23_0334",
+        "BCM_23_0358",
+        "BCM_23_0574",
+        "BCM_23_0578",
+        "BCM_23_0792",
+        "BCM_23_1340",
+        "BCM_23_1401",
+        "BCM_23_1448",
+        "BCM_23_1556",
+        "BCM_24_0080",
+        "MMD_22_02443",
+        "MMD_22_13066",
+        "MMD_22_14307",
+        "MMD_22_16477",
+        "MMD_22_16608",
+        "MMD_22_16860",
+        "MMD_22_17017",
+        "MMD_22_17464",
+        "MMD_22_17939",
+        "MMD_22_18633",
+        "MMD_22_20357",
+        "MMD_22_20137",
+        "MMD_22_20372",
+        "MMD_22_21878",
+        "MMD_22_25357",
+        "MMD_22_32888",
+        "MMD_22_33472",
+        "MMD_22_34032",
+        "MMD_22_37089",
+        "MMD_22_37117",
+        "MMD_22_38029",
+        "MMD_22_38453",
+        "MMD_23_01524",
+        "MMD_23_02177",
+        "MMD_23_16055",
+        "MMD_23_17738",
+        "MMD_23_20181",
+        "MMD_23_21623",
+        "MMD_23_21999",
+        "MMD_23_22486",
+        "Hu0326",
+        "Hu0355",
+        "Hu0563",
+        "Hu0564",
+        "sanes2022_Hu082219",
+        "Hu0869",
+        "Hu0887",
+        "Hu1059",
+        "Hu0218",
+        "pooled [Hu0220,Hu0235]",
+        "Hu0220",
+        "Hu0235",
+        "pooled [0150-19,0194-19,0978-18]",
+        "pooled [1017-17,1053-17,1005-17]",
+        "pooled [Hu0564,Hu1059]",
+        "pooled [Hu0326,Hu0355]",
+        "pooled [Hu0869,Hu0887]"
+      ],
+      "embeddings": [
+        "X_scVI",
+        "X_umap"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/8c0a3574-b0ad-4e4f-b5d3-d1a743b00d4a.cxg/",
+      "feature_biotype": [
+        "gene"
+      ],
+      "feature_count": 35475,
+      "feature_reference": [
+        "NCBITaxon:9606"
+      ],
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        false
+      ],
+      "mean_genes_per_cell": 2988.8235536994885,
+      "organism": [
+        {
+          "label": "Homo sapiens",
+          "ontology_term_id": "NCBITaxon:9606"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 0,
+      "published_at": "2023-11-10T21:54:15+00:00",
+      "raw_data_location": "raw.X",
+      "revised_at": "2026-06-11T16:53:37+00:00",
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "African American",
+          "ontology_term_id": "HANCESTRO:0568"
+        },
+        {
+          "label": "Asian",
+          "ontology_term_id": "HANCESTRO:0847"
+        },
+        {
+          "label": "European American",
+          "ontology_term_id": "HANCESTRO:0590"
+        },
+        {
+          "label": "Hispanic or Latin",
+          "ontology_term_id": "HANCESTRO:0612"
+        },
+        {
+          "label": "Indian",
+          "ontology_term_id": "HANCESTRO:0487"
+        },
+        {
+          "label": "South Asian",
+          "ontology_term_id": "HANCESTRO:0848"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "sex": [
+        {
+          "label": "female",
+          "ontology_term_id": "PATO:0000383"
+        },
+        {
+          "label": "male",
+          "ontology_term_id": "PATO:0000384"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "nucleus"
+      ],
+      "tissue": [
+        {
+          "label": "fovea centralis",
+          "ontology_term_id": "UBERON:0001786",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea",
+          "ontology_term_id": "UBERON:0000053",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea proper",
+          "ontology_term_id": "UBERON:0002822",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "peripheral region of retina",
+          "ontology_term_id": "UBERON:0013682",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "snRNA-seq of human retina - amacrine cell subset",
+      "tombstone": false,
+      "x_approximate_distribution": null
+    },
+    {
+      "assay": [
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 6585832537,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/e4c0ab7b-35da-4d47-a285-f25db28c1624.h5ad"
+        }
+      ],
+      "cell_count": 345257,
+      "cell_type": [
+        {
+          "label": "OFF midget ganglion cell",
+          "ontology_term_id": "CL:4033047"
+        },
+        {
+          "label": "OFF parasol ganglion cell",
+          "ontology_term_id": "CL:4033051"
+        },
+        {
+          "label": "ON midget ganglion cell",
+          "ontology_term_id": "CL:4033046"
+        },
+        {
+          "label": "ON parasol ganglion cell",
+          "ontology_term_id": "CL:4033052"
+        },
+        {
+          "label": "retinal ganglion cell",
+          "ontology_term_id": "CL:0000740"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1038/s41588-025-02454-1 Dataset Version: https://datasets.cellxgene.cziscience.com/e4c0ab7b-35da-4d47-a285-f25db28c1624.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/4c6eaf5c-6d57-4c76-b1e9-60df8c655f1e",
+      "dataset_id": "547b47fa-d4e4-439e-bace-5b3b0f45fa23",
+      "dataset_version_id": "e4c0ab7b-35da-4d47-a285-f25db28c1624",
+      "default_embedding": "X_umap",
+      "development_stage": [
+        {
+          "label": "10-year-old stage",
+          "ontology_term_id": "HsapDv:0000104"
+        },
+        {
+          "label": "11-year-old stage",
+          "ontology_term_id": "HsapDv:0000105"
+        },
+        {
+          "label": "15-year-old stage",
+          "ontology_term_id": "HsapDv:0000109"
+        },
+        {
+          "label": "16-year-old stage",
+          "ontology_term_id": "HsapDv:0000110"
+        },
+        {
+          "label": "17-year-old stage",
+          "ontology_term_id": "HsapDv:0000111"
+        },
+        {
+          "label": "18-year-old stage",
+          "ontology_term_id": "HsapDv:0000112"
+        },
+        {
+          "label": "21-year-old stage",
+          "ontology_term_id": "HsapDv:0000115"
+        },
+        {
+          "label": "25-year-old stage",
+          "ontology_term_id": "HsapDv:0000119"
+        },
+        {
+          "label": "27-year-old stage",
+          "ontology_term_id": "HsapDv:0000121"
+        },
+        {
+          "label": "3-year-old stage",
+          "ontology_term_id": "HsapDv:0000097"
+        },
+        {
+          "label": "30-year-old stage",
+          "ontology_term_id": "HsapDv:0000124"
+        },
+        {
+          "label": "32-year-old stage",
+          "ontology_term_id": "HsapDv:0000126"
+        },
+        {
+          "label": "34-year-old stage",
+          "ontology_term_id": "HsapDv:0000128"
+        },
+        {
+          "label": "41-year-old stage",
+          "ontology_term_id": "HsapDv:0000135"
+        },
+        {
+          "label": "43-year-old stage",
+          "ontology_term_id": "HsapDv:0000137"
+        },
+        {
+          "label": "46-year-old stage",
+          "ontology_term_id": "HsapDv:0000140"
+        },
+        {
+          "label": "47-year-old stage",
+          "ontology_term_id": "HsapDv:0000141"
+        },
+        {
+          "label": "50-year-old stage",
+          "ontology_term_id": "HsapDv:0000144"
+        },
+        {
+          "label": "52-year-old stage",
+          "ontology_term_id": "HsapDv:0000146"
+        },
+        {
+          "label": "53-year-old stage",
+          "ontology_term_id": "HsapDv:0000147"
+        },
+        {
+          "label": "58-year-old stage",
+          "ontology_term_id": "HsapDv:0000152"
+        },
+        {
+          "label": "60-79 year-old stage",
+          "ontology_term_id": "HsapDv:0000272"
+        },
+        {
+          "label": "60-year-old stage",
+          "ontology_term_id": "HsapDv:0000154"
+        },
+        {
+          "label": "62-year-old stage",
+          "ontology_term_id": "HsapDv:0000156"
+        },
+        {
+          "label": "63-year-old stage",
+          "ontology_term_id": "HsapDv:0000157"
+        },
+        {
+          "label": "64-year-old stage",
+          "ontology_term_id": "HsapDv:0000158"
+        },
+        {
+          "label": "65-year-old stage",
+          "ontology_term_id": "HsapDv:0000159"
+        },
+        {
+          "label": "66-year-old stage",
+          "ontology_term_id": "HsapDv:0000160"
+        },
+        {
+          "label": "67-year-old stage",
+          "ontology_term_id": "HsapDv:0000161"
+        },
+        {
+          "label": "68-year-old stage",
+          "ontology_term_id": "HsapDv:0000162"
+        },
+        {
+          "label": "69-year-old stage",
+          "ontology_term_id": "HsapDv:0000163"
+        },
+        {
+          "label": "70-year-old stage",
+          "ontology_term_id": "HsapDv:0000164"
+        },
+        {
+          "label": "71-year-old stage",
+          "ontology_term_id": "HsapDv:0000165"
+        },
+        {
+          "label": "72-year-old stage",
+          "ontology_term_id": "HsapDv:0000166"
+        },
+        {
+          "label": "73-year-old stage",
+          "ontology_term_id": "HsapDv:0000167"
+        },
+        {
+          "label": "74-year-old stage",
+          "ontology_term_id": "HsapDv:0000168"
+        },
+        {
+          "label": "75-year-old stage",
+          "ontology_term_id": "HsapDv:0000169"
+        },
+        {
+          "label": "76-year-old stage",
+          "ontology_term_id": "HsapDv:0000170"
+        },
+        {
+          "label": "77-year-old stage",
+          "ontology_term_id": "HsapDv:0000171"
+        },
+        {
+          "label": "78-year-old stage",
+          "ontology_term_id": "HsapDv:0000172"
+        },
+        {
+          "label": "80 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000095"
+        },
+        {
+          "label": "80-year-old stage",
+          "ontology_term_id": "HsapDv:0000206"
+        },
+        {
+          "label": "81-year-old stage",
+          "ontology_term_id": "HsapDv:0000207"
+        },
+        {
+          "label": "82-year-old stage",
+          "ontology_term_id": "HsapDv:0000208"
+        },
+        {
+          "label": "83-year-old stage",
+          "ontology_term_id": "HsapDv:0000209"
+        },
+        {
+          "label": "84-year-old stage",
+          "ontology_term_id": "HsapDv:0000210"
+        },
+        {
+          "label": "85-year-old stage",
+          "ontology_term_id": "HsapDv:0000211"
+        },
+        {
+          "label": "86-year-old stage",
+          "ontology_term_id": "HsapDv:0000212"
+        },
+        {
+          "label": "88-year-old stage",
+          "ontology_term_id": "HsapDv:0000214"
+        },
+        {
+          "label": "90 year-old and over stage",
+          "ontology_term_id": "HsapDv:0000274"
+        },
+        {
+          "label": "eighth decade stage",
+          "ontology_term_id": "HsapDv:0000242"
+        },
+        {
+          "label": "late adult stage",
+          "ontology_term_id": "HsapDv:0000227"
+        },
+        {
+          "label": "prime adult stage",
+          "ontology_term_id": "HsapDv:0000226"
+        }
+      ],
+      "disease": [
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "Chen_19_D003",
+        "19-D005",
+        "Chen_19_D006",
+        "Chen_19_D007",
+        "19-D008",
+        "19-D009",
+        "Chen_19_D010",
+        "Chen_19_D011",
+        "Chen_19_D019",
+        "Chen_D005_13",
+        "Chen_D009_13",
+        "Chen_D013_13",
+        "pooled [Chen_D018_13,Chen_D017_13]",
+        "pooled [Chen_D018_13,Chen_D026_13]",
+        "Chen_D026_13",
+        "Chen_D019_13",
+        "Chen_D021_13",
+        "Chen_D027_13",
+        "Chen_D028_13",
+        "Chen_D030_13",
+        "Chen_19_D013",
+        "Chen_19_D014",
+        "Chen_19_D015",
+        "Chen_19_D016",
+        "Chen_D017_13",
+        "Chen_D018_13",
+        "Chen_19_D017",
+        "A23_5566_Atlanta",
+        "BCM_22_0047",
+        "BCM_22_0183",
+        "pooled [BCM_22_0200,BCM_23_0491]",
+        "BCM_22_0200",
+        "BCM_22_0389",
+        "BCM_22_0395",
+        "BCM_22_0434",
+        "BCM_22_0458",
+        "BCM_22_0500",
+        "BCM_22_0769",
+        "BCM_22_0784",
+        "BCM_22_0849",
+        "BCM_22_0867",
+        "BCM_22_0890",
+        "BCM_22_0896",
+        "BCM_23_0131",
+        "BCM_23_0231",
+        "BCM_23_0313",
+        "BCM_23_0334",
+        "BCM_23_0358",
+        "BCM_23_0574",
+        "BCM_23_0578",
+        "BCM_23_0792",
+        "BCM_23_1340",
+        "BCM_23_1401",
+        "BCM_23_1448",
+        "BCM_23_1556",
+        "MMD_22_02443",
+        "MMD_22_13066",
+        "MMD_22_14307",
+        "MMD_22_16477",
+        "MMD_22_16608",
+        "MMD_22_16860",
+        "MMD_22_17017",
+        "MMD_22_17464",
+        "MMD_22_17939",
+        "MMD_22_18633",
+        "MMD_22_20357",
+        "MMD_22_20137",
+        "MMD_22_20372",
+        "MMD_22_21878",
+        "MMD_22_25357",
+        "MMD_22_32888",
+        "MMD_22_33472",
+        "MMD_22_34032",
+        "MMD_22_37089",
+        "MMD_22_37117",
+        "MMD_22_38029",
+        "MMD_22_38453",
+        "MMD_23_01524",
+        "MMD_23_02177",
+        "MMD_23_16055",
+        "MMD_23_17738",
+        "MMD_23_21623",
+        "MMD_23_21999",
+        "MMD_23_22486",
+        "Hu0326",
+        "Hu0355",
+        "Hu0563",
+        "Hu0564",
+        "sanes2022_Hu082219",
+        "Hu0869",
+        "Hu0887",
+        "Hu1059",
+        "Hu0218",
+        "pooled [Hu0220,Hu0235]",
+        "Hu0220",
+        "Hu0235",
+        "pooled [0150-19,0194-19,0978-18]",
+        "pooled [1017-17,1053-17,1005-17]",
+        "pooled [Hu0564,Hu1059]",
+        "pooled [Hu0326,Hu0355]",
+        "pooled [Hu0869,Hu0887]"
+      ],
+      "embeddings": [
+        "X_scVI",
+        "X_umap"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/547b47fa-d4e4-439e-bace-5b3b0f45fa23.cxg/",
+      "feature_biotype": [
+        "gene"
+      ],
+      "feature_count": 35475,
+      "feature_reference": [
+        "NCBITaxon:9606"
+      ],
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        false
+      ],
+      "mean_genes_per_cell": 4270.426265072106,
+      "organism": [
+        {
+          "label": "Homo sapiens",
+          "ontology_term_id": "NCBITaxon:9606"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 0,
+      "published_at": "2025-08-13T18:34:33+00:00",
+      "raw_data_location": "raw.X",
+      "revised_at": "2026-06-11T16:53:37+00:00",
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "African American",
+          "ontology_term_id": "HANCESTRO:0568"
+        },
+        {
+          "label": "Asian",
+          "ontology_term_id": "HANCESTRO:0847"
+        },
+        {
+          "label": "European American",
+          "ontology_term_id": "HANCESTRO:0590"
+        },
+        {
+          "label": "Hispanic or Latin",
+          "ontology_term_id": "HANCESTRO:0612"
+        },
+        {
+          "label": "Indian",
+          "ontology_term_id": "HANCESTRO:0487"
+        },
+        {
+          "label": "South Asian",
+          "ontology_term_id": "HANCESTRO:0848"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "sex": [
+        {
+          "label": "female",
+          "ontology_term_id": "PATO:0000383"
+        },
+        {
+          "label": "male",
+          "ontology_term_id": "PATO:0000384"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "nucleus"
+      ],
+      "tissue": [
+        {
+          "label": "fovea centralis",
+          "ontology_term_id": "UBERON:0001786",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea",
+          "ontology_term_id": "UBERON:0000053",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea proper",
+          "ontology_term_id": "UBERON:0002822",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "peripheral region of retina",
+          "ontology_term_id": "UBERON:0013682",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "snRNA-seq of human retina - retinal ganglion cell subset - refined clustering",
+      "tombstone": false,
+      "x_approximate_distribution": null
+    },
+    {
+      "assay": [
+        {
+          "label": "10x 3' v2",
+          "ontology_term_id": "EFO:0009899"
+        },
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 631438805,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/a11a14b3-13ea-4c22-a961-45a377091fea.h5ad"
+        }
+      ],
+      "cell_count": 72788,
+      "cell_type": [
+        {
+          "label": "OFFx cell",
+          "ontology_term_id": "CL:4033036"
+        },
+        {
+          "label": "ON-blue cone bipolar cell",
+          "ontology_term_id": "CL:4033019"
+        },
+        {
+          "label": "diffuse bipolar 1 cell",
+          "ontology_term_id": "CL:4033027"
+        },
+        {
+          "label": "diffuse bipolar 2 cell",
+          "ontology_term_id": "CL:4033028"
+        },
+        {
+          "label": "diffuse bipolar 3a cell",
+          "ontology_term_id": "CL:4033029"
+        },
+        {
+          "label": "diffuse bipolar 3b cell",
+          "ontology_term_id": "CL:4033030"
+        },
+        {
+          "label": "diffuse bipolar 4 cell",
+          "ontology_term_id": "CL:4033031"
+        },
+        {
+          "label": "diffuse bipolar 6 cell",
+          "ontology_term_id": "CL:4033032"
+        },
+        {
+          "label": "flat midget bipolar cell",
+          "ontology_term_id": "CL:4033033"
+        },
+        {
+          "label": "giant bipolar cell",
+          "ontology_term_id": "CL:4033035"
+        },
+        {
+          "label": "invaginating midget bipolar cell",
+          "ontology_term_id": "CL:4033034"
+        },
+        {
+          "label": "retinal bipolar neuron",
+          "ontology_term_id": "CL:0000748"
+        },
+        {
+          "label": "rod bipolar cell",
+          "ontology_term_id": "CL:0000751"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1038/s41588-025-02454-1 Dataset Version: https://datasets.cellxgene.cziscience.com/a11a14b3-13ea-4c22-a961-45a377091fea.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/4c6eaf5c-6d57-4c76-b1e9-60df8c655f1e",
+      "dataset_id": "459dc9de-9ab8-4e4d-ac44-182595b1c18b",
+      "dataset_version_id": "a11a14b3-13ea-4c22-a961-45a377091fea",
+      "default_embedding": "X_umap",
+      "development_stage": [
+        {
+          "label": "42-year-old stage",
+          "ontology_term_id": "HsapDv:0000136"
+        },
+        {
+          "label": "53-year-old stage",
+          "ontology_term_id": "HsapDv:0000147"
+        },
+        {
+          "label": "54-year-old stage",
+          "ontology_term_id": "HsapDv:0000148"
+        },
+        {
+          "label": "60-year-old stage",
+          "ontology_term_id": "HsapDv:0000154"
+        },
+        {
+          "label": "64-year-old stage",
+          "ontology_term_id": "HsapDv:0000158"
+        },
+        {
+          "label": "65-year-old stage",
+          "ontology_term_id": "HsapDv:0000159"
+        },
+        {
+          "label": "68-year-old stage",
+          "ontology_term_id": "HsapDv:0000162"
+        },
+        {
+          "label": "69-year-old stage",
+          "ontology_term_id": "HsapDv:0000163"
+        },
+        {
+          "label": "71-year-old stage",
+          "ontology_term_id": "HsapDv:0000165"
+        },
+        {
+          "label": "74-year-old stage",
+          "ontology_term_id": "HsapDv:0000168"
+        },
+        {
+          "label": "78-year-old stage",
+          "ontology_term_id": "HsapDv:0000172"
+        },
+        {
+          "label": "80-year-old stage",
+          "ontology_term_id": "HsapDv:0000206"
+        },
+        {
+          "label": "82-year-old stage",
+          "ontology_term_id": "HsapDv:0000208"
+        },
+        {
+          "label": "86-year-old stage",
+          "ontology_term_id": "HsapDv:0000212"
+        },
+        {
+          "label": "89-year-old stage",
+          "ontology_term_id": "HsapDv:0000215"
+        },
+        {
+          "label": "adult stage",
+          "ontology_term_id": "HsapDv:0000258"
+        }
+      ],
+      "disease": [
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "donor1-hafler",
+        "donor2-hafler",
+        "donor3-hafler",
+        "R-00646_01",
+        "R-00646_03",
+        "R-00646_04",
+        "R-00646_07",
+        "Hu11",
+        "H1",
+        "Pt2",
+        "H3",
+        "H4",
+        "H5",
+        "H9",
+        "donor1-scheetz",
+        "donor2-scheetz",
+        "donor3-scheetz",
+        "17-010",
+        "SC",
+        "17-011"
+      ],
+      "embeddings": [
+        "X_scVI",
+        "X_umap"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/459dc9de-9ab8-4e4d-ac44-182595b1c18b.cxg/",
+      "feature_biotype": [
+        "gene"
+      ],
+      "feature_count": 35475,
+      "feature_reference": [
+        "NCBITaxon:9606"
+      ],
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        false
+      ],
+      "mean_genes_per_cell": 1860.8441638731658,
+      "organism": [
+        {
+          "label": "Homo sapiens",
+          "ontology_term_id": "NCBITaxon:9606"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 0,
+      "published_at": "2023-12-07T20:19:40+00:00",
+      "raw_data_location": "raw.X",
+      "revised_at": "2026-06-11T16:53:37+00:00",
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "European American",
+          "ontology_term_id": "HANCESTRO:0590"
+        },
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "sex": [
+        {
+          "label": "female",
+          "ontology_term_id": "PATO:0000383"
+        },
+        {
+          "label": "male",
+          "ontology_term_id": "PATO:0000384"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "cell"
+      ],
+      "tissue": [
+        {
+          "label": "chorioretinal region",
+          "ontology_term_id": "UBERON:0019207",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "fovea centralis",
+          "ontology_term_id": "UBERON:0001786",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "macula lutea proper",
+          "ontology_term_id": "UBERON:0002822",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "peripheral region of retina",
+          "ontology_term_id": "UBERON:0013682",
+          "tissue_type": "tissue"
+        },
+        {
+          "label": "retinal neural layer",
+          "ontology_term_id": "UBERON:0003902",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "scRNA-seq of human retina - bipolar cell subclass",
+      "tombstone": false,
+      "x_approximate_distribution": null
+    }
+  ],
+  "description": "As the light sensing part of the visual system, the human retina is composed of five classes of neuron, including photoreceptors, horizontal cells, amacrine, bipolar, and retinal ganglion cells. Each class of neuron can be further classified into subgroups with the abundance varying three orders of magnitude. Therefore, to capture all cell types in the retina and generate a complete single cell reference atlas, it is essential to scale up from currently published single cell profiling studies to improve the sensitivity. In addition, to gain a better understanding of gene regulation at single cell level, it is important to include sufficient scATAC-seq data in the reference. To fill the gap, we performed snRNA-seq and snATAC-seq for the retina from healthy donors. To further increase the size of the dataset, we then collected and incorporated publicly available datasets. All data underwent a unified preprocessing pipeline and data integration. Multiple integration methods were benchmarked by scIB, and scVI was chosen. To harness the power of multiomics, snATAC-seq datasets were also preprocessed, and scGlue was used to generate co-embeddings between snRNA-seq and snATAC-seq cells. To facilitate the public use of references, we employ CELLxGENE and UCSC Cell Browser for visualization. By combining previously published and newly generated datasets, a single cell atlas of the human retina that is composed of 2.5 million single cells from 48 donors has been generated. As a result, over 90 distinct cell types are identified based on the transcriptomics profile with the rarest cell type accounting for about 0.01% of the cell population. In addition, open chromatin profiling has been generated for over 400K nuclei via single nuclei ATAC-seq, allowing systematic characterization of cis-regulatory elements for individual cell type. Integrative analysis reveals intriguing differences in the transcriptome, chromatin landscape, and gene regulatory network among cell class, subgroup, and type. In addition, changes in cell proportion, gene expression and chromatin openness have been observed between different gender and over age. Accessible through interactive browsers, this study represents the most comprehensive reference cell atlas of the human retina to date. As part of the human cell atlas project, this resource lays the foundation for further research in understanding retina biology and diseases.",
+  "doi": "10.1038/s41588-025-02454-1",
+  "is_pre_analysis": false,
+  "links": [
+    {
+      "link_name": "Github code",
+      "link_type": "OTHER",
+      "link_url": "https://github.com/RCHENLAB/HRCA_reproducibility"
+    },
+    {
+      "link_name": "GSE265801",
+      "link_type": "RAW_DATA",
+      "link_url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE265801"
+    },
+    {
+      "link_name": "",
+      "link_type": "RAW_DATA",
+      "link_url": "https://explore.data.humancellatlas.org/projects/4bcc16b5-7a47-45bb-b9c0-be9d5336df2d"
+    },
+    {
+      "link_name": "",
+      "link_type": "LAB_WEBSITE",
+      "link_url": "https://rchenlab.github.io/resources/human-atlas.html"
+    },
+    {
+      "link_name": "",
+      "link_type": "OTHER",
+      "link_url": "https://zenodo.org/records/17265527"
+    },
+    {
+      "link_name": "",
+      "link_type": "OTHER",
+      "link_url": "https://zenodo.org/records/17412073"
+    },
+    {
+      "link_name": "Human Retina Cell Atlas reference model",
+      "link_type": "OTHER",
+      "link_url": "https://zenodo.org/records/14014720"
+    },
+    {
+      "link_name": "",
+      "link_type": "OTHER",
+      "link_url": "https://zenodo.org/records/8137510"
+    }
+  ],
+  "name": "Single cell atlas of the human retina",
+  "published_at": "2023-11-10T21:54:15+00:00",
+  "publisher_metadata": {
+    "authors": [
+      {
+        "family": "Li",
+        "given": "Jin"
+      },
+      {
+        "family": "Wang",
+        "given": "Jun"
+      },
+      {
+        "family": "Ibarra",
+        "given": "Ignacio L."
+      },
+      {
+        "family": "Cheng",
+        "given": "Xuesen"
+      },
+      {
+        "family": "Luecken",
+        "given": "Malte D."
+      },
+      {
+        "family": "Lu",
+        "given": "Jiaxiong"
+      },
+      {
+        "family": "Monavarfeshani",
+        "given": "Aboozar"
+      },
+      {
+        "family": "Yan",
+        "given": "Wenjun"
+      },
+      {
+        "family": "Zheng",
+        "given": "Yiqiao"
+      },
+      {
+        "family": "Zuo",
+        "given": "Zhen"
+      },
+      {
+        "family": "Colborn",
+        "given": "Samantha Lynn Zayas"
+      },
+      {
+        "family": "Cortez",
+        "given": "Berenice Sarahi"
+      },
+      {
+        "family": "Owen",
+        "given": "Leah A."
+      },
+      {
+        "family": "Wick",
+        "given": "Brittney"
+      },
+      {
+        "family": "Bao",
+        "given": "Xuan"
+      },
+      {
+        "family": "Choi",
+        "given": "Jongsu"
+      },
+      {
+        "family": "Haeussler",
+        "given": "Maximilian"
+      },
+      {
+        "family": "Tran",
+        "given": "Nicholas M."
+      },
+      {
+        "family": "Shekhar",
+        "given": "Karthik"
+      },
+      {
+        "family": "Sanes",
+        "given": "Joshua R."
+      },
+      {
+        "family": "Stout",
+        "given": "J. Timothy"
+      },
+      {
+        "family": "Chen",
+        "given": "Shiming"
+      },
+      {
+        "family": "Li",
+        "given": "Yumei"
+      },
+      {
+        "family": "DeAngelis",
+        "given": "Margaret M."
+      },
+      {
+        "family": "Theis",
+        "given": "Fabian J."
+      },
+      {
+        "family": "Chen",
+        "given": "Rui"
+      }
+    ],
+    "is_preprint": false,
+    "journal": "Nat Genet",
+    "published_at": 1769904000,
+    "published_day": 1,
+    "published_month": 2,
+    "published_year": 2026
+  },
+  "revised_at": "2026-06-11T16:53:37+00:00",
+  "revising_in": null,
+  "revision_of": null,
+  "visibility": "PUBLIC"
+}
