@@ -58,12 +58,14 @@ class SourceFlagsTestCase(unittest.TestCase):
         self.assertEqual(run.call_args[0][0], "DataFetcher.py")
         return run.call_args[1]["extra_args"]
 
-    def _transform_args(self, **kwargs):
+    def _transform_runs(self, **kwargs):
+        """Return the arguments of each DataTransformer.py run."""
         with patch.object(_fetch_module, "get_run_logger", return_value=_noop_logger()), \
              patch.object(_fetch_module, "_run_python_script") as run:
             _fetch_module.transform_external_api_results.fn(**kwargs)
-        self.assertEqual(run.call_args[0][0], "DataTransformer.py")
-        return run.call_args[1]["extra_args"]
+        for call in run.call_args_list:
+            self.assertEqual(call[0][0], "DataTransformer.py")
+        return [call[1]["extra_args"] for call in run.call_args_list]
 
     def test_fetch_forces_only_the_named_sources(self):
         args = self._fetch_args(force_sources=["cellxgene"], run_name="r")
@@ -76,17 +78,33 @@ class SourceFlagsTestCase(unittest.TestCase):
     def test_fetch_without_sources_is_unchanged(self):
         self.assertIsNone(self._fetch_args())
 
-    def test_transform_forces_only_the_named_sources(self):
-        args = self._transform_args(force_sources=["cellxgene"], run_name="r")
-        self.assertEqual(args, ["cellxgene", "--force", "--run-name", "r"])
+    def test_transform_forces_the_named_sources_and_checks_the_rest(self):
+        # Naming sources restricts a DataTransformer.py run to them, so the
+        # others must be transformed by a run of their own.
+        runs = self._transform_runs(force_sources=["cellxgene"], run_name="r")
+        self.assertEqual(
+            runs,
+            [
+                ["opentargets", "gene", "uniprot", "--run-name", "r"],
+                ["cellxgene", "--force", "--run-name", "r"],
+            ],
+        )
+
+    def test_transform_of_every_source_forced_needs_no_other_run(self):
+        runs = self._transform_runs(
+            force_sources=["cellxgene", "opentargets", "gene", "uniprot"]
+        )
+        self.assertEqual(
+            runs, [["cellxgene", "opentargets", "gene", "uniprot", "--force"]]
+        )
 
     def test_transform_force_all_wins(self):
         self.assertEqual(
-            self._transform_args(force=True, force_sources=["cellxgene"]), ["--force"]
+            self._transform_runs(force=True, force_sources=["cellxgene"]), [["--force"]]
         )
 
     def test_transform_without_sources_is_unchanged(self):
-        self.assertIsNone(self._transform_args())
+        self.assertEqual(self._transform_runs(), [None])
 
 
 class _Stop(Exception):

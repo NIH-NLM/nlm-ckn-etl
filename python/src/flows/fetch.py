@@ -45,6 +45,7 @@ from _common import (
     S3_BUCKET,
     _external_dir,
     _fetch_code_hash,
+    REFRESHABLE_SOURCES,
     _run_python_script,
     clean_empty_external_files,
     parse_refresh_sources,
@@ -203,27 +204,34 @@ def transform_external_api_results(
         up to date.
     force_sources:
         Sources whose transformer is re-run even when its output looks up to
-        date, and no other.  An output restored from S3 can look newer than
-        the raw data it was made from, so a source whose raw data was just
-        re-fetched is named here.  Redundant with ``force``.
+        date.  An output restored from S3 can look newer than the raw data it
+        was made from, so a source whose raw data was just re-fetched is named
+        here.  The other sources are transformed with the usual freshness
+        check, as the fetcher may have updated them too.  Redundant with
+        ``force``.
     run_name:
         Run name passed as ``--run-name`` (selects ``data/results-<name>/``).
         Defaults to ``$CKN_RUN`` or ``'full'``.
     """
     logger = get_run_logger()
     logger.info("Transforming external API results (DataTransformer)")
-    extra_args = []
+    run_args = ["--run-name", run_name] if run_name else []
     if force:
-        extra_args.append("--force")
+        runs = [["--force", *run_args]]
     elif force_sources:
-        extra_args.extend([*force_sources, "--force"])
-    if run_name:
-        extra_args.extend(["--run-name", run_name])
-    _run_python_script(
-        "DataTransformer.py",
-        arango_db_password=arango_db_password,
-        extra_args=extra_args or None,
-    )
+        # Naming sources restricts a run to them, so the rest get a run of
+        # their own, without --force.
+        others = [s for s in REFRESHABLE_SOURCES if s not in force_sources]
+        runs = [[*others, *run_args]] if others else []
+        runs.append([*force_sources, "--force", *run_args])
+    else:
+        runs = [run_args]
+    for extra_args in runs:
+        _run_python_script(
+            "DataTransformer.py",
+            arango_db_password=arango_db_password,
+            extra_args=extra_args or None,
+        )
     logger.info("External API results transformed")
 
 
