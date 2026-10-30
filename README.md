@@ -315,6 +315,13 @@ The Batch job runs `release.py` end-to-end (fetch + full ETL) on EC2 and returns
 
 Release settings (`nlm_ckn_tag`, `tar_source`, etc.) come from `release.json` at the repo root, not from this repo's release tag.
 
+Two optional `release.json` keys change how a release treats the cached external fetch (`s3://…/external/`). Both are for one release; remove them afterwards.
+
+- `"refresh_sources": ["cellxgene"]` re-fetches and re-transforms only the named sources (`cellxgene`, `opentargets`, `gene`, `uniprot`) and reuses the rest of the cache.
+- `"fetch_mode": "resume"` reuses the cache without comparing the fetch code hash. By default (`"auto"`) a change to `DataFetcher.py`, `DataTransformer.py`, `E_Utilities.py` or `flows/fetch.py` forces a full re-fetch of every source. Use `resume` when the change does not invalidate cached data, or only the sources in `refresh_sources`. The run records the new hash, so the next release is `auto` again.
+
+`release.py` takes the same settings as `--fetch-mode` and `--refresh-sources`.
+
 Required secrets: `AWS_RELEASE_ROLE_ARN`, `AWS_REGION`, `S3_BUCKET`, `DEPLOYMENTS_TOKEN` (classic PAT with `repo:deployments` scope).
 
 ### `on-release-deactivate.yml` — On Release Removed: Delete Deployment
