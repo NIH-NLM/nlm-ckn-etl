@@ -33,6 +33,7 @@ from LoaderUtilities import (
 from TupleWriterUtilities import (
     ASSOCIATION_CLASSES,
     association_to_tuples,
+    get_predicate_uri,
     get_tuples_dir,
     write_tuples,
 )
@@ -163,13 +164,13 @@ def create_tuples(
 
             # Edge annotation: score. Subject/predicate/object must match the
             # relationship triple above so the annotation addresses the same
-            # edge (is_associated_with = RO_0004029, since ckn-schema
-            # v0.0.0-alpha.6 renamed GeneIsGeneticBasisForDisease).
+            # edge, so the predicate is resolved from the schema rather than
+            # hard-coded.
             gs_term = f"GS_{gene_name}"
             tuples.append(
                 (
                     URIRef(f"{PURLBASE}/{gs_term}"),
-                    URIRef(f"{PURLBASE}/RO_0004029"),
+                    get_predicate_uri(assoc),
                     URIRef(f"{PURLBASE}/{mondo_term}"),
                     URIRef(f"{RDFSBASE}#Score"),
                     Literal(str(disease["score"])),
